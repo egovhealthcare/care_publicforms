@@ -1,0 +1,47 @@
+{% extends "patient_feedback/base.html" %}
+{% load patient_feedback_tags %}
+
+{% block screen %}
+<form id="{{ form_id }}" class="screen screen--comments" method="post">
+  {% csrf_token %}
+  <div class="area-head stack stack--8">
+    <span class="kicker">{% t "open_kicker" %}</span>
+    <h2 class="h2">{% t "open_heading" %}</h2>
+  </div>
+
+  <fieldset class="area-return group stack stack--12">
+    <legend class="qlabel">{% t "open_would_return" %}</legend>
+    <div class="yesno">
+      <label class="yn">
+        <input type="radio" name="would_return" value="yes"{% if answers.would_return is True %} checked{% endif %}>
+        <span class="ynbtn">{% t "yes" %}</span>
+      </label>
+      <label class="yn">
+        <input type="radio" name="would_return" value="no"{% if answers.would_return is False %} checked{% endif %}>
+        <span class="ynbtn">{% t "no" %}</span>
+      </label>
+    </div>
+    <textarea name="would_return_reason" class="ta" rows="2" maxlength="2000" placeholder="{% t 'open_why' %}" aria-label="{% t 'open_why' %}">{{ answers.would_return_reason }}</textarea>
+  </fieldset>
+
+  <div class="area-body stack stack--26">
+    <div class="stack stack--10">
+      <label class="qlabel" for="improvement">{% t "open_improve" %}</label>
+      <textarea id="improvement" name="improvement" class="ta" rows="3" maxlength="2000">{{ answers.improvement }}</textarea>
+    </div>
+    <div class="stack stack--10">
+      <label class="qlabel" for="reasonForChoosing">{% t "open_chose" %}</label>
+      <textarea id="reasonForChoosing" name="reason_for_choosing" class="ta" rows="3" maxlength="2000">{{ answers.reason_for_choosing }}</textarea>
+    </div>
+    <div class="stack stack--10">
+      <label class="qlabel" for="suggestions">{% t "open_suggest" %}</label>
+      <textarea id="suggestions" name="suggestions" class="ta" rows="3" maxlength="2000">{{ answers.suggestions }}</textarea>
+    </div>
+  </div>
+
+  <div class="area-nav navrow">
+    <button type="submit" name="action" value="back" class="btn btn--ghost btn--md btn-back">{% t "back" %}</button>
+    <button type="submit" name="action" value="review" class="btn btn--primary btn--lg btn-cta btn-cta--grow">{% t "review_answers" %}</button>
+  </div>
+</form>
+{% endblock %}

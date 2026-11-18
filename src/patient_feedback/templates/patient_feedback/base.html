@@ -1,0 +1,90 @@
+{% load static patient_feedback_tags %}<!DOCTYPE html>
+<html lang="{{ lang }}" class="no-js">
+<head>
+<meta charset="utf-8">
+<title>{% t "kicker" %} — {{ facility_name }}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="same-origin">
+{% block head_extra %}{% endblock %}
+{% if load_web_fonts %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700{% if lang == 'kn' %}&amp;family=Noto+Sans+Kannada:wght@300;400;500;600{% endif %}&amp;display=swap">
+{% endif %}
+<link rel="stylesheet" href="{% static 'patient_feedback/kiosk.css' %}">
+<script>document.documentElement.className = 'js';</script>
+</head>
+<body data-screen="{{ screen }}" data-idle-timeout="{{ idle_timeout }}" data-reset-url="{{ urls.reset }}?idle=1">
+
+<div class="page">
+<div class="shell">
+
+  <header class="hdr">
+    <div class="hdr-row">
+      <div class="hdr-id">
+        <span class="hdr-kicker">{% t "kicker" %}</span>
+        <span class="hdr-place">{{ facility_name }}</span>
+      </div>
+
+      {% if show_nav %}
+      <nav class="hdr-nav">
+        <a class="navbtn navbtn--home" href="{{ urls.first_question }}">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#1577DD" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4v-5.5H9V20H5a1 1 0 0 1-1-1z"/></svg>
+          <span>{% t "nav_home" %}</span>
+        </a>
+        <a class="navbtn navbtn--reset" href="{{ urls.reset }}">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#C10FFF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M19.8 4.2v4h-4"/></svg>
+          <span>{% t "nav_reset" %}</span>
+        </a>
+      </nav>
+      {% endif %}
+
+      <div class="langtog" role="group" aria-label="Language">
+        {% for language in languages %}
+        <a href="{{ language.url }}" class="langbtn langbtn--{{ language.code }}{% if language.active %} is-on{% endif %}" lang="{{ language.code }}" data-lang="{{ language.code }}" aria-label="{{ language.name }}"{% if language.active %} aria-current="true"{% endif %}>{{ language.label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="progress"><div class="progress-fill" style="width:{{ progress }}%"></div></div>
+  </header>
+
+  <main class="main">
+    {% if uhid_display %}
+    <a class="idstrip" href="{{ urls.uhid }}">
+      <span class="idstrip-icon">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+      </span>
+      <span class="idstrip-body">
+        <span class="idstrip-kicker">UHID</span>
+        <span class="idstrip-value">{{ uhid_display }}</span>
+      </span>
+      <span class="idstrip-action">{% t "change" %}</span>
+    </a>
+    {% endif %}
+
+    {% block screen %}{% endblock %}
+  </main>
+
+  <footer class="ftr">
+    <span class="ftr-note">{% t "footer_note" %}</span>
+    <span class="ftr-date">{{ today|date:"d M Y" }}</span>
+  </footer>
+
+</div>
+</div>
+
+{% if idle_timeout %}
+<div class="idle" id="idleOverlay" hidden>
+  <div class="idle-card" role="alertdialog" aria-live="assertive" aria-labelledby="idleTitle" aria-describedby="idleBody">
+    <p class="idle-title" id="idleTitle">{% t "idle_title" %}</p>
+    <p class="idle-body" id="idleBody" data-template="{% t 'idle_body' n='{n}' %}"></p>
+  </div>
+</div>
+{% endif %}
+
+<script src="{% static 'patient_feedback/kiosk.js' %}" defer></script>
+</body>
+</html>

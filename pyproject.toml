@@ -1,0 +1,51 @@
+[project]
+name = "patient_feedback"
+version = "0.1.0"
+description = "A Care plugin that serves server-rendered patient feedback kiosks (OPD questionnaire) for touch-screen TVs"
+readme = "README.md"
+authors = [{ name = "Open Healthcare Network", email = "support@ohc.network" }]
+maintainers = [
+    { name = "Open Healthcare Network", email = "support@ohc.network" },
+]
+license = { text = "MIT" }
+dependencies = ["django", "djangorestframework"]
+requires-python = ">= 3.10"
+
+[project.optional-dependencies]
+test = [
+    "ruff", # linting
+]
+
+[project.urls]
+homepage = "https://github.com/ohcnetwork/care_patient_feedback"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+patient_feedback = ["templates/**/*", "static/**/*"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["src/patient_feedback/migrations"]
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # Pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "UP", # pyupgrade
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["patient_feedback"]
+known-third-party = ["care"]
+
+[tool.uv]
+package = true

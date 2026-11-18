@@ -1,0 +1,25 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feedback kiosk unavailable</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="stylesheet" href="{% static 'patient_feedback/kiosk.css' %}">
+</head>
+<body>
+<div class="page page--blocked">
+  <div class="blocked-card">
+    <span class="kicker">OPD Feedback</span>
+    {% if reason == "inactive" %}
+    <h1 class="h2">This kiosk is switched off.</h1>
+    <p class="lead-sm">A Care administrator can turn it back on in the Care admin under Patient Feedback → Feedback kiosks.</p>
+    {% else %}
+    <h1 class="h2">This screen isn't set up as a feedback kiosk.</h1>
+    <p class="lead-sm">Open the kiosk link from the Care admin (Patient Feedback → Feedback kiosks) on this screen once. If the access key was regenerated, open the new link.</p>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>
