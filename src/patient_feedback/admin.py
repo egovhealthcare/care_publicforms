@@ -55,7 +55,7 @@ class FeedbackKioskAdmin(admin.ModelAdmin):
     def kiosk_link(self, obj):
         if not obj or not obj.pk:
             return _("Save the kiosk to get its link.")
-        path = reverse("patient_feedback:start", kwargs={"kiosk_id": obj.external_id})
+        path = reverse("patient_feedback:start", kwargs={"facility_id": obj.facility.external_id})
         request = _current_request.get()
         url = f"{request.build_absolute_uri(path) if request else path}?key={obj.access_key}"
         return format_html(

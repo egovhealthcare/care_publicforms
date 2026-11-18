@@ -27,7 +27,7 @@ class KioskTestBase(CareAPITestBase):
 
     def url(self, name, kiosk=None, **kwargs):
         kiosk = kiosk or self.kiosk
-        return reverse(f"patient_feedback:{name}", kwargs={"kiosk_id": kiosk.external_id, **kwargs})
+        return reverse(f"patient_feedback:{name}", kwargs={"facility_id": kiosk.facility.external_id, **kwargs})
 
     def open_kiosk(self, kiosk=None):
         kiosk = kiosk or self.kiosk
@@ -49,11 +49,14 @@ class KioskTestBase(CareAPITestBase):
 
 
 class KioskAccessTests(KioskTestBase):
+    def test_kiosk_lives_under_the_facility(self):
+        self.assertEqual(self.url("start"), f"/facility/{self.facility.external_id}/patient_feedback/")
+
     def test_key_sets_cookie_and_strips_key_from_url(self):
         self.client.cookies.clear()
         response = self.open_kiosk()
         self.assertEqual(response["Location"], self.url("start"))
-        cookie = response.cookies[kiosk_auth.cookie_name(self.kiosk)]
+        cookie = response.cookies[kiosk_auth.cookie_name(self.facility.external_id)]
         self.assertTrue(cookie["httponly"])
         self.assertEqual(cookie["path"], self.url("start"))
         self.assertEqual(self.client.get(self.url("start")).status_code, 200)
@@ -73,9 +76,28 @@ class KioskAccessTests(KioskTestBase):
         self.kiosk.regenerate_access_key()
         self.assertEqual(self.client.get(self.url("start")).status_code, 403)
 
-    def test_cookie_for_one_kiosk_does_not_open_another(self):
-        other = FeedbackKiosk.objects.create(facility=self.facility, name="Second")
+    def test_unknown_facility_is_blocked(self):
+        response = self.client.get(
+            reverse("patient_feedback:start", kwargs={"facility_id": "00000000-0000-0000-0000-000000000000"})
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_key_from_another_facility_is_rejected(self):
+        other_facility = self.create_facility(user=self.user)
+        other = FeedbackKiosk.objects.create(facility=other_facility, name="Elsewhere")
+        response = self.client.get(self.url("start"), {"key": other.access_key})
+        self.assertEqual(response.status_code, 403)
+
+    def test_cookie_for_one_facility_does_not_open_another(self):
+        other_facility = self.create_facility(user=self.user)
+        other = FeedbackKiosk.objects.create(facility=other_facility, name="Elsewhere")
         self.assertEqual(self.client.get(self.url("start", other)).status_code, 403)
+
+    def test_second_kiosk_key_switches_the_browser(self):
+        other = FeedbackKiosk.objects.create(facility=self.facility, name="Pharmacy", default_language="kn")
+        self.open_kiosk(other)
+        self.assertContains(self.client.get(self.url("start")), 'lang="kn"')
+        self.assertEqual(self.client.get(self.url("start")).context["kiosk"], other)
 
     def test_inactive_kiosk(self):
         self.kiosk.is_active = False

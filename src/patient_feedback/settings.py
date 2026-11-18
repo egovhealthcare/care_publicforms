@@ -106,7 +106,7 @@ DEFAULTS = {
     # How far back to look for the patient's encounter at the kiosk's facility
     # when linking a UHID response to an encounter. 0 disables linking.
     "ENCOUNTER_LOOKBACK_DAYS": 1,
-    # Load DM Sans / Noto Sans Kannada from Google Fonts. Turn off for kiosks
+    # Load Figtree (care_fe's font) / Noto Sans Kannada from Google Fonts. Turn off for kiosks
     # without internet access (system fonts are used instead).
     "LOAD_WEB_FONTS": True,
     # Lifetime of the cookie that marks a browser as an authorised kiosk.

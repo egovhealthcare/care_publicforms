@@ -11,7 +11,7 @@
 {% if load_web_fonts %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700{% if lang == 'kn' %}&amp;family=Noto+Sans+Kannada:wght@300;400;500;600{% endif %}&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700{% if lang == 'kn' %}&amp;family=Noto+Sans+Kannada:wght@400;500;600;700{% endif %}&amp;display=swap">
 {% endif %}
 <link rel="stylesheet" href="{% static 'patient_feedback/kiosk.css' %}">
 <script>document.documentElement.className = 'js';</script>
@@ -31,11 +31,11 @@
       {% if show_nav %}
       <nav class="hdr-nav">
         <a class="navbtn navbtn--home" href="{{ urls.first_question }}">
-          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#1577DD" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4v-5.5H9V20H5a1 1 0 0 1-1-1z"/></svg>
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4v-5.5H9V20H5a1 1 0 0 1-1-1z"/></svg>
           <span>{% t "nav_home" %}</span>
         </a>
         <a class="navbtn navbtn--reset" href="{{ urls.reset }}">
-          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#C10FFF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M19.8 4.2v4h-4"/></svg>
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M19.8 4.2v4h-4"/></svg>
           <span>{% t "nav_reset" %}</span>
         </a>
       </nav>

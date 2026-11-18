@@ -30,9 +30,14 @@ visit) when the UHID matches a patient identifier.
   secret key. Opening the kiosk link once stores a signed cookie on that
   browser. The key only allows submitting feedback for that kiosk; it is not
   a Care user token. Regenerating the key logs the screen out.
-- **TV layouts.** Sizes are in `rem` and scale with the screen: the original
-  phone design at small sizes, scaled up on portrait TVs (e.g. 1080×1920),
-  and a two-column layout on landscape TVs (e.g. 1920×1080).
+- **care_fe look.** Styled with care_fe's CareUI theme (Figtree, emerald
+  primary, neutral greys, care_fe buttons/cards), using hex colours so older
+  TV browsers render it.
+- **TV layouts.** Sizes are in `rem` and scale to the tighter of the screen's
+  width and height: a single column on phones, a centred card on portrait
+  TVs (a question screen fits 1080×1920 without scrolling), and a centred
+  two-column card on landscape TVs and monitors (every screen fits 16:9,
+  16:10 and 4:3, including 960×540 TV browsers).
 - **Unattended use.** After 90 s without a touch the kiosk shows *"Are you
   still there?"*, then wipes the answers and returns to the start in the
   kiosk's default language. The server also discards drafts untouched for
@@ -91,11 +96,20 @@ Then rebuild the image and run migrations. Care's start scripts run
 1. In Care's Django admin, open **Patient Feedback → Feedback kiosks → Add**.
    Pick the facility, give it a name ("OPD block, ground floor") and save.
 2. Copy the **Kiosk link** shown on the saved kiosk
-   (`https://<care-api-host>/patient_feedback/kiosk/<id>/?key=<secret>`).
+   (`https://<care-api-host>/facility/<facility_id>/patient_feedback/?key=<secret>`).
    Treat it like a password.
 3. Open that link once on the TV. The browser is now authorised and the key
    is removed from the address bar. Bookmark or set as the kiosk start page
-   `https://<care-api-host>/patient_feedback/kiosk/<id>/`.
+   `https://<care-api-host>/facility/<facility_id>/patient_feedback/`.
+
+A facility can have several kiosks (e.g. one per OPD block); each screen
+becomes whichever kiosk's key it was opened with.
+
+> [!NOTE]
+> The kiosk pages are served by the Care **backend**. If your deployment
+> serves care_fe and the backend from the same domain, route
+> `/facility/<id>/patient_feedback/` to the backend, since care_fe also uses
+> `/facility/...` paths.
 
 Per-kiosk options:
 
@@ -113,13 +127,13 @@ which is handy for spotting a TV that is off or offline.
 
 ### Kiosk browser tips
 
-- Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/patient_feedback/kiosk/<id>/"`.
+- Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/patient_feedback/"`.
 - The camera only works over HTTPS. Allow camera access for the site once.
 - QR payloads count as a UHID when they contain exactly 11 digits once other
   characters are removed (`UHID:123-4567-8901` works).
 - Without internet access to Google Fonts, set `LOAD_WEB_FONTS=False` and
-  install *Noto Sans Kannada* on the device (or ship the fonts yourself), or
-  Kannada may not render.
+  install *Figtree* and *Noto Sans Kannada* on the device (or ship the fonts
+  yourself); otherwise system fonts are used and Kannada may not render.
 
 ## Viewing feedback
 
@@ -152,7 +166,7 @@ Set in the plug's `configs={}` or as environment variables:
 | `DONE_TIMEOUT_SECONDS` | `20` | How long the thank-you screen stays up. |
 | `DRAFT_EXPIRY_SECONDS` | `600` | Server-side limit for an untouched draft. |
 | `ENCOUNTER_LOOKBACK_DAYS` | `1` | How far back to look for the encounter to link. `0` turns linking off. |
-| `LOAD_WEB_FONTS` | `True` | Load DM Sans / Noto Sans Kannada from Google Fonts. |
+| `LOAD_WEB_FONTS` | `True` | Load Figtree (care_fe's font) / Noto Sans Kannada from Google Fonts. |
 | `KIOSK_COOKIE_MAX_AGE_DAYS` | `400` | How long a kiosk browser stays authorised. |
 
 ## Questions and translations

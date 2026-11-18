@@ -7,6 +7,7 @@ flow therefore works on TV browsers with JavaScript disabled or broken;
 ``kiosk.js`` only adds the camera scanner, instant keypad, idle reset and a
 short highlight before a rating is submitted.
 
+Pages live under /facility/<facility_id>/patient_feedback/ (see apps.py).
 Flow: start → (scan | uhid | guest) → question 1..10 → comments → review → done
 """
 
@@ -14,7 +15,7 @@ import time
 from datetime import timedelta
 
 from django.http import HttpResponseRedirect
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme, urlencode
@@ -60,18 +61,21 @@ class KioskView(View):
 
     # ── request lifecycle ───────────────────────────────────────────
     def dispatch(self, request, *args, **kwargs):
-        self.kiosk = get_object_or_404(
-            FeedbackKiosk.objects.select_related("facility"), external_id=kwargs.pop("kiosk_id")
-        )
+        facility_id = kwargs.pop("facility_id")
+        self.kiosk = None
 
         if "key" in request.GET:
-            if not kiosk_auth.key_matches(self.kiosk, request.GET.get("key")):
+            self.kiosk = kiosk_auth.kiosk_for_key(facility_id, request.GET.get("key"))
+            if self.kiosk is None:
                 return self.render_blocked("unauthorised")
             # Remember this browser, then drop the key from the address bar.
             response = HttpResponseRedirect(self.url("start"))
             kiosk_auth.authorise(response, self.kiosk)
             return response
-        if not kiosk_auth.is_authorised(request, self.kiosk):
+        # Unknown facilities get the same answer as a missing cookie, so
+        # facility ids can't be probed through this page.
+        self.kiosk = kiosk_auth.kiosk_from_cookie(request, facility_id)
+        if self.kiosk is None:
             return self.render_blocked("unauthorised")
         if not self.kiosk.is_active:
             return self.render_blocked("inactive")
@@ -111,7 +115,7 @@ class KioskView(View):
 
     # ── helpers ─────────────────────────────────────────────────────
     def url(self, name: str, **kwargs) -> str:
-        return reverse(f"patient_feedback:{name}", kwargs={"kiosk_id": self.kiosk.external_id, **kwargs})
+        return reverse(f"patient_feedback:{name}", kwargs={"facility_id": self.kiosk.facility.external_id, **kwargs})
 
     def question_url(self, number: int, from_review: bool = False) -> str:
         url = self.url("question", number=number)

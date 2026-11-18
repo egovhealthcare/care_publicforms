@@ -15,6 +15,9 @@ class PatientFeedbackConfig(AppConfig):
 
     def ready(self):
         # Care mounts `<plugin>.urls` under /api/<plugin>/ for API routes.
-        # The kiosk pages are server-rendered HTML, so they live outside /api/.
+        # The kiosk pages are server-rendered HTML, so they live outside /api/,
+        # scoped to the facility like Care's own facility routes.
         urlconf = import_module(settings.ROOT_URLCONF)
-        urlconf.urlpatterns += [path(f"{PLUGIN_NAME}/", include(f"{PLUGIN_NAME}.pages"))]
+        urlconf.urlpatterns += [
+            path(f"facility/<uuid:facility_id>/{PLUGIN_NAME}/", include(f"{PLUGIN_NAME}.pages")),
+        ]

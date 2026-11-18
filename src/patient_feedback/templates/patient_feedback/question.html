@@ -7,7 +7,7 @@
   {% if from_review %}<input type="hidden" name="return_to" value="review">{% endif %}
 
   <div class="area-head qhead">
-    <span class="kicker kicker--tnum">{% t "question_counter" n=number total=total %}</span>
+    <span class="badge">{% t "question_counter" n=number total=total %}</span>
     <h2 class="qtitle">{% tr question.text %}</h2>
     {% if question.hint %}<p class="qhint">{% tr question.hint %}</p>{% endif %}
   </div>
