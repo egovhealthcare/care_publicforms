@@ -86,7 +86,18 @@ class PluginSettings:  # pragma: no cover
 REQUIRED_SETTINGS = set()
 
 DEFAULTS = {
-    # Number of digits in a UHID (the number printed on the OP slip).
+    # Language a new patient starts in ("en" or "kn"). A screen can start in
+    # another one with ?lang=kn in its URL.
+    "DEFAULT_LANGUAGE": "en",
+    # How the QR on the OP slip is read: "camera" (the browser reads it with
+    # the screen's camera), "scanner" (a USB/Bluetooth scanner in keyboard
+    # mode) or "off". A screen can override it with ?scan=scanner.
+    "SCAN_MODE": "camera",
+    # Show an on-screen number pad for the UHID (screens without a system
+    # keyboard). A screen can override it with ?keypad=0 or ?keypad=1.
+    "SHOW_KEYPAD": True,
+    # Number of digits in a UHID (the number printed on the OP slip). Only
+    # the format is checked; the UHID is stored as entered.
     "UHID_LENGTH": 11,
     # How the UHID is grouped on screen, e.g. 3-4-4 → "123 4567 8901".
     # Must add up to UHID_LENGTH.
@@ -94,28 +105,16 @@ DEFAULTS = {
     # Prefix of the reference number shown after submitting. Empty uses the
     # form's code, e.g. OPD-20261118-4821 / IPD-20261118-0932.
     "REFERENCE_PREFIX": "",
-    # Seconds without a touch before the kiosk warns, then wipes an unfinished
-    # questionnaire and returns to the start screen (browser-side timer).
+    # Seconds without a touch before the screen warns, then starts over.
     "IDLE_TIMEOUT_SECONDS": 90,
-    # Server-side backstop: a draft untouched (no page request) for this long
-    # is discarded, so kiosks without working JavaScript never carry one
-    # patient's answers over to the next. Keep it well above
-    # IDLE_TIMEOUT_SECONDS: typing a comment doesn't reach the server.
-    "DRAFT_EXPIRY_SECONDS": 600,
-    # Seconds the "Thank you" screen stays up before returning to the start.
+    # Seconds the "Thank you" screen stays up before starting over.
     "DONE_TIMEOUT_SECONDS": 20,
-    # How far back to look for the patient's encounter at the kiosk's facility
-    # when recording which encounter an OP response is about. 0 disables it.
-    "ENCOUNTER_LOOKBACK_DAYS": 1,
-    # Same for inpatient forms, which are usually filled at discharge, days
-    # after admission. Inpatient encounters are preferred.
-    "IP_ENCOUNTER_LOOKBACK_DAYS": 60,
-    # Load Figtree (care_fe's font) / Noto Sans Kannada from Google Fonts. Turn off for kiosks
-    # without internet access (system fonts are used instead).
+    # The pages are public, so limit how often one IP address can submit
+    # (django-ratelimit rate; Care's DISABLE_RATELIMIT turns it off).
+    "SUBMIT_RATE_LIMIT": "60/m",
+    # Load Figtree (care_fe's font) and Noto Sans Kannada from Google Fonts.
+    # Turn off for screens without internet access (system fonts are used).
     "LOAD_WEB_FONTS": True,
-    # Lifetime of the cookie that marks a browser as an authorised kiosk.
-    # Browsers cap cookie lifetimes at 400 days.
-    "KIOSK_COOKIE_MAX_AGE_DAYS": 400,
 }
 
 plugin_settings = PluginSettings(PLUGIN_NAME, defaults=DEFAULTS, required_settings=REQUIRED_SETTINGS)

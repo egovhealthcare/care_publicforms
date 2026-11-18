@@ -1,8 +1,8 @@
 # care_patient_feedback
 
 A [Care](https://github.com/ohcnetwork/care) plugin that runs **patient
-satisfaction surveys (OPD and inpatient) on touch-screen TV kiosks**. Every
-screen is rendered on the server (Django templates), so it needs no frontend
+satisfaction surveys (OPD and inpatient) on touch-screen TV kiosks**. The
+pages are rendered on the server (Django templates), so it needs no frontend
 build and works on the limited browsers built into TVs and signage players,
 even with JavaScript switched off.
 
@@ -14,49 +14,49 @@ details from the paper form.
 Flow (bilingual, English / Kannada):
 
 ```
-choose form (OP visit / IP stay)        ← skipped on a kiosk pinned to one form
+choose form (OP visit / IP stay)        ← skipped on a screen pinned to one form
   → /<form>/ identify: scan QR on OP slip | type UHID | continue as guest
   → a few details (clinic / ward, date of admission, age, sex …)
-  → ratings: all on one page, one card at a time (Poor → Excellent, No comments)
+  → ratings, one card at a time (Poor → Excellent, No comments)
   → open questions → review → thank you + reference number
 ```
 
-Each response is stored as one row in a table **without foreign keys**,
-holding a snapshot of every question as it was asked.
+The pages are **public**: anyone in the hospital can open them, with no
+login, kiosk key, session or cookie. Each response is one row in a table
+**without foreign keys**.
 
 ## How it works
 
-- **Server-rendered pages, plain HTML forms.** Answers in progress live in
-  the Django session; every POST redirects (Post/Redirect/Get). Nothing is
-  written to the database until the patient taps *Submit feedback*.
-- **All ratings on one page.** The server renders every rating question on
-  a single page with only the current card visible. With JavaScript, a tap
-  highlights the answer, saves it in the background and slides to the next
-  card without reloading; the last answer submits the page. Without
-  JavaScript, each answer button posts and the server shows the next card.
-- **JavaScript is optional.** `kiosk.js` (ES5, no dependencies) adds the
-  in-page question stepping, an idle timer, the instant on-screen keypad and
-  camera QR scanning. Everything also works through plain form posts.
+- **One page per form, posted once.** The whole questionnaire (identify,
+  details, every rating, open questions, review) is one server-rendered form
+  with every language in it. `kiosk.js` shows one step at a time and
+  switches language instantly; the form controls are the only state. Nothing
+  reaches the server until the patient taps *Submit feedback*, which posts
+  the page once. The server validates it and either saves it and shows the
+  thank-you page, or shows the page again at the first step with a problem.
+- **JavaScript is optional.** Without it the same page is one long form
+  (UHID, details, every rating, open questions, submit). `kiosk.js` (ES5, no
+  dependencies) adds the steps, the UHID cells and on-screen keypad, QR
+  scanning and the idle timer.
+- **Nothing stored until submit.** No session, cookie or draft rows; the
+  UHID is stored as entered and is not looked up in Care. Submissions are
+  rate-limited per IP (`SUBMIT_RATE_LIMIT`; Care's `DISABLE_RATELIMIT`
+  turns it off).
 - **Configurable forms.** Forms and questions live in the database and are
   edited in the Django admin, with a text box per language. See
   [Forms and questions](#forms-and-questions).
-- **Kiosk access is separate from Care logins.** Each kiosk has its own
-  secret key. Opening the kiosk link once stores a signed cookie on that
-  browser. The key only allows submitting feedback for that kiosk; it is not
-  a Care user token. Regenerating the key logs the screen out.
 - **care_fe look.** Styled with care_fe's CareUI theme (Figtree, emerald
   primary, neutral greys, care_fe buttons/cards), using hex colours so older
   TV browsers render it.
 - **One layout on every screen.** The original single-column kiosk design
-  is used everywhere. Sizes are in `rem`, so on TVs the column simply scales
-  up to the screen (the smaller of height/60 and width/32). A question fits
+  is used everywhere. Sizes are in `rem`, so on TVs the column scales up to
+  the screen (the smaller of height/60 and width/32). A question fits
   without scrolling on 1920×1080, 960×540 TV browsers, 1080×1920 portrait
-  and tablets. The longer comments and review pages scroll, with their main
+  and tablets. The longer comments and review steps scroll, with their main
   button pinned at the bottom.
-- **Unattended use.** After 90 s without a touch the kiosk shows *"Are you
-  still there?"*, then wipes the answers and returns to the start in the
-  kiosk's default language. The server also discards drafts untouched for
-  10 minutes, so one patient's answers never carry over to the next.
+- **Unattended use.** Once someone has used the screen, 90 s without a
+  touch shows *"Are you still there?"*, then reloads the start page, which
+  drops everything entered.
 
 ## Installation
 
@@ -106,50 +106,36 @@ Then rebuild the image and run migrations. Care's start scripts run
 > [!IMPORTANT]
 > Don't commit the `plug_config.py` / `plugs/manager.py` changes to Care.
 
-## Setting up a kiosk
+## Putting a form on a screen
 
-1. In Care's Django admin, open **Patient Feedback → Feedback kiosks → Add**.
-   Pick the facility, give it a name ("OPD block, ground floor") and save.
-2. Copy one of the **Kiosk links** shown on the saved kiosk. Treat them like
-   passwords:
-   - `…/facility/<facility_id>/patient_feedback/?key=<secret>`: patients
-     choose OPD or inpatient feedback;
-   - `…/facility/<facility_id>/patient_feedback/<form code>/?key=<secret>`,
-     e.g. `…/ipd/?key=…`: the screen is **pinned to that form**, with no
-     chooser.
-3. Open that link once on the TV. The browser is now authorised and the key
-   is removed from the address bar (the form part stays). Set the clean URL
-   as the kiosk's start page, e.g.
-   `https://<care-api-host>/facility/<facility_id>/patient_feedback/ipd/`.
+There is nothing to register: open the page for the facility on the TV and
+set it as the browser's start page.
 
-Every step of a form lives under its code (`/ipd/`, `/ipd/questions/` …).
-A screen launched on a form's URL stays on that form: there is no way back
-to the chooser, and idle reset and "Submit another response" return to that
-form. Launched on the plain URL, the screen returns to the chooser. A kiosk
-whose **Forms** list has a single form behaves as pinned too.
+- `…/facility/<facility_id>/patient_feedback/`: patients choose OPD or
+  inpatient feedback (opens the form directly if only one is active);
+- `…/facility/<facility_id>/patient_feedback/<form code>/`, e.g. `…/ipd/`:
+  the screen is **pinned to that form**, with no chooser. Idle reset and
+  the thank-you page return to that form.
 
-A facility can have several kiosks (e.g. one per OPD block, one per ward);
-each screen becomes whichever kiosk's key it was opened with.
+The Django admin shows each form's link (**Patient Feedback → Feedback
+forms**, open a form). A screen can set its own options in the URL:
+
+| Parameter | What it does |
+| --- | --- |
+| `lang=kn` | Language each new patient starts in (`en` / `kn`). Default: `DEFAULT_LANGUAGE`. |
+| `scan=camera` | The browser reads the QR with the TV's camera (needs HTTPS and a browser with `BarcodeDetector`, e.g. Chrome on Android / ChromeOS / macOS). |
+| `scan=scanner` | A USB/Bluetooth QR scanner in keyboard mode, which works on any browser. A scanner also works on the first step in camera mode. |
+| `scan=off` | Hides the scan option. |
+| `keypad=0` / `keypad=1` | On-screen number pad for the UHID. Keep it on for TVs without a system keyboard. |
+
+For example `…/patient_feedback/ipd/?lang=kn&scan=scanner` pins a ward
+screen to the inpatient form, in Kannada, with a USB scanner.
 
 > [!NOTE]
-> The kiosk pages are served by the Care **backend**. If your deployment
-> serves care_fe and the backend from the same domain, route
+> The pages are served by the Care **backend**. If your deployment serves
+> care_fe and the backend from the same domain, route
 > `/facility/<id>/patient_feedback/` to the backend, since care_fe also uses
 > `/facility/...` paths.
-
-Per-kiosk options:
-
-| Field | What it does |
-| --- | --- |
-| Default language | Language each new patient starts in (`en` / `kn`). |
-| Scan mode | `camera`: the browser reads the QR with the TV's camera (needs HTTPS and a browser with `BarcodeDetector`, e.g. Chrome on Android / ChromeOS / macOS). `scanner`: a USB/Bluetooth QR scanner in keyboard mode, which works on any browser. `disabled`: hides the scan option. |
-| Show keypad | On-screen number pad for the UHID. Keep it on for TVs without a system keyboard. |
-| Forms | Forms offered on this screen, e.g. only the inpatient form on a ward kiosk. Empty offers every active form for the facility. |
-| Patient identifier config | The Care patient identifier that holds the UHID. When set, responses record the patient's id and their most recent encounter's id at the facility. |
-| Require registered UHID | Reject UHIDs that don't match a patient (needs the identifier above). |
-
-**Last seen** on the kiosk list shows when the screen last loaded a page,
-which is handy for spotting a TV that is off or offline.
 
 ### Kiosk browser tips
 
@@ -167,57 +153,67 @@ which is handy for spotting a TV that is off or offline.
 
 In the Django admin under **Patient Feedback → Feedback forms**:
 
-- **Form**: a code stored with every response and used in the kiosk URL
-  (`opd`, `ipd`; `done`, `reset` and `language` are reserved), the patient
-  type (**OP** or **IP**), a title and description per language, and active
-  / order. A form with no facility is offered everywhere; a facility can add
-  its own form with the same code (say, with its own clinic list), which
-  replaces the shared one on that facility's kiosks.
+- **Form**: a code stored with every response and used in the URL (`opd`,
+  `ipd`), the patient type (**OP** or **IP**), a title and description per
+  language, and active / order. A form with no facility is offered
+  everywhere; a facility can add its own form with the same code (say, with
+  its own clinic list), which replaces the shared one for that facility.
 - **Questions** (inline on the form, or under *Feedback questions* for every
   option). The type decides where a question appears:
 
-  | Type | Screen | Notes |
+  | Type | Step | Notes |
   | --- | --- | --- |
   | `choice` | A few details | `options`: `[{"value": "ent", "en": "ENT", "kn": "..."}]` |
   | `date` | A few details | e.g. date of admission; future dates are refused |
-  | `rating` | Ratings page, one card at a time | Poor → Excellent plus "No comments" (can be turned off). `options` can relabel the five steps, e.g. waiting time "More than 30 mins" … "Immediate". Ratings always need an answer. |
+  | `rating` | One card at a time | Poor → Excellent plus "No comments" (can be turned off). `options` can relabel the five steps, e.g. waiting time "More than 30 mins" … "Immediate". Ratings always need an answer. |
   | `yes_no` | In your own words | `allow_comment` adds a "Why?" box |
   | `text` | In your own words | free text |
 
-  Each question has a stable `key` (stored with answers, so don't rename it
-  once answers exist), an order, `required`, active, and an **audience**:
-  everyone, guests only, or patients who gave a UHID. The default forms ask
-  age and sex only of guests, since UHID patients already have a record.
+  Each question has a stable `key` (answers are stored under it), an order,
+  `required`, active, and an **audience**: everyone, guests only, or
+  patients who gave a UHID. The default forms ask age and sex only of
+  guests, since UHID patients already have a record.
 
-To change wording, edit the question; stored responses keep the wording they
-were answered with. `python manage.py seed_feedback_forms` re-creates either
-default form if it was deleted.
+Responses store only keys and values; the wording and labels come from the
+form. Fixing a typo is fine, but if a question's meaning changes, add a new
+question with a new key and switch the old one off, so earlier answers
+aren't read against the new wording. `python manage.py seed_feedback_forms`
+re-creates either default form if it was deleted.
 
 ## Viewing feedback
 
 Responses go to `FeedbackSubmission` (`patient_feedback_feedbacksubmission`),
-which has **no foreign keys**. Facility, kiosk, form, patient and encounter
-are kept as plain ids plus names, and `answers` holds every question's
-English wording, value and display text as answered. Ratings are also kept
-as `{question_key: 0–5}`, where `0` means *No comments* and is left out of
-averages.
+which has **no foreign keys** and only these columns: `external_id`,
+`reference_number`, `facility_external_id`, `form_code`, `patient_type`,
+`language`, `uhid` (empty for guests), `answers` and `submitted_at`.
 
-- **Django admin → Feedback submissions**: filter by OP/IP, form, how the
-  patient identified and language; search by reference number, UHID or
-  facility; **Export selected as CSV** gives one column per question.
-  Submissions are read-only there.
+`answers` is a flat `{question_key: value}` object, for example:
+
+```json
+{"clinic": "ent", "information_signage": 4, "registration_wait": 0,
+ "would_return": true, "would_return__comment": "Friendly staff"}
+```
+
+Ratings are `0`–`5` (`0` = *No comments*, left out of averages), choices
+their option value, dates `YYYY-MM-DD`, yes/no `true`/`false` (the "Why?"
+text under `<key>__comment`) and free text as typed. Unanswered questions
+are left out.
+
+- **Django admin → Feedback submissions**: filter by OP/IP, form and
+  language; search by reference number or UHID; each submission shows its
+  answers with the form's wording. **Export selected as CSV** gives one
+  column per answer key. Submissions are read-only there.
 - **API** (Care auth; needs permission to view questionnaire responses for
   the facility):
   - `GET /api/patient_feedback/facility/<facility_id>/responses/`: paginated
-    submissions with their answers
+    submissions, with the fields above
   - `GET /api/patient_feedback/facility/<facility_id>/summary/`: one block
     per form with the overall score, attribute-wise averages and
     distributions, the **two lowest-scoring attributes** (the NQAS "Check"
     step) and counts for yes/no and choice questions
 
-  Both accept `patient_type` (`op` | `ip`), `form` (code),
-  `submitted_after` / `submitted_before` (YYYY-MM-DD), `kiosk` (kiosk id)
-  and `identification_method` (`scan` | `manual` | `guest`).
+  Both accept `patient_type` (`op` | `ip`), `form` (code) and
+  `submitted_after` / `submitted_before` (YYYY-MM-DD).
   `GET /api/patient_feedback/health` returns `OK`.
 
 ## Settings
@@ -226,16 +222,16 @@ Set in the plug's `configs={}` or as environment variables:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
+| `DEFAULT_LANGUAGE` | `"en"` | Starting language; a screen can override it with `?lang=`. |
+| `SCAN_MODE` | `"camera"` | `camera`, `scanner` or `off`; a screen can override it with `?scan=`. |
+| `SHOW_KEYPAD` | `True` | On-screen UHID keypad; a screen can override it with `?keypad=`. |
 | `UHID_LENGTH` | `11` | Digits in a UHID. |
 | `UHID_GROUPS` | `[3, 4, 4]` | Display grouping (`123 4567 8901`); must add up to `UHID_LENGTH`. |
 | `REFERENCE_PREFIX` | `""` | Reference numbers look like `OPD-20261118-4821` / `IPD-…` (unique per facility). Empty uses the form's code. |
-| `IDLE_TIMEOUT_SECONDS` | `90` | Idle time before the kiosk warns, then resets. |
-| `DONE_TIMEOUT_SECONDS` | `20` | How long the thank-you screen stays up. |
-| `DRAFT_EXPIRY_SECONDS` | `600` | Server-side limit for an untouched draft. |
-| `ENCOUNTER_LOOKBACK_DAYS` | `1` | OP forms: how far back to look for the patient's encounter to record. `0` turns it off. |
-| `IP_ENCOUNTER_LOOKBACK_DAYS` | `60` | Same for IP forms (filled at discharge); inpatient encounters are preferred. |
+| `IDLE_TIMEOUT_SECONDS` | `90` | Idle time before the screen warns, then starts over. |
+| `DONE_TIMEOUT_SECONDS` | `20` | How long the thank-you page stays up. |
+| `SUBMIT_RATE_LIMIT` | `"60/m"` | Submissions allowed per IP (django-ratelimit rate). A kiosk is one IP, so keep it well above a busy hour. |
 | `LOAD_WEB_FONTS` | `True` | Load Figtree (care_fe's font) / Noto Sans Kannada from Google Fonts. |
-| `KIOSK_COOKIE_MAX_AGE_DAYS` | `400` | How long a kiosk browser stays authorised. |
 
 ## Translations
 
@@ -253,17 +249,15 @@ Set in the plug's `configs={}` or as environment variables:
 
 ```
 src/patient_feedback/
-├── views.py          # SSR kiosk screens (one class per screen; ratings share one page)
-├── pages.py          # kiosk URLs, mounted at /facility/<id>/patient_feedback/
+├── views.py          # the public pages: chooser, questionnaire (GET + one POST), thank you
+├── pages.py          # page URLs, mounted at /facility/<id>/patient_feedback/
 ├── urls.py, api.py   # staff API, mounted by Care at /api/patient_feedback/
-├── draft.py          # in-progress answers in the session
-├── questionnaire.py  # a configured form → screens; answer parsing and labels
+├── questionnaire.py  # a configured form → steps; answer parsing and labels
+├── services.py       # UHID format, collecting answers, saving submissions
 ├── seed.py           # default OPD / inpatient forms (NQAS format)
-├── services.py       # UHID parsing, patient lookup, saving submissions
-├── kiosk_auth.py     # kiosk key → signed cookie
 ├── i18n.py           # UI strings
 ├── models.py, admin.py, settings.py
-├── templates/patient_feedback/   # one template per screen
+├── templates/patient_feedback/   # form.html + steps/, choose, done, empty
 ├── static/patient_feedback/      # kiosk.css, kiosk.js
 └── tests/
 ```

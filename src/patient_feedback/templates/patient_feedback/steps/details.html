@@ -1,0 +1,36 @@
+{% load patient_feedback_tags %}
+<section class="step screen screen--details" data-step="details">
+  <div class="area-head stack stack--8">
+    <h2 class="h2">{% t "details_heading" %}</h2>
+    <p class="lead-sm" data-audience="guest">{% t "details_lead_guest" %}</p>
+    <p class="lead-sm" data-audience="identified">{% t "details_lead" %}</p>
+  </div>
+
+  <div class="area-body stack stack--24">
+    {% for field in details %}
+    <fieldset class="group stack stack--10" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}">
+      <legend class="kicker">{% tr field.text %}</legend>
+      <span class="q-label" hidden>{% tr field.label %}</span>
+      {% if field.hint %}<p class="lead-sm">{% tr field.hint %}</p>{% endif %}
+      {% if field.type == "choice" %}
+      <div class="chips{% if field.compact %} chips--wide chips--num{% endif %}">
+        {% for option in field.options %}
+        <label class="chip">
+          <input type="radio" name="{{ field.key }}" value="{{ option.value }}"{% if option.value == field.value %} checked{% endif %}>
+          <span class="chip-face">{% tr option.label %}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <input type="date" class="ta ta--date" name="{{ field.key }}" value="{{ field.value }}" max="{{ today|date:'Y-m-d' }}" {% l10n_attr "aria-label" value=field.text %}>
+      {% endif %}
+      <p class="err" data-error role="alert"{% if not field.error %} hidden{% endif %}>{% t "required_error" %}</p>
+    </fieldset>
+    {% endfor %}
+  </div>
+
+  <div class="area-nav stack stack--10 js-only">
+    <button type="button" class="btn btn--primary btn--lg btn-cta" data-action="details-next">{% t "start_questions" %}</button>
+    <button type="button" class="btn btn--ghost btn--md btn-quiet" data-go="identify">{% t "back" %}</button>
+  </div>
+</section>

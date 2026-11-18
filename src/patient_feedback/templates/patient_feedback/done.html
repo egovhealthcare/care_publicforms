@@ -2,8 +2,8 @@
 {% load patient_feedback_tags %}
 
 {% block head_extra %}
-{# Return to the start for the next patient; works without JavaScript. #}
-<meta http-equiv="refresh" content="{{ done_timeout }};url={{ idle_reset_url }}">
+{# Back to the start for the next patient; works without JavaScript. #}
+<meta http-equiv="refresh" content="{{ done_timeout }};url={{ home_url }}">
 {% endblock %}
 
 {% block screen %}
@@ -19,6 +19,6 @@
     <span class="kicker">{% t "reference_number" %}</span>
     <span class="token">{{ reference }}</span>
   </div>
-  <a class="btn btn--outline btn--lg btn-wide" href="{{ urls.reset }}">{% t "restart" %}</a>
+  <a class="btn btn--outline btn--lg btn-wide" href="{{ home_url }}">{% t "restart" %}</a>
 </section>
 {% endblock %}

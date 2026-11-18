@@ -1,0 +1,18 @@
+{% load patient_feedback_tags %}
+<section class="step screen screen--review" data-step="review">
+  <div class="area-head stack stack--8">
+    <h2 class="h2">{% t "review_heading" %}</h2>
+    <p class="lead-sm">{% t "review_lead" %}</p>
+  </div>
+
+  {# kiosk.js fills this from the answers on the page. #}
+  <div class="area-body rows" id="reviewRows"></div>
+  <span id="notAnsweredText" hidden>{% t "not_answered" %}</span>
+
+  <div class="area-note callout callout--small">{% t "review_note" %}</div>
+
+  <div class="area-nav navrow">
+    <button type="button" class="btn btn--ghost btn--md btn-back" data-action="review-back">{% t "back" %}</button>
+    <button type="submit" class="btn btn--primary btn--lg btn-cta btn-cta--grow">{% t "submit" %}</button>
+  </div>
+</section>

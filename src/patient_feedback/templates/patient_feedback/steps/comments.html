@@ -1,0 +1,46 @@
+{% load patient_feedback_tags %}
+<section class="step screen screen--comments" data-step="comments">
+  <div class="area-head stack stack--8">
+    <span class="kicker">{% t "open_kicker" %}</span>
+    <h2 class="h2">{% if open_questions_required %}{% t "open_heading_required" n=open_questions|length %}{% else %}{% t "open_heading" n=open_questions|length %}{% endif %}</h2>
+  </div>
+
+  <div class="area-body stack stack--26">
+    {% for field in open_questions %}
+    {% if field.type == "yes_no" %}
+    <fieldset class="group stack stack--12" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}">
+      <legend class="qlabel">{% tr field.text %}</legend>
+      <span class="q-label" hidden>{% tr field.label %}</span>
+      {% if field.hint %}<p class="lead-sm">{% tr field.hint %}</p>{% endif %}
+      <div class="yesno">
+        <label class="yn">
+          <input type="radio" name="{{ field.key }}" value="yes"{% if field.value == "yes" %} checked{% endif %}>
+          <span class="ynbtn">{% t "yes" %}</span>
+        </label>
+        <label class="yn">
+          <input type="radio" name="{{ field.key }}" value="no"{% if field.value == "no" %} checked{% endif %}>
+          <span class="ynbtn">{% t "no" %}</span>
+        </label>
+      </div>
+      {% if field.allow_comment %}
+      <textarea name="{{ field.comment_key }}" class="ta ta--short" rows="2" maxlength="2000" data-comment {% l10n_attr "placeholder" "open_why" %}>{{ field.comment }}</textarea>
+      {% endif %}
+      <p class="err" data-error role="alert"{% if not field.error %} hidden{% endif %}>{% t "required_error" %}</p>
+    </fieldset>
+    {% else %}
+    <div class="stack stack--10" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}">
+      <label class="qlabel" for="q-{{ field.key }}">{% tr field.text %}</label>
+      <span class="q-label" hidden>{% tr field.label %}</span>
+      {% if field.hint %}<p class="lead-sm">{% tr field.hint %}</p>{% endif %}
+      <textarea id="q-{{ field.key }}" name="{{ field.key }}" class="ta" rows="3" maxlength="2000">{{ field.value }}</textarea>
+      <p class="err" data-error role="alert"{% if not field.error %} hidden{% endif %}>{% t "required_error" %}</p>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="area-nav navrow js-only">
+    <button type="button" class="btn btn--ghost btn--md btn-back" data-action="comments-back">{% t "back" %}</button>
+    <button type="button" class="btn btn--primary btn--lg btn-cta btn-cta--grow" data-action="comments-next">{% t "review_answers" %}</button>
+  </div>
+</section>

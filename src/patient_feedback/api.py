@@ -6,8 +6,6 @@ responses for the facility (``can_read_facility_questionnaire``) can read its
 patient feedback.
 """
 
-from uuid import UUID
-
 from care.facility.models import Facility
 from care.security.authorization import AuthorizationController
 from django.db.models import Q
@@ -20,9 +18,10 @@ from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from patient_feedback.models import FeedbackSubmission, IdentificationMethod, PatientType
-from patient_feedback.questionnaire import NO_COMMENT
+from patient_feedback.models import FeedbackSubmission, PatientType, QuestionType
+from patient_feedback.questionnaire import NO_COMMENT, form_for_submission
 
+SUMMARISED_TYPES = (QuestionType.RATING, QuestionType.YES_NO, QuestionType.CHOICE)
 LOWEST_ATTRIBUTES = 2  # NQAS "Check" step: root-cause the two lowest-scoring attributes
 
 
@@ -35,26 +34,7 @@ class FeedbackSubmissionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FeedbackSubmission
-        fields = (
-            "id",
-            "reference_number",
-            "submitted_at",
-            "started_at",
-            "form_code",
-            "form_title",
-            "form_external_id",
-            "patient_type",
-            "kiosk_external_id",
-            "kiosk_name",
-            "language",
-            "identification_method",
-            "uhid",
-            "patient_external_id",
-            "encounter_external_id",
-            "answers",
-            "ratings",
-            "average_rating",
-        )
+        fields = ("id", "reference_number", "submitted_at", "form_code", "patient_type", "language", "uhid", "answers")
 
 
 class FacilityFeedbackMixin:
@@ -71,7 +51,10 @@ class FacilityFeedbackMixin:
         date_filters = (("submitted_after", "submitted_at__date__gte"), ("submitted_before", "submitted_at__date__lte"))
         for param, lookup in date_filters:
             if value := params.get(param):
-                date = parse_date(value)
+                try:
+                    date = parse_date(value)
+                except ValueError:  # well formed but not a real date, e.g. 2026-13-01
+                    date = None
                 if date is None:
                     raise ValidationError({param: "Use YYYY-MM-DD."})
                 filters &= Q(**{lookup: date})
@@ -81,15 +64,6 @@ class FacilityFeedbackMixin:
             filters &= Q(patient_type=patient_type)
         if form := params.get("form"):
             filters &= Q(form_code=form)
-        if kiosk := params.get("kiosk"):
-            try:
-                filters &= Q(kiosk_external_id=UUID(kiosk))
-            except ValueError as error:
-                raise ValidationError({"kiosk": "Must be a kiosk id (UUID)."}) from error
-        if method := params.get("identification_method"):
-            if method not in IdentificationMethod.values:
-                raise ValidationError({"identification_method": f"One of {', '.join(IdentificationMethod.values)}."})
-            filters &= Q(identification_method=method)
         return FeedbackSubmission.objects.filter(filters)
 
 
@@ -98,8 +72,7 @@ class FacilityFeedbackListView(FacilityFeedbackMixin, ListAPIView):
     GET /api/patient_feedback/facility/<facility_id>/responses/
 
     Filters: patient_type (op | ip), form (code), submitted_after,
-    submitted_before (YYYY-MM-DD), kiosk (uuid), identification_method
-    (scan | manual | guest). Paginated with limit/offset.
+    submitted_before (YYYY-MM-DD). Paginated with limit/offset.
     """
 
     serializer_class = FeedbackSubmissionSerializer
@@ -108,71 +81,60 @@ class FacilityFeedbackListView(FacilityFeedbackMixin, ListAPIView):
         return self.filter_submissions(self.get_facility()).order_by("-submitted_at")
 
 
-def _summarise(rows) -> list[dict]:
-    """Aggregate submissions per form; question labels come from the stored answers."""
-    forms = {}
-    for form_code, form_title, patient_type, method, answers in rows:
-        form = forms.setdefault(
-            form_code,
-            {
+def _summarise(facility, rows) -> list[dict]:
+    """
+    Aggregate submissions per form. Which answers are ratings, yes/no or
+    choices comes from the form as it is now; keys no longer on it are left out.
+    """
+    blocks = {}
+    for form_code, patient_type, uhid, answers in rows:
+        if form_code not in blocks:
+            form = form_for_submission(facility.external_id, form_code)
+            questions = list(form.questions.order_by("order", "id")) if form else []
+            blocks[form_code] = {
                 "form": form_code,
-                "title": form_title,
                 "patient_type": patient_type,
                 "total": 0,
-                "by_identification": dict.fromkeys(IdentificationMethod.values, 0),
-                "_questions": {},
-            },
-        )
-        form["total"] += 1
-        form["by_identification"][method] = form["by_identification"].get(method, 0) + 1
-        for answer in answers or []:
-            if answer.get("type") not in ("rating", "yes_no", "choice"):
+                "with_uhid": 0,
+                "_questions": [q for q in questions if q.type in SUMMARISED_TYPES],
+                "_counts": {q.key: {} for q in questions},
+            }
+        block = blocks[form_code]
+        block["total"] += 1
+        block["with_uhid"] += bool(uhid)
+        for key, value in (answers or {}).items():
+            counts = block["_counts"].get(key)
+            if counts is None or value is None:
                 continue
-            question = form["_questions"].setdefault(
-                answer["key"],
-                {
-                    "key": answer["key"],
-                    "type": answer["type"],
-                    "label": answer.get("label") or answer["key"],
-                    "counts": {},
-                },
-            )
-            value = answer.get("value")
-            if value is None:
-                continue
-            bucket = str(value).lower() if isinstance(value, bool) else str(value)
-            question["counts"][bucket] = question["counts"].get(bucket, 0) + 1
+            bucket = ("yes" if value else "no") if isinstance(value, bool) else str(value)
+            counts[bucket] = counts.get(bucket, 0) + 1
 
     result = []
-    for form in forms.values():
+    for block in blocks.values():
+        counts_by_key = block.pop("_counts")
         ratings, others = [], []
         scored_total = scored_count = 0
-        for question in form.pop("_questions").values():
-            counts = question.pop("counts")
-            if question["type"] == "rating":
+        for question in block.pop("_questions"):
+            counts = counts_by_key[question.key]
+            item = {"key": question.key, "type": question.type, "text": question.text}
+            if question.type == QuestionType.RATING:
                 distribution = {str(v): counts.get(str(v), 0) for v in (5, 4, 3, 2, 1, NO_COMMENT)}
-                scored = {v: distribution[str(v)] for v in (1, 2, 3, 4, 5)}
-                count = sum(scored.values())
-                total = sum(v * c for v, c in scored.items())
+                count = sum(distribution[str(v)] for v in (1, 2, 3, 4, 5))
+                total = sum(v * distribution[str(v)] for v in (1, 2, 3, 4, 5))
                 scored_total += total
                 scored_count += count
                 ratings.append(
-                    {
-                        **question,
-                        "answered": count + distribution[str(NO_COMMENT)],
-                        "average": round(total / count, 2) if count else None,
-                        "distribution": distribution,
-                    }
+                    {**item, "average": round(total / count, 2) if count else None, "distribution": distribution}
                 )
             else:
-                others.append({**question, "counts": counts})
-        form["average_rating"] = round(scored_total / scored_count, 2) if scored_count else None
-        form["questions"] = ratings
-        form["lowest"] = [
+                others.append({**item, "counts": counts})
+        block["average_rating"] = round(scored_total / scored_count, 2) if scored_count else None
+        block["lowest"] = [
             q["key"] for q in sorted((q for q in ratings if q["average"] is not None), key=lambda q: q["average"])
         ][:LOWEST_ATTRIBUTES]
-        form["other_questions"] = others
-        result.append(form)
+        block["ratings"] = ratings
+        block["other_questions"] = others
+        result.append(block)
     return result
 
 
@@ -180,14 +142,13 @@ class FacilityFeedbackSummaryView(FacilityFeedbackMixin, APIView):
     """
     GET /api/patient_feedback/facility/<facility_id>/summary/
 
-    Same filters as the list. Returns one block per form (OP and IP forms ask
+    Same filters as the list. One block per form (OP and IP forms ask
     different questions) with the overall score, attribute-wise averages and
     distributions ("No comments" = 0 is not averaged), the two
     lowest-scoring attributes, and counts for yes/no and choice questions.
     """
 
     def get(self, request, facility_external_id):
-        submissions = self.filter_submissions(self.get_facility())
-        rows = submissions.values_list("form_code", "form_title", "patient_type", "identification_method", "answers")
-        forms = _summarise(rows.iterator())
-        return Response({"total": sum(f["total"] for f in forms), "forms": forms})
+        facility = self.get_facility()
+        rows = self.filter_submissions(facility).values_list("form_code", "patient_type", "uhid", "answers")
+        return Response({"forms": _summarise(facility, rows.iterator())})

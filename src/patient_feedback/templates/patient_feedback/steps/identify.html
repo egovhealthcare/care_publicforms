@@ -1,19 +1,16 @@
-{% extends "patient_feedback/base.html" %}
 {% load patient_feedback_tags %}
-
-{% block screen %}
-<section class="screen screen--start">
+<section class="step screen screen--start" data-step="identify">
   <div class="area-head hero">
     <span class="hero-glow" aria-hidden="true"></span>
     <h1 class="hero-title">{% t "hero_title" %}</h1>
-    <p class="hero-lead">{% t "hero_lead" n=question_count m=minutes %}</p>
+    <p class="hero-lead">{% t "hero_lead" n=rating_count m=minutes %}</p>
   </div>
 
   <div class="area-body stack stack--8">
-    <span class="kicker">{% t "step_identify" n=step %}</span>
+    <span class="kicker">{% t "step_identify" n=step_number %}</span>
 
-    {% if scan_enabled %}
-    <a class="opt opt--scan" href="{{ urls.scan }}">
+    {% if scan_mode != "off" %}
+    <button type="button" class="opt opt--scan" data-go="scan">
       <span class="opt-icon opt-icon--scan">
         <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
           <path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8"/><path d="M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8"/>
@@ -25,10 +22,10 @@
         <span class="opt-title opt-title--lg">{% t "opt_scan_title" %}</span>
         <span class="opt-sub opt-sub--onbrand">{% t "opt_scan_sub" %}</span>
       </span>
-    </a>
+    </button>
     {% endif %}
 
-    <a class="opt opt--manual" href="{{ urls.uhid }}">
+    <button type="button" class="opt opt--manual" data-go="uhid">
       <span class="opt-icon opt-icon--manual">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
           <rect x="2.5" y="6.5" width="19" height="11" rx="2.5"/><path d="M6.5 11h1M10 11h1M13.5 11h1M17 11h.5M8 14.5h8"/>
@@ -38,7 +35,7 @@
         <span class="opt-title">{% t "opt_manual_title" %}</span>
         <span class="opt-sub">{% t "opt_manual_sub" %}</span>
       </span>
-    </a>
+    </button>
 
     <div class="or" aria-hidden="true">
       <span class="or-rule"></span>
@@ -46,7 +43,7 @@
       <span class="or-rule"></span>
     </div>
 
-    <a class="opt opt--guest" href="{{ urls.guest }}">
+    <button type="button" class="opt opt--guest" data-action="guest">
       <span class="opt-icon opt-icon--guest">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.7-3.6 3.7-5.6 7.2-5.6s6.5 2 7.2 5.6"/></svg>
       </span>
@@ -55,21 +52,12 @@
         <span class="opt-sub">{% t "opt_guest_sub" %}</span>
       </span>
       <svg class="opt-chevron" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
-    </a>
+    </button>
   </div>
 
-  {% if back_url %}
+  {% if back_to_chooser %}
   <div class="area-nav">
-    <a class="btn btn--ghost btn--md btn-back btn-wide" href="{{ back_url }}">{% t "back" %}</a>
+    <a class="btn btn--ghost btn--md btn-back btn-wide" href="{{ back_to_chooser }}">{% t "back" %}</a>
   </div>
-  {% endif %}
-
-  {% if scan_enabled %}
-  {# A USB/Bluetooth QR scanner types the code + Enter; kiosk.js catches it here without a visible field. #}
-  <form id="scanCaptureForm" method="post" action="{{ urls.scan }}" hidden>
-    {% csrf_token %}
-    <input type="hidden" name="code">
-  </form>
   {% endif %}
 </section>
-{% endblock %}

@@ -85,10 +85,6 @@ STRINGS = {
         "en": "Enter all {n} digits of your UHID.",
         "kn": "ನಿಮ್ಮ UHID ನ ಎಲ್ಲಾ {n} ಅಂಕಿಗಳನ್ನು ನಮೂದಿಸಿ.",
     },
-    "uhid_error_not_found": {  # review
-        "en": "We couldn't find a patient with this UHID. Check the number, or continue as a guest.",
-        "kn": "ಈ UHID ಹೊಂದಿರುವ ರೋಗಿ ಕಂಡುಬಂದಿಲ್ಲ. ಸಂಖ್ಯೆಯನ್ನು ಪರಿಶೀಲಿಸಿ ಅಥವಾ ಅತಿಥಿಯಾಗಿ ಮುಂದುವರಿಯಿರಿ.",
-    },
     "continue": {"en": "Continue", "kn": "ಮುಂದುವರಿಯಿರಿ"},
     "no_uhid": {
         "en": "I don't have a UHID — continue as guest",
@@ -108,6 +104,18 @@ STRINGS = {
     },
     "start_questions": {"en": "Start the questions", "kn": "ಪ್ರಶ್ನೆಗಳನ್ನು ಪ್ರಾರಂಭಿಸಿ"},
     "required_error": {"en": "This question needs an answer.", "kn": "ಈ ಪ್ರಶ್ನೆಗೆ ಉತ್ತರ ಅಗತ್ಯವಿದೆ."},  # review
+    "error_summary": {  # review
+        "en": "Please answer the questions marked below.",
+        "kn": "ಕೆಳಗೆ ಗುರುತಿಸಿದ ಪ್ರಶ್ನೆಗಳಿಗೆ ಉತ್ತರಿಸಿ.",
+    },
+    "too_many": {  # review
+        "en": "Too many responses from this screen just now. Please wait a minute and try again.",
+        "kn": "ಈ ಪರದೆಯಿಂದ ಇದೀಗ ಹೆಚ್ಚು ಪ್ರತಿಕ್ರಿಯೆಗಳು ಬಂದಿವೆ. ಒಂದು ನಿಮಿಷ ಕಾದು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    },
+    "uhid_optional": {  # review; shown only when JavaScript is off
+        "en": "UHID (leave empty to stay anonymous)",
+        "kn": "UHID (ಅನಾಮಧೇಯವಾಗಿರಲು ಖಾಲಿ ಬಿಡಿ)",
+    },
     "optional": {"en": "optional", "kn": "ಐಚ್ಛಿಕ"},
     # ── Rating ──────────────────────────────────────────────────────
     "question_counter": {"en": "Question {n} of {total}", "kn": "ಪ್ರಶ್ನೆ {n} / {total}"},

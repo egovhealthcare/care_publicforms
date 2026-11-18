@@ -1,0 +1,51 @@
+{% extends "patient_feedback/base.html" %}
+{% load patient_feedback_tags %}
+
+{% block header_nav %}
+<nav class="hdr-nav" id="hdrNav" hidden>
+  <button type="button" class="navbtn navbtn--home" data-action="home">
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4v-5.5H9V20H5a1 1 0 0 1-1-1z"/></svg>
+    <span>{% t "nav_home" %}</span>
+  </button>
+  <a class="navbtn navbtn--reset" href="{{ home_url }}">
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M19.8 4.2v4h-4"/></svg>
+    <span>{% t "nav_reset" %}</span>
+  </a>
+</nav>
+{% endblock %}
+
+{% block screen %}
+{# The whole questionnaire. kiosk.js shows one step at a time; without     #}
+{# JavaScript it is one long form. Everything is posted once, at the end.  #}
+<form id="feedback" method="post" novalidate autocomplete="off"
+      data-start-step="{{ start_step }}" data-start-card="{{ start_card }}"
+      data-uhid-length="{{ uhid_length }}" data-scan-mode="{{ scan_mode }}">
+  <input type="hidden" name="language" value="{{ lang }}" id="fLang">
+  {% if came_from_chooser %}<input type="hidden" name="from" value="start">{% endif %}
+
+  {% if banner %}<div class="callout callout--error banner" role="alert">{% t banner %}</div>{% endif %}
+
+  <button type="button" class="idstrip" id="idStrip" data-go="uhid" hidden>
+    <span class="idstrip-icon">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+    </span>
+    <span class="idstrip-body">
+      <span class="idstrip-kicker">UHID</span>
+      <span class="idstrip-value" id="idStripValue"></span>
+    </span>
+    <span class="idstrip-action">{% t "change" %}</span>
+  </button>
+
+  {% include "patient_feedback/steps/identify.html" %}
+  {% if scan_mode != "off" %}{% include "patient_feedback/steps/scan.html" %}{% endif %}
+  {% include "patient_feedback/steps/uhid.html" %}
+  {% if details %}{% include "patient_feedback/steps/details.html" %}{% endif %}
+  {% include "patient_feedback/steps/ratings.html" %}
+  {% if open_questions %}{% include "patient_feedback/steps/comments.html" %}{% endif %}
+  {% include "patient_feedback/steps/review.html" %}
+
+  <div class="no-js-only submit-row">
+    <button type="submit" class="btn btn--primary btn--lg btn-cta">{% t "submit" %}</button>
+  </div>
+</form>
+{% endblock %}

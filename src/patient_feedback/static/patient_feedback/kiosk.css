@@ -95,6 +95,7 @@ body{
 html[lang="kn"] body{font-family:'Noto Sans Kannada','Figtree',ui-sans-serif,system-ui,Arial,sans-serif}
 input,textarea{-webkit-user-select:text;user-select:text}
 button,input,textarea,select{font-family:inherit;margin:0}
+button.opt,button.idstrip{font:inherit;cursor:pointer;-webkit-appearance:none;appearance:none}
 textarea{resize:vertical}
 a{color:var(--link);text-decoration:none}
 :focus-visible{outline:.125rem solid var(--ring);outline-offset:.125rem}
@@ -387,19 +388,27 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
 }
 .chip input:focus + .chip-face,
 .yn input:focus + .ynbtn{outline:.125rem solid var(--ring);outline-offset:.125rem}
+/* Rings for remote/keyboard focus only, not after a tap (older browsers skip this and keep the ring). */
+.chip input:focus:not(:focus-visible) + .chip-face,
+.yn input:focus:not(:focus-visible) + .ynbtn,
+.rate-option input:focus:not(:focus-visible) + .rate{outline:none}
 
-/* ── Rating questions (one page, one card visible at a time) ────── */
+/* ── Rating questions (one card visible at a time) ──────────────── */
 .screen--question{display:block}
-.qcard{display:none}
-.qcard.is-active{display:flex;flex-direction:column}
+.js .qcard{display:none}
+.js .qcard.is-active{display:flex;flex-direction:column}
+.qcard{display:flex;flex-direction:column}
 .qcard > * + *{margin-top:1.125rem}
 .qhead{display:flex;flex-direction:column;animation:focusIn .34s var(--ease) both}
 .qhead > * + *{margin-top:.75rem}
 .qtitle{margin:0;font-size:1.5rem;font-weight:600;line-height:1.3;letter-spacing:-.015em;color:var(--foreground);text-wrap:pretty}
 .qhint{margin:0;font-size:.875rem;line-height:1.55;color:var(--soft-foreground)}
 
+/* Each rating is a radio input with its face drawn by the span after it. */
 .scale{display:flex;flex-direction:column}
 .scale > * + *{margin-top:.5rem}
+.rate-option{position:relative;display:block}
+.rate-option input{position:absolute;top:0;left:0;width:1px;height:1px;opacity:0;margin:0}
 .rate{
   display:flex;align-items:center;width:100%;min-height:4.125rem;padding:.5625rem .875rem;
   text-align:left;border-radius:var(--radius-xl);cursor:pointer;
@@ -407,10 +416,12 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
   border:1px solid var(--strong-border);background:var(--background);color:var(--foreground);box-shadow:var(--shadow-xs);
 }
 .rate > * + *{margin-left:.875rem}
-.scale > .rate--none{
-  min-height:3.5rem;padding:.5rem .875rem;margin-top:.75rem;
+.scale > .rate-option:last-child > .rate--none{margin-top:.25rem}
+.rate--none{
+  min-height:3.5rem;padding:.5rem .875rem;
   border:1px dashed var(--strong-border);background:var(--soft-background);color:var(--soft-foreground);box-shadow:none;
 }
+.rate-option input:focus + .rate{outline:.125rem solid var(--ring);outline-offset:.125rem}
 .rate-face{
   flex:none;width:2.75rem;height:2.75rem;border-radius:999px;
   display:flex;align-items:center;justify-content:center;
@@ -429,20 +440,20 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
 .rate--v2 .rate-face{background:#FFF7ED;color:#EA580C}
 .rate--v1 .rate-face{background:#FEF2F2;color:#DC2626}
 .rate--v0 .rate-face{background:#F5F5F5;color:#737373}
-.rate.is-on{box-shadow:var(--shadow-md)}
-.rate--v5.is-on{border-color:#059669;background:#ECFDF5}
-.rate--v4.is-on{border-color:#65A30D;background:#F7FEE7}
-.rate--v3.is-on{border-color:#D97706;background:#FFFBEB}
-.rate--v2.is-on{border-color:#EA580C;background:#FFF7ED}
-.rate--v1.is-on{border-color:#DC2626;background:#FEF2F2}
-.scale > .rate--v0.is-on{border-color:#737373;border-style:solid;background:#F5F5F5}
-.rate.is-on .rate-face{color:#FFFFFF}
-.rate--v5.is-on .rate-face{background:#059669}
-.rate--v4.is-on .rate-face{background:#65A30D}
-.rate--v3.is-on .rate-face{background:#D97706}
-.rate--v2.is-on .rate-face{background:#EA580C}
-.rate--v1.is-on .rate-face{background:#DC2626}
-.rate--v0.is-on .rate-face{background:#737373}
+input:checked + .rate{box-shadow:var(--shadow-md)}
+input:checked + .rate--v5{border-color:#059669;background:#ECFDF5}
+input:checked + .rate--v4{border-color:#65A30D;background:#F7FEE7}
+input:checked + .rate--v3{border-color:#D97706;background:#FFFBEB}
+input:checked + .rate--v2{border-color:#EA580C;background:#FFF7ED}
+input:checked + .rate--v1{border-color:#DC2626;background:#FEF2F2}
+input:checked + .rate--v0{border-color:#737373;border-style:solid;background:#F5F5F5}
+input:checked + .rate .rate-face{color:#FFFFFF}
+input:checked + .rate--v5 .rate-face{background:#059669}
+input:checked + .rate--v4 .rate-face{background:#65A30D}
+input:checked + .rate--v3 .rate-face{background:#D97706}
+input:checked + .rate--v2 .rate-face{background:#EA580C}
+input:checked + .rate--v1 .rate-face{background:#DC2626}
+input:checked + .rate--v0 .rate-face{background:#737373}
 
 .navrow{display:flex;align-items:center}
 .navrow > * + *{margin-left:.625rem}
@@ -475,11 +486,13 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
   min-height:3.5rem;padding:.75rem 1rem;text-align:left;color:inherit;
   background:var(--background);border-bottom:1px solid var(--border);
 }
+button.row{font:inherit;border:0;border-bottom:1px solid var(--border);border-radius:0;cursor:pointer}
 .row:last-child{border-bottom:0}
 .row:active{background:var(--soft-background)}
 .row-label{flex:1;min-width:0;margin-right:.875rem;font-size:.9375rem;line-height:1.4;color:var(--muted-foreground)}
 .row-value{flex:none;font-size:.9375rem;font-weight:600;text-align:right;color:var(--primary)}
 .row-value.is-empty{color:var(--placeholder);font-weight:500}
+.row-note{display:block;max-width:12rem;margin-top:.125rem;font-size:.8125rem;font-weight:400;color:var(--soft-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Longer screens scroll; their main button stays pinned at the bottom. */
 .screen--review > .area-nav,
 .screen--comments > .area-nav{
@@ -573,10 +586,27 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
 .idle-title{margin:0;font-size:1.375rem;font-weight:600;color:var(--foreground)}
 .idle-body{margin:.75rem 0 0;font-size:1rem;line-height:1.55;color:var(--soft-foreground);font-feature-settings:'tnum'}
 
-/* ── "Not a kiosk" page ─────────────────────────────────────────── */
+/* ── Empty states (unknown facility, no forms) ──────────────────── */
 .page--blocked{align-items:center;padding:1.5rem}
 .blocked-card{
   max-width:32rem;padding:2rem;border-radius:var(--radius-2xl);
   background:var(--background);border:1px solid var(--border);box-shadow:var(--shadow-sm);
 }
 .blocked-card > * + *{margin-top:.75rem}
+
+/* ── One page, many steps ───────────────────────────────────────── */
+/* With JavaScript one step is shown at a time; without it the page is a
+   single long form (UHID, details, every rating, open questions, submit). */
+#feedback{flex:1 0 auto;display:flex;flex-direction:column}
+.banner{margin-bottom:1.125rem}
+.js .step:not(.is-active){display:none !important}
+.js .no-js-only{display:none !important}
+.no-js .js-only,
+.no-js .step[data-step="identify"],
+.no-js .step[data-step="scan"],
+.no-js .step[data-step="review"],
+.no-js .lead-sm[data-audience]{display:none !important}
+.no-js .step{flex:none}
+.no-js .step + .step{margin-top:2.5rem;padding-top:2rem;border-top:1px solid var(--border)}
+.no-js .qcard + .qcard{margin-top:2.25rem}
+.submit-row{margin-top:2rem}

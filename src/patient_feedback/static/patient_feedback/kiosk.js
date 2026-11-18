@@ -1,373 +1,630 @@
 /* ──────────────────────────────────────────────────────────────────
    Patient feedback kiosk — progressive enhancement only.
 
-   Every screen is server-rendered and works without this file. It adds:
-     · an idle timer that returns the kiosk to the start screen
-     · stepping through the rating questions on one page, with the
-       answers saved in the background
-     · the UHID cells + instant on-screen keypad
-     · QR scanning with the camera (BarcodeDetector) or a keyboard-mode
-       USB/Bluetooth scanner
-     · language switching that keeps what was typed on form screens
+   The questionnaire is one server-rendered form holding every step and
+   every language. Without this file it is one long form. With it:
+     · one step at a time (identify → details → one card per rating →
+       open questions → review), switched in the page; the form controls
+       are the only state and the page is posted once, from the review
+     · the UHID cells, on-screen keypad and QR scanning (camera via
+       BarcodeDetector, or a keyboard-mode USB/Bluetooth scanner)
+     · questions shown only to guests or only to identified patients
+     · instant language switching
+     · an idle timer that starts over for the next patient
    Plain ES5 so it runs on older TV browsers.
    ────────────────────────────────────────────────────────────────── */
 (function () {
   'use strict';
 
+  var root = document.documentElement;
   var body = document.body;
   function $(id) { return document.getElementById(id); }
   function each(list, fn) { for (var i = 0; i < list.length; i++) fn(list[i], i); }
   function digitsOf(value) { return String(value || '').replace(/\D/g, ''); }
-
-  /* ── Forms: submit once ──────────────────────────────────────── */
-  function claim(form) {
-    if (form.getAttribute('data-submitting')) return false;
-    form.setAttribute('data-submitting', '1');
-    return true;
+  function closest(element, selector) {
+    while (element && element.nodeType === 1) {
+      if (matches(element, selector)) return element;
+      element = element.parentNode;
+    }
+    return null;
+  }
+  function matches(element, selector) {
+    var fn = element.matches || element.msMatchesSelector || element.webkitMatchesSelector;
+    return fn.call(element, selector);
   }
 
-  function submitWith(form, name, value) {
-    if (!claim(form)) return;
-    var input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = name;
-    input.value = value;
-    form.appendChild(input);
-    form.submit();
-  }
-
-  document.addEventListener('submit', function (event) {
-    if (!claim(event.target)) event.preventDefault();
-  }, true);
-
-  // Pages restored from the back/forward cache must accept input again.
-  window.addEventListener('pageshow', function (event) {
-    if (!event.persisted) return;
-    each(document.querySelectorAll('form[data-submitting]'), function (form) {
-      form.removeAttribute('data-submitting');
+  /* ── Language ────────────────────────────────────────────────── */
+  // Every string is already in the page; CSS shows the current language.
+  // Attributes (placeholders, aria-labels) carry data-l10n-<attr> JSON.
+  var localized = [];
+  each(document.getElementsByTagName('*'), function (element) {
+    each(element.attributes, function (attribute) {
+      if (attribute.name.indexOf('data-l10n-') !== 0) return;
+      try {
+        localized.push([element, attribute.name.slice(10), JSON.parse(attribute.value)]);
+      } catch (e) { /* ignore a malformed value */ }
     });
   });
 
-  /* ── Language toggle on form screens keeps unsaved input ─────── */
-  var screenForm = $('screen-form');
-  if (screenForm) {
-    each(document.querySelectorAll('a.langbtn[data-lang]'), function (link) {
-      link.addEventListener('click', function (event) {
-        event.preventDefault();
-        if (link.className.indexOf('is-on') > -1) return;
-        submitWith(screenForm, '_lang', link.getAttribute('data-lang'));
-      });
+  function setLanguage(code) {
+    root.setAttribute('data-lang', code);
+    root.setAttribute('lang', code);
+    each(localized, function (item) {
+      if (item[2][code] !== undefined) item[0].setAttribute(item[1], item[2][code]);
     });
+    each(document.querySelectorAll('[data-set-lang]'), function (link) {
+      var on = link.getAttribute('data-set-lang') === code;
+      link.classList.toggle('is-on', on);
+      if (on) link.setAttribute('aria-current', 'true'); else link.removeAttribute('aria-current');
+    });
+    var field = $('fLang');
+    if (field) field.value = code;
   }
 
-  /* ── Rating questions: one page, one card at a time ─────────── */
-  // The server renders every question and marks the current card. Here a
-  // tap stores the answer in a hidden field, saves it in the background and
-  // moves to the next card; the last answer submits the page.
-  var questionsForm = document.querySelector('form[data-questions]');
-  if (questionsForm) {
-    var cards = questionsForm.querySelectorAll('.qcard');
-    var total = cards.length;
-    var current = parseInt(questionsForm.getAttribute('data-start'), 10) || 0;
-    var backToReview = questionsForm.getAttribute('data-return') === 'review';
-    var currentField = $('qCurrent');
-    var progressFill = document.querySelector('.progress-fill');
-    var progressBase = parseFloat(questionsForm.getAttribute('data-progress-base')) || 0;
-    var progressTotal = parseFloat(questionsForm.getAttribute('data-progress-total')) || total;
-    var advanceTimer = null;
-
-    var valueField = function (index) { return $('qValue' + index); };
-
-    var restartAnimation = function (element) {
-      if (!element) return;
-      element.style.animation = 'none';
-      void element.offsetWidth; // reflow so the entrance animation plays again
-      element.style.animation = '';
-    };
-
-    var show = function (index) {
-      if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer = null; }
-      current = index;
-      currentField.value = index;
-      each(cards, function (card, i) {
-        card.classList.toggle('is-active', i === index);
-        card.setAttribute('aria-hidden', i === index ? 'false' : 'true');
-      });
-      if (progressFill) {
-        progressFill.style.width = Math.round((progressBase + index + 1) / progressTotal * 100) + '%';
-      }
-      restartAnimation(cards[index].querySelector('.qhead'));
-      window.scrollTo(0, 0);
-      // Keep TV-remote focus on the visible card.
-      var focusTarget = cards[index].querySelector('.rate.is-on') || cards[index].querySelector('.rate');
-      if (focusTarget && document.activeElement && document.activeElement !== body) focusTarget.focus();
-    };
-
-    // Save answers as they are given, so nothing is lost if the patient
-    // switches language or wanders off, and the server knows they're active.
-    var autosave = function () {
-      if (!window.fetch || !window.FormData) return;
-      var data = new FormData(questionsForm);
-      data.append('autosave', '1');
-      try {
-        window.fetch(questionsForm.getAttribute('action') || window.location.href, {
-          method: 'POST', body: data, credentials: 'same-origin', keepalive: true
-        }).catch(function () {});
-      } catch (e) { /* old browser: the final submit still carries every answer */ }
-    };
-
-    var finish = function () { submitWith(questionsForm, 'action', 'done'); };
-    var goNext = function () { if (current < total - 1) show(current + 1); else finish(); };
-
-    each(cards, function (card, index) {
-      var rateButtons = card.querySelectorAll('.rate');
-      var nextButton = card.querySelector('[data-nav="next"]');
-      var backButton = card.querySelector('[data-nav="back"]');
-
-      each(rateButtons, function (button) {
-        button.addEventListener('click', function (event) {
-          event.preventDefault();
-          if (questionsForm.getAttribute('data-submitting')) return;
-          valueField(index).value = button.value.split(':')[1];
-          each(rateButtons, function (other) {
-            other.classList.remove('is-on');
-            other.setAttribute('aria-pressed', 'false');
-          });
-          button.classList.add('is-on');
-          button.setAttribute('aria-pressed', 'true');
-          if (nextButton) nextButton.disabled = false;
-          autosave();
-          if (advanceTimer) clearTimeout(advanceTimer);
-          advanceTimer = setTimeout(function () {
-            advanceTimer = null;
-            if (backToReview) finish(); else goNext();
-          }, 300);
-        });
-      });
-
-      if (nextButton) {
-        nextButton.addEventListener('click', function (event) {
-          event.preventDefault();
-          if (valueField(index).value !== '') goNext();
-        });
-      }
-      if (backButton) {
-        backButton.addEventListener('click', function (event) {
-          event.preventDefault();
-          if (index > 0) show(index - 1);
-          else submitWith(questionsForm, 'nav', 'back:0'); // saves answers, then leaves
-        });
-      }
+  each(document.querySelectorAll('[data-set-lang]'), function (link) {
+    link.addEventListener('click', function (event) {
+      event.preventDefault();
+      setLanguage(link.getAttribute('data-set-lang'));
     });
-
-    // The header's Home button goes back to the first question in place.
-    var homeLink = document.querySelector('.navbtn--home');
-    if (homeLink) {
-      homeLink.addEventListener('click', function (event) {
-        event.preventDefault();
-        show(0);
-      });
-    }
-  }
-
-  /* ── UHID entry ──────────────────────────────────────────────── */
-  var uhidWrap = $('uhidWrap');
-  if (uhidWrap) {
-    var uhidInput = $('uhidInput');
-    var uhidForm = uhidInput.form;
-    var cells = uhidWrap.querySelectorAll('.uhid-cell');
-    var maxDigits = cells.length;
-
-    var hideError = function () {
-      var error = $('uhidErr');
-      if (error) error.style.display = 'none';
-      uhidInput.removeAttribute('aria-invalid');
-    };
-
-    var paint = function () {
-      var digits = digitsOf(uhidInput.value).slice(0, maxDigits);
-      if (uhidInput.value !== digits) uhidInput.value = digits;
-      each(cells, function (cell, i) {
-        cell.textContent = i < digits.length ? digits.charAt(i) : '';
-        cell.classList.toggle('is-filled', i < digits.length);
-        cell.classList.toggle('is-active', i === digits.length || (digits.length === maxDigits && i === maxDigits - 1));
-      });
-    };
-
-    uhidInput.addEventListener('input', function () { hideError(); paint(); });
-    uhidInput.addEventListener('focus', function () { uhidWrap.classList.add('is-focus'); });
-    uhidInput.addEventListener('blur', function () { uhidWrap.classList.remove('is-focus'); });
-    uhidWrap.addEventListener('click', function () { uhidInput.focus(); });
-    uhidInput.addEventListener('keydown', function (event) {
-      if (event.key === 'Enter' || event.keyCode === 13) {
-        event.preventDefault();
-        submitWith(uhidForm, 'action', 'continue');
-      }
-    });
-
-    var keypad = $('keypad');
-    if (keypad) {
-      each(keypad.querySelectorAll('button[name="key"]'), function (key) {
-        key.addEventListener('click', function (event) {
-          event.preventDefault();
-          var digits = digitsOf(uhidInput.value);
-          if (key.value === 'back') digits = digits.slice(0, -1);
-          else if (key.value === 'clear') digits = '';
-          else digits = (digits + key.value).slice(0, maxDigits);
-          uhidInput.value = digits;
-          hideError();
-          paint();
-        });
-      });
-    }
-    paint();
-    if (document.activeElement === uhidInput) uhidWrap.classList.add('is-focus');
-  }
-
-  /* ── Keyboard-mode QR scanners on the start screen ───────────── */
-  // A USB/Bluetooth scanner "types" the code within a few milliseconds and
-  // ends with Enter (or Tab). People pressing keys are much slower, and a TV
-  // remote's OK button sends Enter with nothing buffered, so it is ignored.
-  var captureForm = $('scanCaptureForm');
-  if (captureForm) {
-    var buffer = '';
-    var lastKeyAt = 0;
-    document.addEventListener('keydown', function (event) {
-      var target = event.target;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-      var now = Date.now();
-      if (now - lastKeyAt > 80) buffer = '';
-      lastKeyAt = now;
-      var key = event.key;
-      if (key === 'Enter' || key === 'Tab') {
-        if (digitsOf(buffer).length >= 6) {
-          event.preventDefault();
-          captureForm.elements.code.value = buffer;
-          if (claim(captureForm)) captureForm.submit();
-        }
-        buffer = '';
-      } else if (key && key.length === 1) {
-        buffer += key;
-      }
-    });
-  }
-
-  /* ── Scan screen ─────────────────────────────────────────────── */
-  var scanForm = $('scanForm');
-  if (scanForm) {
-    var codeInput = $('scanCode');
-    var uhidLength = parseInt(scanForm.getAttribute('data-uhid-length'), 10) || 11;
-
-    // Keep the hidden field focused so a keyboard-mode scanner's keystrokes
-    // land in it, unless the patient is on one of the buttons.
-    document.addEventListener('click', function (event) {
-      var target = event.target;
-      while (target && target !== document.body) {
-        if (target.tagName === 'A' || target.tagName === 'BUTTON') return;
-        target = target.parentNode;
-      }
-      codeInput.focus();
-    });
-
-    if (scanForm.getAttribute('data-camera') === '1') startCamera();
-  }
-
-  function startCamera() {
-    var video = $('camVideo');
-    var callout = $('camCallout');
-    var stream = null;
-    var timer = null;
-    var busy = false;
-    var detector = null;
-
-    function stop() {
-      if (timer) { clearInterval(timer); timer = null; }
-      if (stream) {
-        each(stream.getTracks(), function (track) { track.stop(); });
-        stream = null;
-      }
-      if (video) video.srcObject = null;
-    }
-
-    function fail() {
-      stop();
-      if (callout) callout.hidden = false;
-    }
-
-    function found(raw) {
-      if (digitsOf(raw).length !== uhidLength) return false;
-      stop();
-      codeInput.value = raw;
-      if (claim(scanForm)) scanForm.submit();
-      return true;
-    }
-
-    function detect() {
-      if (busy || !video || video.readyState < 2) return;
-      busy = true;
-      detector.detect(video).then(function (codes) {
-        busy = false;
-        for (var i = 0; i < codes.length; i++) {
-          if (found(codes[i].rawValue)) return;
-        }
-      }).catch(function () { busy = false; });
-    }
-
-    try {
-      detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-    } catch (e) {
-      detector = null;
-    }
-    if (!detector || !video || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      fail();
-      return;
-    }
-
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
-      .then(function (s) {
-        stream = s;
-        video.srcObject = s;
-        var playing = video.play();
-        if (playing && playing.catch) playing.catch(function () {});
-        timer = setInterval(detect, 350);
-      })
-      .catch(fail);
-
-    window.addEventListener('pagehide', stop);
-    document.addEventListener('visibilitychange', function () {
-      if (document.hidden) stop();
-    });
-  }
+  });
 
   /* ── Idle reset ──────────────────────────────────────────────── */
+  // Once someone has touched the screen, a quiet spell sends the kiosk
+  // back to the start, dropping anything entered.
   var idleSeconds = parseInt(body.getAttribute('data-idle-timeout'), 10) || 0;
   if (idleSeconds > 0) {
-    var resetUrl = body.getAttribute('data-reset-url');
+    var homeUrl = body.getAttribute('data-home-url');
     var overlay = $('idleOverlay');
     var overlayText = $('idleBody');
-    var template = overlayText ? overlayText.getAttribute('data-template') : '';
     var warnSeconds = Math.min(15, Math.floor(idleSeconds / 3));
-    var lastActivity = Date.now();
+    var lastActivity = 0;
     var leaving = false;
 
     var activity = function () {
       lastActivity = Date.now();
       if (overlay && !overlay.hidden) overlay.hidden = true;
     };
-    each(['pointerdown', 'touchstart', 'mousedown', 'keydown', 'input', 'wheel', 'scroll'], function (name) {
+    each(['pointerdown', 'touchstart', 'mousedown', 'keydown', 'input', 'wheel'], function (name) {
       document.addEventListener(name, activity, true);
     });
 
     setInterval(function () {
-      if (leaving) return;
+      if (leaving || !lastActivity) return;
       var left = Math.ceil(idleSeconds - (Date.now() - lastActivity) / 1000);
       if (left <= 0) {
         leaving = true;
-        window.location.replace(resetUrl);
+        window.location.replace(homeUrl);
       } else if (left <= warnSeconds && overlay) {
-        overlayText.textContent = template.replace('{n}', left);
+        overlayText.textContent = (overlayText.getAttribute('data-template') || '').replace('{n}', left);
         overlay.hidden = false;
       }
     }, 500);
   }
+
+  /* ── The questionnaire ───────────────────────────────────────── */
+  var form = $('feedback');
+  if (!form) return;
+
+  var uhidInput = $('uhidInput');
+  var uhidLength = parseInt(form.getAttribute('data-uhid-length'), 10) || 11;
+  var scanMode = form.getAttribute('data-scan-mode');
+  var steps = {};
+  each(form.querySelectorAll('[data-step]'), function (step) { steps[step.getAttribute('data-step')] = step; });
+  var cards = steps.questions ? steps.questions.querySelectorAll('[data-card]') : [];
+  var progressFill = $('progressFill');
+  var headerNav = $('hdrNav');
+  var idStrip = $('idStrip');
+
+  var current = null;       // name of the visible step
+  var currentCard = 0;      // index into cards
+  var identified = digitsOf(uhidInput.value).length === uhidLength;
+  var returnToReview = false;
+  var submitting = false;
+  var advanceTimer = null;
+
+  /* Questions for guests only / identified patients only */
+  function isShownTo(element) {
+    var audience = element.getAttribute('data-audience');
+    return audience === 'guest' ? !identified : audience === 'identified' ? identified : true;
+  }
+
+  function applyAudience() {
+    each(form.querySelectorAll('[data-audience]'), function (element) {
+      var shown = isShownTo(element);
+      element.hidden = !shown;
+      // Hidden questions are not posted.
+      each(element.querySelectorAll('input, textarea, select'), function (control) { control.disabled = !shown; });
+    });
+    renumberCards();
+  }
+
+  function visible(list) {
+    var out = [];
+    each(list, function (element) { if (!element.hidden) out.push(element); });
+    return out;
+  }
+
+  function visibleCards() { return visible(cards); }
+
+  function hasVisibleQuestions(step) {
+    return !!step && visible(step.querySelectorAll('[data-question-key]')).length > 0;
+  }
+
+  function renumberCards() {
+    var template = $('counterTemplate');
+    if (!template) return;
+    var shown = visibleCards();
+    each(shown, function (card, i) {
+      var badge = card.querySelector('[data-counter]');
+      if (badge) badge.innerHTML = template.innerHTML.replace(/\{n\}/g, i + 1).replace(/\{total\}/g, shown.length);
+    });
+  }
+
+  /* Answers */
+  function hasAnswer(question) {
+    var controls = question.querySelectorAll('input, textarea, select');
+    for (var i = 0; i < controls.length; i++) {
+      var control = controls[i];
+      if (control.hasAttribute('data-comment')) continue;
+      if (control.type === 'radio' || control.type === 'checkbox') {
+        if (control.checked) return true;
+      } else if (String(control.value).replace(/\s+/g, '') !== '') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function showError(question, on) {
+    var error = question.querySelector('[data-error]');
+    if (error) error.hidden = !on;
+  }
+
+  // Shows the error under each required question left empty; true if none.
+  function checkRequired(step) {
+    var first = null;
+    each(visible(step.querySelectorAll('[data-question-key]')), function (question) {
+      var missing = question.getAttribute('data-required') === '1' && !hasAnswer(question);
+      showError(question, missing);
+      if (missing && !first) first = question;
+    });
+    if (first && first.scrollIntoView) first.scrollIntoView({ block: 'center' });
+    return !first;
+  }
+
+  /* Moving between steps */
+  function flow() {
+    // The steps after identification, in order, for progress and back/next.
+    var units = [];
+    if (hasVisibleQuestions(steps.details)) units.push(['details', 0]);
+    each(cards, function (card, i) { if (!card.hidden) units.push(['questions', i]); });
+    if (hasVisibleQuestions(steps.comments)) units.push(['comments', 0]);
+    units.push(['review', 0]);
+    return units;
+  }
+
+  function position() {
+    var units = flow();
+    for (var i = 0; i < units.length; i++) {
+      if (units[i][0] === current && (current !== 'questions' || units[i][1] === currentCard)) return i;
+    }
+    return -1;
+  }
+
+  function goTo(unit) {
+    if (unit) show(unit[0], unit[1]);
+  }
+
+  function next() {
+    var units = flow();
+    goTo(returnToReview ? ['review', 0] : units[position() + 1]);
+  }
+
+  function back() {
+    var index = position();
+    if (index <= 0) show('identify'); else goTo(flow()[index - 1]);
+  }
+
+  function restartAnimation(element) {
+    if (!element) return;
+    element.style.animation = 'none';
+    void element.offsetWidth; // reflow so the entrance animation plays again
+    element.style.animation = '';
+  }
+
+  function show(name, cardIndex) {
+    if (!steps[name]) return;
+    if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer = null; }
+    if (current === 'scan' && name !== 'scan') stopCamera();
+    current = name;
+    for (var key in steps) {
+      if (steps.hasOwnProperty(key)) steps[key].classList.toggle('is-active', key === name);
+    }
+
+    if (name === 'questions') {
+      currentCard = cardIndex || 0;
+      each(cards, function (card, i) {
+        card.classList.toggle('is-active', i === currentCard);
+        card.setAttribute('aria-hidden', i === currentCard ? 'false' : 'true');
+      });
+      restartAnimation(cards[currentCard] && cards[currentCard].querySelector('.qhead'));
+      updateNextButton(cards[currentCard]);
+    }
+    if (name === 'review') {
+      returnToReview = false;
+      buildReview();
+    }
+    if (name === 'uhid') paintUhid();
+    if (name === 'scan') startScan();
+
+    var inFlow = name !== 'identify' && name !== 'scan' && name !== 'uhid';
+    if (headerNav) headerNav.hidden = name === 'identify';
+    if (idStrip) {
+      idStrip.hidden = !(inFlow && identified);
+      $('idStripValue').textContent = formatUhid(digitsOf(uhidInput.value));
+    }
+    if (progressFill) {
+      var units = flow();
+      progressFill.style.width = inFlow ? Math.round((position() + 1) / (units.length + 1) * 100) + '%' : '0%';
+    }
+    window.scrollTo(0, 0);
+    // Keep TV-remote focus inside the visible step.
+    if (document.activeElement && document.activeElement !== body && (name !== 'questions' || cards[currentCard])) {
+      var target = name === 'questions'
+        ? cards[currentCard].querySelector('input:checked') || cards[currentCard].querySelector('input')
+        : steps[name].querySelector('button, input:not([type=hidden]), textarea, a');
+      if (target && target.focus) target.focus();
+    }
+  }
+
+  // After the patient identified themselves (or chose not to).
+  function startQuestions() {
+    applyAudience();
+    goTo(flow()[0]);
+  }
+
+  function continueAsGuest() {
+    identified = false;
+    uhidInput.value = '';
+    paintUhid();
+    startQuestions();
+  }
+
+  function continueWithUhid(raw) {
+    var digits = digitsOf(raw);
+    if (digits.length !== uhidLength) return false;
+    uhidInput.value = digits;
+    identified = true;
+    hideUhidError();
+    startQuestions();
+    return true;
+  }
+
+  /* ── UHID entry ──────────────────────────────────────────────── */
+  var uhidWrap = $('uhidWrap');
+  var uhidCells = uhidWrap.querySelectorAll('.uhid-cell');
+  var uhidGroups = [];
+  each(uhidCells, function (cell, i) { if (i && cell.className.indexOf('uhid-cell--gap') > -1) uhidGroups.push(i); });
+
+  function formatUhid(digits) {
+    var out = '';
+    for (var i = 0; i < digits.length; i++) {
+      if (uhidGroups.indexOf(i) > -1) out += ' ';
+      out += digits.charAt(i);
+    }
+    return out;
+  }
+
+  function hideUhidError() {
+    $('uhidErr').hidden = true;
+    uhidInput.removeAttribute('aria-invalid');
+  }
+
+  function paintUhid() {
+    var digits = digitsOf(uhidInput.value).slice(0, uhidLength);
+    if (uhidInput.value !== digits) uhidInput.value = digits;
+    each(uhidCells, function (cell, i) {
+      cell.textContent = i < digits.length ? digits.charAt(i) : '';
+      cell.classList.toggle('is-filled', i < digits.length);
+      cell.classList.toggle('is-active', i === digits.length || (digits.length === uhidLength && i === uhidLength - 1));
+    });
+  }
+
+  function submitUhid() {
+    if (continueWithUhid(uhidInput.value)) return;
+    $('uhidErr').hidden = false;
+    uhidInput.setAttribute('aria-invalid', 'true');
+  }
+
+  uhidInput.addEventListener('input', function () { hideUhidError(); paintUhid(); });
+  uhidInput.addEventListener('focus', function () { uhidWrap.classList.add('is-focus'); });
+  uhidInput.addEventListener('blur', function () { uhidWrap.classList.remove('is-focus'); });
+  uhidWrap.addEventListener('click', function () { uhidInput.focus(); });
+
+  each(form.querySelectorAll('[data-key]'), function (key) {
+    key.addEventListener('click', function () {
+      var digits = digitsOf(uhidInput.value);
+      var value = key.getAttribute('data-key');
+      if (value === 'back') digits = digits.slice(0, -1);
+      else if (value === 'clear') digits = '';
+      else digits = (digits + value).slice(0, uhidLength);
+      uhidInput.value = digits;
+      hideUhidError();
+      paintUhid();
+    });
+  });
+
+  /* ── QR scanning ─────────────────────────────────────────────── */
+  function scanned(raw) {
+    if (continueWithUhid(raw)) return;
+    if (current !== 'scan') show('scan');
+    var error = $('scanError');
+    if (error) error.hidden = false;
+  }
+
+  // A keyboard-mode scanner "types" the code within a few milliseconds,
+  // usually ending with Enter or Tab. People are much slower, and a TV
+  // remote's OK button sends Enter with nothing buffered, so it is ignored.
+  var buffer = '';
+  var lastKeyAt = 0;
+  var flushTimer = null;
+  function flush() {
+    flushTimer = null;
+    var code = buffer;
+    buffer = '';
+    if (digitsOf(code).length >= 6) scanned(code);
+  }
+  document.addEventListener('keydown', function (event) {
+    if (current !== 'identify' && current !== 'scan') return;
+    var target = event.target;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+    var now = Date.now();
+    if (now - lastKeyAt > 80) buffer = '';
+    lastKeyAt = now;
+    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+    var key = event.key;
+    if (key === 'Enter' || key === 'Tab') {
+      if (digitsOf(buffer).length >= 6) { event.preventDefault(); flush(); }
+      buffer = '';
+    } else if (key && key.length === 1) {
+      buffer += key;
+      // Scanners that send no terminator: take the code once typing stops.
+      if (digitsOf(buffer).length >= uhidLength) flushTimer = setTimeout(flush, 150);
+    }
+  });
+
+  var video = $('camVideo');
+  var stream = null;
+  var scanTimer = null;
+
+  function stopCamera() {
+    if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+    if (stream) {
+      each(stream.getTracks(), function (track) { track.stop(); });
+      stream = null;
+    }
+    if (video) video.srcObject = null;
+  }
+
+  function startScan() {
+    var error = $('scanError');
+    if (error) error.hidden = true;
+    if (scanMode !== 'camera' || stream) return;
+    var callout = $('camCallout');
+    var detector = null;
+    var busy = false;
+    var unavailable = function () {
+      stopCamera();
+      if (callout) callout.hidden = false;
+    };
+    try {
+      detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+    } catch (e) {
+      detector = null;
+    }
+    if (!detector || !video || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      unavailable();
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+      .then(function (s) {
+        if (current !== 'scan') { each(s.getTracks(), function (track) { track.stop(); }); return; }
+        stream = s;
+        video.srcObject = s;
+        var playing = video.play();
+        if (playing && playing.catch) playing.catch(function () {});
+        scanTimer = setInterval(function () {
+          if (busy || video.readyState < 2) return;
+          busy = true;
+          detector.detect(video).then(function (codes) {
+            busy = false;
+            for (var i = 0; i < codes.length; i++) {
+              if (digitsOf(codes[i].rawValue).length === uhidLength) {
+                stopCamera();
+                scanned(codes[i].rawValue);
+                return;
+              }
+            }
+          }).catch(function () { busy = false; });
+        }, 350);
+      })
+      .catch(unavailable);
+  }
+  window.addEventListener('pagehide', stopCamera);
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) stopCamera();
+    else if (current === 'scan') startScan();
+  });
+
+  /* ── Rating cards ────────────────────────────────────────────── */
+  // A tap on a rating moves on by itself; arrow keys only change the
+  // choice, so TV-remote users aren't rushed past a question.
+  var pointerAt = 0;
+
+  function updateNextButton(card) {
+    if (!card) return;
+    var nextButton = card.querySelector('[data-nav="next"]');
+    if (nextButton) nextButton.classList.toggle('is-disabled', !hasAnswer(card));
+  }
+
+  function picked(card, advance) {
+    showError(card, false);
+    updateNextButton(card);
+    if (!advance) return;
+    if (advanceTimer) clearTimeout(advanceTimer);
+    advanceTimer = setTimeout(function () { advanceTimer = null; next(); }, 300);
+  }
+
+  each(cards, function (card) {
+    each(card.querySelectorAll('.rate-option'), function (option) {
+      option.addEventListener('mousedown', function () { pointerAt = Date.now(); });
+      option.addEventListener('touchstart', function () { pointerAt = Date.now(); });
+    });
+    each(card.querySelectorAll('input[type=radio]'), function (radio) {
+      radio.addEventListener('change', function () { picked(card, Date.now() - pointerAt < 1500); });
+      radio.addEventListener('click', function () {
+        // Tapping the answer already chosen still moves on.
+        if (radio.checked && Date.now() - pointerAt < 1500) picked(card, true);
+      });
+      radio.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' && event.keyCode !== 13) return;
+        event.preventDefault();
+        radio.checked = true;
+        picked(card, true);
+      });
+    });
+    card.querySelector('[data-nav="next"]').addEventListener('click', function () {
+      if (hasAnswer(card)) next(); else showError(card, true);
+    });
+    card.querySelector('[data-nav="back"]').addEventListener('click', back);
+  });
+
+  // Answering clears that question's error.
+  form.addEventListener('change', function (event) {
+    var question = closest(event.target, '[data-question-key]');
+    if (question && hasAnswer(question)) showError(question, false);
+  });
+  form.addEventListener('input', function (event) {
+    var question = closest(event.target, '[data-question-key]');
+    if (question && hasAnswer(question)) showError(question, false);
+  });
+
+  /* ── Review ──────────────────────────────────────────────────── */
+  function answerHtml(question) {
+    var checked = question.querySelector('input[type=radio]:checked');
+    if (checked) {
+      var face = checked.nextElementSibling;
+      var label = face && (face.querySelector('.rate-label') || face);
+      return label ? label.innerHTML : '';
+    }
+    var date = question.querySelector('input[type=date]');
+    if (date) {
+      var parts = date.value.split('-');
+      return parts.length === 3 ? escapeHtml(parts[2] + '/' + parts[1] + '/' + parts[0]) : '';
+    }
+    var text = question.querySelector('textarea');
+    return text ? escapeHtml(text.value.replace(/^\s+|\s+$/g, '')) : '';
+  }
+
+  function commentText(question) {
+    var comment = question.querySelector('[data-comment]');
+    var value = comment ? comment.value.replace(/^\s+|\s+$/g, '') : '';
+    if (value.length > 60) value = value.slice(0, 57) + '…';
+    return value;
+  }
+
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function buildReview() {
+    var rows = $('reviewRows');
+    var notAnswered = $('notAnsweredText').innerHTML;
+    rows.innerHTML = '';
+    each(visible(form.querySelectorAll('[data-question-key]')), function (question) {
+      var step = closest(question, '[data-step]');
+      if (!step) return;
+      var value = answerHtml(question);
+      var comment = commentText(question);
+      var row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'row';
+      row.innerHTML = '<span class="row-label">' + question.querySelector('.q-label').innerHTML + '</span>' +
+        '<span class="row-value' + (value ? '' : ' is-empty') + '">' + (value || notAnswered) +
+        (value && comment ? '<span class="row-note">' + escapeHtml(comment) + '</span>' : '') + '</span>';
+      row.addEventListener('click', function () {
+        returnToReview = true;
+        var name = step.getAttribute('data-step');
+        var index = 0;
+        each(cards, function (card, i) { if (card === question) index = i; });
+        show(name, index);
+        if (name !== 'questions' && question.scrollIntoView) question.scrollIntoView({ block: 'center' });
+      });
+      rows.appendChild(row);
+    });
+  }
+
+  /* ── Buttons ─────────────────────────────────────────────────── */
+  form.addEventListener('click', function (event) {
+    var button = closest(event.target, '[data-go], [data-action]');
+    if (!button || !form.contains(button)) return;
+    var go = button.getAttribute('data-go');
+    if (go) {
+      if (go === 'uhid' && current === 'scan') stopCamera();
+      show(go);
+      return;
+    }
+    switch (button.getAttribute('data-action')) {
+      case 'guest': continueAsGuest(); break;
+      case 'uhid-continue': submitUhid(); break;
+      case 'details-next': if (checkRequired(steps.details)) next(); break;
+      case 'comments-next': if (checkRequired(steps.comments)) next(); break;
+      case 'comments-back':
+      case 'review-back': back(); break;
+    }
+  });
+
+  if (headerNav) {
+    var home = headerNav.querySelector('[data-action="home"]');
+    if (home) home.addEventListener('click', function () { show('identify'); });
+  }
+
+  /* ── Submitting ──────────────────────────────────────────────── */
+  // Enter must not post the form from a half-finished step.
+  form.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' && event.keyCode !== 13) return;
+    var target = event.target;
+    if (target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.tagName === 'A') return;
+    event.preventDefault();
+    if (target === uhidInput) submitUhid();
+    // A TV remote's OK button sends Enter: let it pick a choice.
+    else if (target.type === 'radio' && !target.checked) {
+      target.checked = true;
+      var question = closest(target, '[data-question-key]');
+      if (question) showError(question, false);
+    }
+  });
+
+  form.addEventListener('submit', function (event) {
+    if (current !== 'review' || submitting) { event.preventDefault(); return; }
+    if (!identified) uhidInput.value = '';
+    submitting = true;
+  });
+
+  // Pages restored from the back/forward cache must accept input again.
+  window.addEventListener('pageshow', function (event) {
+    if (event.persisted) submitting = false;
+  });
+
+  /* ── Start ───────────────────────────────────────────────────── */
+  applyAudience();
+  paintUhid();
+  each(cards, updateNextButton);
+  var startStep = form.getAttribute('data-start-step') || 'identify';
+  var startCard = parseInt(form.getAttribute('data-start-card'), 10) || 0;
+  // After a failed submit some of the server's errors may be on questions
+  // that no longer apply; start from the step it pointed at.
+  show(steps[startStep] ? startStep : 'identify', startCard);
 })();

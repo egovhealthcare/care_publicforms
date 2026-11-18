@@ -1,9 +1,10 @@
 import csv
 from contextvars import ContextVar
 
+from care.facility.models import Facility
 from django import forms
-from django.contrib import admin, messages
-from django.db.models import Count, Q
+from django.contrib import admin
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import StreamingHttpResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -11,15 +12,12 @@ from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 
 from patient_feedback.i18n import DEFAULT_LANGUAGE, LANGUAGES, localize
-from patient_feedback.models import FeedbackForm, FeedbackKiosk, FeedbackQuestion, FeedbackSubmission
-from patient_feedback.questionnaire import forms_for_kiosk
+from patient_feedback.models import FeedbackForm, FeedbackQuestion, FeedbackSubmission
+from patient_feedback.questionnaire import comment_key, display_answer, form_for_submission
 
 # The admin's readonly-field callables only receive the object; this lets the
-# kiosk link use the host the admin is being served from.
+# page link use the host the admin is being served from.
 _current_request: ContextVar = ContextVar("patient_feedback_admin_request", default=None)
-
-
-LINK_ROW = '<div style="margin-bottom:.5rem">{}<br><code style="user-select:all;word-break:break-all">{}</code></div>'
 
 
 # ── Per-language text fields ──────────────────────────────────────────
@@ -70,8 +68,7 @@ def localized_form(model, localized: dict, required: tuple = ()):
         forms.ModelForm._update_errors(self, errors)
 
     attrs.update(__init__=__init__, clean=clean, _update_errors=_update_errors)
-    meta = type("Meta", (), {"model": model, "exclude": (*localized, "external_id", "deleted")})
-    attrs["Meta"] = meta
+    attrs["Meta"] = type("Meta", (), {"model": model, "exclude": tuple(localized)})
     return type(f"Localized{model.__name__}Form", (forms.ModelForm,), attrs)
 
 
@@ -90,6 +87,7 @@ FeedbackFormForm = localized_form(
 )
 
 
+# ── Forms & questions ─────────────────────────────────────────────────
 class QuestionInline(admin.TabularInline):
     model = FeedbackQuestion
     form = QuestionInlineForm
@@ -106,10 +104,11 @@ class FeedbackFormAdmin(admin.ModelAdmin):
     list_filter = ("patient_type", "is_active")
     search_fields = ("code", "title", "facility__name")
     raw_id_fields = ("facility",)
+    readonly_fields = ("page_link",)
     inlines = (QuestionInline,)
     fieldsets = (
         (None, {"fields": ("code", "patient_type", *language_fields("title", "description"))}),
-        (_("Where"), {"fields": ("facility", "is_active", "order")}),
+        (_("Where"), {"fields": ("facility", "is_active", "order", "page_link")}),
     )
 
     def get_queryset(self, request):
@@ -117,8 +116,19 @@ class FeedbackFormAdmin(admin.ModelAdmin):
             super()
             .get_queryset(request)
             .select_related("facility")
-            .annotate(_questions=Count("questions", filter=Q(questions__deleted=False, questions__is_active=True)))
+            .annotate(_questions=Count("questions", filter=Q(questions__is_active=True)))
         )
+
+    def changeform_view(self, request, *args, **kwargs):
+        token = _current_request.set(request)
+        try:
+            response = super().changeform_view(request, *args, **kwargs)
+            # Render now: a TemplateResponse renders lazily, after the reset below.
+            if hasattr(response, "render") and not response.is_rendered:
+                response.render()
+            return response
+        finally:
+            _current_request.reset(token)
 
     @admin.display(description=_("Title"), ordering="code")
     def form_title(self, obj):
@@ -127,6 +137,29 @@ class FeedbackFormAdmin(admin.ModelAdmin):
     @admin.display(description=_("Active questions"), ordering="_questions")
     def question_count(self, obj):
         return obj._questions
+
+    @admin.display(description=_("Page"))
+    def page_link(self, obj):
+        if not obj or not obj.pk:
+            return _("Save the form to see its link.")
+        if obj.facility is None:
+            path = reverse(
+                "patient_feedback:form",
+                kwargs={"facility_id": "00000000-0000-0000-0000-000000000000", "form": obj.code},
+            ).replace("00000000-0000-0000-0000-000000000000", "<facility-id>")
+            return format_html(
+                "<code>{}</code><br><small>{}</small>",
+                path,
+                _("Open it on a screen with a facility's id; the screen then stays on this form."),
+            )
+        request = _current_request.get()
+        path = reverse("patient_feedback:form", kwargs={"facility_id": obj.facility.external_id, "form": obj.code})
+        url = request.build_absolute_uri(path) if request else path
+        return format_html(
+            '<code style="user-select:all;word-break:break-all">{}</code><br><small>{}</small>',
+            url,
+            _("Open it on a screen to keep that screen on this form. It is public: no login is needed."),
+        )
 
 
 @admin.register(FeedbackQuestion)
@@ -150,77 +183,11 @@ class FeedbackQuestionAdmin(admin.ModelAdmin):
         return localize(obj.text, DEFAULT_LANGUAGE)
 
 
-@admin.register(FeedbackKiosk)
-class FeedbackKioskAdmin(admin.ModelAdmin):
-    list_display = ("name", "facility", "is_active", "scan_mode", "last_seen_at")
-    list_filter = ("is_active", "scan_mode", "default_language")
-    search_fields = ("name", "facility__name", "external_id")
-    raw_id_fields = ("facility", "patient_identifier_config")
-    filter_horizontal = ("forms",)
-    readonly_fields = ("external_id", "kiosk_link", "last_seen_at", "created_date", "modified_date")
-    actions = ("regenerate_access_keys", "activate", "deactivate")
-    fieldsets = (
-        (None, {"fields": ("name", "facility", "is_active", "kiosk_link")}),
-        (_("Screen"), {"fields": ("forms", "default_language", "scan_mode", "show_keypad")}),
-        (_("Recording the patient"), {"fields": ("patient_identifier_config", "require_registered_uhid")}),
-        (_("Info"), {"fields": ("external_id", "last_seen_at", "created_date", "modified_date")}),
-    )
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related("facility")
-
-    def changeform_view(self, request, *args, **kwargs):
-        token = _current_request.set(request)
-        try:
-            return super().changeform_view(request, *args, **kwargs)
-        finally:
-            _current_request.reset(token)
-
-    @admin.display(description=_("Kiosk links"))
-    def kiosk_link(self, obj):
-        if not obj or not obj.pk:
-            return _("Save the kiosk to get its link.")
-        request = _current_request.get()
-
-        def link(path):
-            return f"{request.build_absolute_uri(path) if request else path}?key={obj.access_key}"
-
-        start = reverse("patient_feedback:start", kwargs={"facility_id": obj.facility.external_id})
-        rows = [(_("Patient chooses the form"), link(start))]
-        for form in forms_for_kiosk(obj):
-            path = reverse(
-                "patient_feedback:identify", kwargs={"facility_id": obj.facility.external_id, "form": form.code}
-            )
-            rows.append((_("Only “%(title)s”") % {"title": localize(form.title, DEFAULT_LANGUAGE)}, link(path)))
-        return format_html(
-            "{}<small>Open one of these once on the kiosk screen; a form link keeps the screen on that form. "
-            "They are secret: anyone with one can submit feedback for this kiosk. "
-            "Use “Regenerate access key” to revoke them.</small>",
-            format_html_join(
-                "",
-                LINK_ROW,
-                rows,
-            ),
-        )
-
-    @admin.action(description=_("Regenerate access key (logs the kiosk screen out)"))
-    def regenerate_access_keys(self, request, queryset):
-        for kiosk in queryset:
-            kiosk.regenerate_access_key()
-        self.message_user(request, _("New keys generated. Open the new kiosk link on each screen."), messages.WARNING)
-
-    @admin.action(description=_("Switch on"))
-    def activate(self, request, queryset):
-        queryset.update(is_active=True)
-
-    @admin.action(description=_("Switch off"))
-    def deactivate(self, request, queryset):
-        queryset.update(is_active=False)
-
-
 # ── Submissions ───────────────────────────────────────────────────────
 def _csv_safe(value):
     """Stop spreadsheet apps from treating free text as a formula (CSV injection)."""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
     text = "" if value is None else str(value)
     return f"'{text}" if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
 
@@ -230,50 +197,36 @@ class _Echo:
         return value
 
 
-BASE_COLUMNS = (
-    "reference_number",
-    "submitted_at",
-    "facility_name",
-    "kiosk_name",
-    "form_code",
-    "patient_type",
-    "identification_method",
-    "uhid",
-    "patient_external_id",
-    "encounter_external_id",
-    "language",
-    "average_rating",
-)
+CSV_COLUMNS = ("reference_number", "submitted_at", "facility", "form_code", "patient_type", "language", "uhid")
+
+
+def with_facility_name(queryset):
+    return queryset.annotate(
+        facility_name=Subquery(Facility.objects.filter(external_id=OuterRef("facility_external_id")).values("name")[:1])
+    )
 
 
 @admin.register(FeedbackSubmission)
 class FeedbackSubmissionAdmin(admin.ModelAdmin):
-    list_display = (
-        "reference_number",
-        "facility_name",
-        "form_code",
-        "patient_type",
-        "identification_method",
-        "average_rating",
-        "submitted_at",
-    )
-    list_filter = ("patient_type", "form_code", "identification_method", "language")
-    search_fields = ("reference_number", "uhid", "facility_name", "kiosk_name")
+    list_display = ("reference_number", "facility", "form_code", "patient_type", "uhid", "submitted_at")
+    list_filter = ("patient_type", "form_code", "language")
+    search_fields = ("reference_number", "uhid")
     date_hierarchy = "submitted_at"
     actions = ("export_csv",)
-    fieldsets = (
-        (None, {"fields": ("reference_number", "submitted_at", "started_at", "language")}),
-        (_("Where"), {"fields": ("facility_name", "facility_external_id", "kiosk_name", "kiosk_external_id")}),
-        (_("Form"), {"fields": ("form_title", "form_code", "patient_type", "form_external_id")}),
-        (
-            _("Who"),
-            {"fields": ("identification_method", "uhid", "patient_external_id", "encounter_external_id")},
-        ),
-        (_("Answers"), {"fields": ("answers_table", "average_rating")}),
+    fields = (
+        "reference_number",
+        "submitted_at",
+        "facility",
+        "form_code",
+        "patient_type",
+        "language",
+        "uhid",
+        "answers_table",
     )
+    readonly_fields = fields
 
-    def get_readonly_fields(self, request, obj=None):
-        return [f.name for f in self.model._meta.fields] + ["answers_table"]
+    def get_queryset(self, request):
+        return with_facility_name(super().get_queryset(request))
 
     def has_add_permission(self, request):
         return False
@@ -284,41 +237,58 @@ class FeedbackSubmissionAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
+    @admin.display(description=_("Facility"))
+    def facility(self, obj):
+        return obj.facility_name or obj.facility_external_id
+
     @admin.display(description=_("Answers"))
     def answers_table(self, obj):
+        # Labels come from the form as it is now; keys no longer on it are shown as stored.
+        form = form_for_submission(obj.facility_external_id, obj.form_code)
+        questions = {q.key: q for q in form.questions.all()} if form else {}
+        answers = dict(obj.answers or {})
         rows = []
-        for answer in obj.answers or []:
-            display = answer.get("display") or "—"
-            if answer.get("comment"):
-                display = f"{display} — {answer['comment']}"
-            rows.append((answer.get("question", answer.get("key")), display))
+        for question in sorted(questions.values(), key=lambda q: (q.order, q.id)):
+            if question.key not in answers:
+                continue
+            value = display_answer(question, answers.pop(question.key))
+            if comment := answers.pop(comment_key(question), ""):
+                value = f"{value} — {comment}"
+            rows.append((localize(question.text, DEFAULT_LANGUAGE), value))
+        rows.extend((key, value) for key, value in answers.items())
         return format_html(
             "<table>{}</table>", format_html_join("", "<tr><td>{}</td><td><strong>{}</strong></td></tr>", rows)
         )
 
     @admin.action(description=_("Export selected as CSV"))
     def export_csv(self, request, queryset):
-        # One column per question key; OP and IP forms ask different questions,
-        # so the columns are the union over the selection, in order of first use.
-        queryset = queryset.order_by("submitted_at")
-        keys = []
+        # One column per answer key; OP and IP forms ask different questions,
+        # so the columns are the union over the selection, in the forms'
+        # question order (keys no longer on a form go last).
+        queryset = with_facility_name(queryset.order_by("submitted_at"))
+        found = set()
         for answers in queryset.values_list("answers", flat=True).iterator():
-            for answer in answers or []:
-                for column in (answer["key"], f"{answer['key']}__comment") if "comment" in answer else (answer["key"],):
-                    if column not in keys:
-                        keys.append(column)
+            found.update(answers or {})
+        order = {}
+        questions = FeedbackQuestion.objects.filter(form__code__in=queryset.values("form_code"))
+        for key in questions.order_by("form__order", "form_id", "order", "id").values_list("key", flat=True):
+            order.setdefault(key, len(order))
+        keys = sorted(found, key=lambda k: (order.get(k.removesuffix("__comment"), len(order)), k))
 
         def rows():
-            yield [*BASE_COLUMNS, *keys]
+            yield [*CSV_COLUMNS, *keys]
             for item in queryset.iterator():
-                values = {}
-                for answer in item.answers or []:
-                    values[answer["key"]] = answer.get("display", "")
-                    if "comment" in answer:
-                        values[f"{answer['key']}__comment"] = answer.get("comment", "")
-                base = [getattr(item, column) for column in BASE_COLUMNS]
-                base[1] = timezone.localtime(item.submitted_at).isoformat()
-                yield [*base, *[values.get(key, "") for key in keys]]
+                base = [
+                    item.reference_number,
+                    timezone.localtime(item.submitted_at).isoformat(),
+                    item.facility_name or item.facility_external_id,
+                    item.form_code,
+                    item.patient_type,
+                    item.language,
+                    item.uhid,
+                ]
+                answers = item.answers or {}
+                yield [*base, *(answers.get(key, "") for key in keys)]
 
         writer = csv.writer(_Echo())
         response = StreamingHttpResponse(

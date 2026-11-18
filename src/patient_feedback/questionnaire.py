@@ -1,9 +1,9 @@
 """
-Turns a configured FeedbackForm into what the kiosk screens need.
+Turns a configured FeedbackForm into what the feedback page needs.
 
 Questions are grouped by type: choice/date questions are asked together on a
-"few details" screen, each rating gets its own screen, and yes/no and free
-text questions share an "in your own words" screen.
+"few details" step, each rating gets its own card, and yes/no and free-text
+questions share an "in your own words" step.
 """
 
 from datetime import date
@@ -11,8 +11,8 @@ from datetime import date
 from django.db.models import Q
 from django.utils import timezone
 
-from patient_feedback.i18n import localize, translate
-from patient_feedback.models import Audience, FeedbackForm, IdentificationMethod, QuestionType
+from patient_feedback.i18n import DEFAULT_LANGUAGE, localize
+from patient_feedback.models import Audience, FeedbackForm, QuestionType
 
 NO_COMMENT = 0
 # Default labels for ratings; a question can override 1–5 with its own.
@@ -29,17 +29,9 @@ OPEN_TYPES = {QuestionType.YES_NO, QuestionType.TEXT}
 MAX_TEXT_LENGTH = 2000
 
 
-def forms_for_kiosk(kiosk) -> list[FeedbackForm]:
-    """
-    Active forms offered on a kiosk: the ones picked on the kiosk, or else
-    every shared form plus the facility's own. A facility form replaces a
-    shared form with the same code.
-    """
-    if kiosk.forms.exists():
-        candidates = kiosk.forms.filter(is_active=True)
-    else:
-        candidates = FeedbackForm.objects.filter(is_active=True)
-    candidates = candidates.filter(Q(facility__isnull=True) | Q(facility_id=kiosk.facility_id))
+def forms_for_facility(facility) -> list[FeedbackForm]:
+    """Active forms for a facility: shared ones, replaced by the facility's own form with the same code."""
+    candidates = FeedbackForm.objects.filter(is_active=True).filter(Q(facility__isnull=True) | Q(facility=facility))
     by_code = {}
     for form in candidates.order_by("order", "id"):
         if form.code not in by_code or form.facility_id:
@@ -47,28 +39,33 @@ def forms_for_kiosk(kiosk) -> list[FeedbackForm]:
     return sorted(by_code.values(), key=lambda f: (f.order, f.id))
 
 
+def form_for_submission(facility_external_id, form_code) -> FeedbackForm | None:
+    """The form a submission was made on: the facility's own, else the shared one."""
+    candidates = FeedbackForm.objects.filter(code=form_code).filter(
+        Q(facility__external_id=facility_external_id) | Q(facility__isnull=True)
+    )
+    return max(candidates, key=lambda form: form.facility_id is not None, default=None)
+
+
 def comment_key(question) -> str:
     return f"{question.key}__comment"
 
 
+def applies(question, identified: bool) -> bool:
+    """Whether a question is asked of a patient who did (or didn't) give a UHID."""
+    if question.audience == Audience.GUEST:
+        return not identified
+    if question.audience == Audience.IDENTIFIED:
+        return identified
+    return True
+
+
 class FormSpec:
-    """A form's active questions, filtered for how the patient identified."""
+    """A form's active questions, grouped the way the page asks them."""
 
-    def __init__(self, form: FeedbackForm, method: str | None = None):
+    def __init__(self, form: FeedbackForm):
         self.form = form
-        self.method = method
-        self._questions = list(form.questions.filter(is_active=True).order_by("order", "id"))
-
-    def _applies(self, question) -> bool:
-        if question.audience == Audience.GUEST:
-            return self.method == IdentificationMethod.GUEST
-        if question.audience == Audience.IDENTIFIED:
-            return self.method in (IdentificationMethod.SCAN, IdentificationMethod.MANUAL)
-        return True
-
-    @property
-    def questions(self):
-        return [q for q in self._questions if self._applies(q)]
+        self.questions = list(form.questions.filter(is_active=True).order_by("order", "id"))
 
     @property
     def details(self):
@@ -84,7 +81,7 @@ class FormSpec:
 
     @property
     def rating_count_for_everyone(self) -> int:
-        return sum(1 for q in self._questions if q.type == QuestionType.RATING and q.audience == Audience.ALL)
+        return sum(1 for q in self.ratings if q.audience == Audience.ALL)
 
 
 def rating_labels(question) -> dict:
@@ -108,7 +105,7 @@ def clean_text(raw) -> str | None:
 
 
 def parse_answer(question, raw):
-    """Clean a submitted value for ``question``; returns None when unanswered or invalid."""
+    """Clean a submitted value for ``question``; None when unanswered or invalid."""
     if raw is None:
         return None
     if question.type == QuestionType.RATING:
@@ -131,18 +128,16 @@ def parse_answer(question, raw):
     return clean_text(raw)
 
 
-def display_answer(question, value, lang: str) -> str:
+def display_answer(question, value, lang: str = DEFAULT_LANGUAGE) -> str:
+    """A stored answer as the patient saw it, e.g. ``4 · Very good`` or ``ENT``."""
     if value is None or value == "":
         return ""
     if question.type == QuestionType.RATING:
-        return localize(rating_labels(question).get(value, {}), lang)
+        label = rating_labels(question).get(value)
+        return f"{value} · {localize(label, lang)}" if label else str(value)
     if question.type == QuestionType.CHOICE:
-        return localize(choice_labels(question).get(str(value), {"en": str(value)}), lang)
-    if question.type == QuestionType.DATE:
-        try:
-            return date.fromisoformat(value).strftime("%d %b %Y")
-        except ValueError:
-            return str(value)
-    if question.type == QuestionType.YES_NO:
-        return translate("yes" if value else "no", lang)
+        label = choice_labels(question).get(str(value))
+        return localize(label, lang) if label else str(value)
+    if question.type == QuestionType.YES_NO and isinstance(value, bool):
+        return "Yes" if value else "No"
     return str(value)

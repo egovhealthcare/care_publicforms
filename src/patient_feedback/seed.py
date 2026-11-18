@@ -378,7 +378,7 @@ def create_default_forms(form_model, question_model) -> list[str]:
     """
     created = []
     for definition in DEFAULT_FORMS:
-        if form_model.objects.filter(code=definition["code"], facility__isnull=True, deleted=False).exists():
+        if form_model.objects.filter(code=definition["code"], facility__isnull=True).exists():
             continue
         form = form_model.objects.create(
             code=definition["code"],

@@ -1,8 +1,8 @@
 {% load static patient_feedback_tags %}<!DOCTYPE html>
-<html lang="{{ lang }}" class="no-js">
+<html lang="{{ lang }}" data-lang="{{ lang }}" class="no-js">
 <head>
 <meta charset="utf-8">
-<title>{{ form_title }} — {{ facility_name }}</title>
+<title>{% if title_text %}{{ title_text }}{% else %}{% t_text "kicker" %}{% endif %} — {{ facility_name }}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#FFFFFF">
 <meta name="robots" content="noindex, nofollow">
@@ -11,12 +11,14 @@
 {% if load_web_fonts %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700{% if lang == 'kn' %}&amp;family=Noto+Sans+Kannada:wght@400;500;600;700{% endif %}&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&amp;family=Noto+Sans+Kannada:wght@400;500;600;700&amp;display=swap">
 {% endif %}
 <link rel="stylesheet" href="{% static 'patient_feedback/kiosk.css' %}">
+{# Every string is in the page in each language; show the current one. #}
+<style>.l10n{display:none}{% for language in languages %}html[data-lang="{{ language.code }}"] .l10n--{{ language.code }}{% if not forloop.last %},{% endif %}{% endfor %}{display:inline}</style>
 <script>document.documentElement.className = 'js';</script>
 </head>
-<body data-screen="{{ screen }}" data-idle-timeout="{{ idle_timeout }}" data-reset-url="{{ urls.reset }}?idle=1">
+<body data-idle-timeout="{{ idle_timeout }}" data-home-url="{{ home_url }}" data-default-lang="{{ default_lang }}">
 
 <div class="page">
 <div class="shell">
@@ -24,47 +26,23 @@
   <header class="hdr">
     <div class="hdr-row">
       <div class="hdr-id">
-        <span class="hdr-kicker">{{ form_title }}</span>
+        <span class="hdr-kicker">{% if title %}{% tr title %}{% else %}{% t "kicker" %}{% endif %}</span>
         <span class="hdr-place">{{ facility_name }}</span>
       </div>
 
-      {% if show_nav %}
-      <nav class="hdr-nav">
-        <a class="navbtn navbtn--home" href="{{ urls.first_question }}">
-          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4v-5.5H9V20H5a1 1 0 0 1-1-1z"/></svg>
-          <span>{% t "nav_home" %}</span>
-        </a>
-        <a class="navbtn navbtn--reset" href="{{ urls.reset }}">
-          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M19.8 4.2v4h-4"/></svg>
-          <span>{% t "nav_reset" %}</span>
-        </a>
-      </nav>
-      {% endif %}
+      {% block header_nav %}{% endblock %}
 
       <div class="langtog" role="group" aria-label="Language">
         {% for language in languages %}
-        <a href="{{ language.url }}" class="langbtn langbtn--{{ language.code }}{% if language.active %} is-on{% endif %}" lang="{{ language.code }}" data-lang="{{ language.code }}" aria-label="{{ language.name }}"{% if language.active %} aria-current="true"{% endif %}>{{ language.label }}</a>
+        <a href="?lang={{ language.code }}" class="langbtn langbtn--{{ language.code }}{% if language.code == lang %} is-on{% endif %}" lang="{{ language.code }}" data-set-lang="{{ language.code }}" aria-label="{{ language.name }}"{% if language.code == lang %} aria-current="true"{% endif %}>{{ language.label }}</a>
         {% endfor %}
       </div>
     </div>
 
-    <div class="progress"><div class="progress-fill" style="width:{{ progress }}%"></div></div>
+    <div class="progress"><div class="progress-fill" id="progressFill" style="width:{{ progress|default:0 }}%"></div></div>
   </header>
 
   <main class="main">
-    {% if uhid_display %}
-    <a class="idstrip" href="{{ urls.uhid }}">
-      <span class="idstrip-icon">
-        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
-      </span>
-      <span class="idstrip-body">
-        <span class="idstrip-kicker">UHID</span>
-        <span class="idstrip-value">{{ uhid_display }}</span>
-      </span>
-      <span class="idstrip-action">{% t "change" %}</span>
-    </a>
-    {% endif %}
-
     {% block screen %}{% endblock %}
   </main>
 
@@ -80,7 +58,7 @@
 <div class="idle" id="idleOverlay" hidden>
   <div class="idle-card" role="alertdialog" aria-live="assertive" aria-labelledby="idleTitle" aria-describedby="idleBody">
     <p class="idle-title" id="idleTitle">{% t "idle_title" %}</p>
-    <p class="idle-body" id="idleBody" data-template="{% t 'idle_body' n='{n}' %}"></p>
+    <p class="idle-body" id="idleBody" {% l10n_attr "data-template" "idle_body" %}></p>
   </div>
 </div>
 {% endif %}

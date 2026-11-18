@@ -4,6 +4,7 @@
 {% block screen %}
 <section class="screen screen--start">
   <div class="area-head hero">
+    <span class="hero-glow" aria-hidden="true"></span>
     <h1 class="hero-title">{% t "hero_title" %}</h1>
     <p class="hero-lead">{% t "privacy_lead" %}</p>
   </div>
@@ -20,8 +21,8 @@
         {% endif %}
       </span>
       <span class="opt-body opt-body--grow">
-        <span class="opt-title opt-title--lg">{{ option.title }}</span>
-        {% if option.description %}<span class="opt-sub">{{ option.description }}</span>{% endif %}
+        <span class="opt-title opt-title--lg">{% tr option.title %}</span>
+        {% if option.description %}<span class="opt-sub">{% tr option.description %}</span>{% endif %}
       </span>
       <svg class="opt-chevron" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </a>
