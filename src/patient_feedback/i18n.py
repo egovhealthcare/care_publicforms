@@ -21,7 +21,7 @@ LANGUAGE_CHOICES = [(code, meta["name"]) for code, meta in LANGUAGES.items()]
 
 STRINGS = {
     # ── Chrome ──────────────────────────────────────────────────────
-    "kicker": {"en": "OPD Feedback", "kn": "OPD Feedback"},
+    "kicker": {"en": "Patient feedback", "kn": "ರೋಗಿಯ ಅಭಿಪ್ರಾಯ"},  # review
     "nav_home": {"en": "Home", "kn": "ಮುಖಪುಟ"},
     "nav_reset": {"en": "Reset", "kn": "ಮರುಹೊಂದಿಸಿ"},
     "change": {"en": "Change", "kn": "ಬದಲಿಸಿ"},
@@ -33,12 +33,20 @@ STRINGS = {
     },
     # ── Identify ────────────────────────────────────────────────────
     "hero_title": {"en": "Tell us about your visit today.", "kn": "ಇಂದಿನ ನಿಮ್ಮ ಭೇಟಿಯ ಬಗ್ಗೆ ತಿಳಿಸಿ."},
-    "hero_lead": {
-        "en": "Ten short questions, about two minutes. Your answers stay confidential "
+    "hero_lead": {  # review (kn, with numbers)
+        "en": "{n} short questions, about {m} minutes. Your answers stay confidential "
         "and are used only to improve our services.",
-        "kn": "ಹತ್ತು ಸಣ್ಣ ಪ್ರಶ್ನೆಗಳು, ಸುಮಾರು ಎರಡು ನಿಮಿಷ. ನಿಮ್ಮ ಉತ್ತರಗಳು ಗೌಪ್ಯವಾಗಿರುತ್ತವೆ ಮತ್ತು ಸೇವೆ ಸುಧಾರಿಸಲು ಮಾತ್ರ ಬಳಸಲಾಗುತ್ತದೆ.",
+        "kn": "{n} ಸಣ್ಣ ಪ್ರಶ್ನೆಗಳು, ಸುಮಾರು {m} ನಿಮಿಷ. ನಿಮ್ಮ ಉತ್ತರಗಳು ಗೌಪ್ಯವಾಗಿರುತ್ತವೆ ಮತ್ತು ಸೇವೆ ಸುಧಾರಿಸಲು ಮಾತ್ರ ಬಳಸಲಾಗುತ್ತದೆ.",
     },
-    "step_identify": {"en": "Step 1 — Identify yourself", "kn": "ಹಂತ 1 — ನಿಮ್ಮನ್ನು ಗುರುತಿಸಿ"},
+    "privacy_lead": {
+        "en": "Your answers stay confidential and are used only to improve our services.",
+        "kn": "ನಿಮ್ಮ ಉತ್ತರಗಳು ಗೌಪ್ಯವಾಗಿರುತ್ತವೆ ಮತ್ತು ಸೇವೆ ಸುಧಾರಿಸಲು ಮಾತ್ರ ಬಳಸಲಾಗುತ್ತದೆ.",
+    },
+    "step_choose": {  # review
+        "en": "Step 1 — What is your feedback about?",
+        "kn": "ಹಂತ 1 — ನಿಮ್ಮ ಅಭಿಪ್ರಾಯ ಯಾವುದರ ಬಗ್ಗೆ?",
+    },
+    "step_identify": {"en": "Step {n} — Identify yourself", "kn": "ಹಂತ {n} — ನಿಮ್ಮನ್ನು ಗುರುತಿಸಿ"},
     "opt_scan_title": {"en": "Scan the QR on your OP slip", "kn": "ನಿಮ್ಮ ಒಪಿ ಚೀಟಿಯ QR ಸ್ಕ್ಯಾನ್ ಮಾಡಿ"},
     "opt_scan_sub": {"en": "Fastest — nothing to type", "kn": "ಅತಿ ವೇಗ — ಟೈಪ್ ಮಾಡಬೇಕಿಲ್ಲ"},
     "opt_manual_title": {"en": "Enter UHID manually", "kn": "UHID ಕೈಯಿಂದ ನಮೂದಿಸಿ"},
@@ -88,39 +96,32 @@ STRINGS = {
     },
     "keypad_clear": {"en": "Clear", "kn": "ತೆರವುಗೊಳಿಸಿ"},  # review
     "keypad_delete": {"en": "Delete last digit", "kn": "ಕೊನೆಯ ಅಂಕಿ ಅಳಿಸಿ"},  # review
-    # ── Guest ───────────────────────────────────────────────────────
-    "guest_heading": {"en": "Three quick details", "kn": "ಮೂರು ಸಣ್ಣ ವಿವರಗಳು"},
-    "guest_lead": {
+    # ── Details ─────────────────────────────────────────────────────
+    "details_heading": {"en": "A few quick details", "kn": "ಕೆಲವು ಸಣ್ಣ ವಿವರಗಳು"},  # review
+    "details_lead_guest": {
         "en": "No name, no number. This only helps us group feedback by department.",
         "kn": "ಹೆಸರು ಇಲ್ಲ, ಸಂಖ್ಯೆ ಇಲ್ಲ. ವಿಭಾಗವಾರು ಪ್ರತಿಕ್ರಿಯೆ ವರ್ಗೀಕರಿಸಲು ಮಾತ್ರ ಇದು ಸಹಾಯ ಮಾಡುತ್ತದೆ.",
     },
-    "guest_clinic": {"en": "Clinic visited", "kn": "ಭೇಟಿ ನೀಡಿದ ಚಿಕಿತ್ಸಾಲಯ"},
-    "guest_age": {"en": "Age group", "kn": "ವಯೋಮಾನ"},
-    "guest_sex": {"en": "Sex", "kn": "ಲಿಂಗ"},
-    "guest_start": {"en": "Start the questions", "kn": "ಪ್ರಶ್ನೆಗಳನ್ನು ಪ್ರಾರಂಭಿಸಿ"},
+    "details_lead": {
+        "en": "This only helps us group feedback by department.",
+        "kn": "ವಿಭಾಗವಾರು ಪ್ರತಿಕ್ರಿಯೆ ವರ್ಗೀಕರಿಸಲು ಮಾತ್ರ ಇದು ಸಹಾಯ ಮಾಡುತ್ತದೆ.",
+    },
+    "start_questions": {"en": "Start the questions", "kn": "ಪ್ರಶ್ನೆಗಳನ್ನು ಪ್ರಾರಂಭಿಸಿ"},
+    "required_error": {"en": "This question needs an answer.", "kn": "ಈ ಪ್ರಶ್ನೆಗೆ ಉತ್ತರ ಅಗತ್ಯವಿದೆ."},  # review
+    "optional": {"en": "optional", "kn": "ಐಚ್ಛಿಕ"},
     # ── Rating ──────────────────────────────────────────────────────
     "question_counter": {"en": "Question {n} of {total}", "kn": "ಪ್ರಶ್ನೆ {n} / {total}"},
     # ── Open-ended ──────────────────────────────────────────────────
     "open_kicker": {"en": "In your own words", "kn": "ನಿಮ್ಮ ಮಾತಿನಲ್ಲಿ"},
-    "open_heading": {"en": "Last four — all optional.", "kn": "ಕೊನೆಯ ನಾಲ್ಕು — ಎಲ್ಲವೂ ಐಚ್ಛಿಕ."},
-    "open_would_return": {
-        "en": "Would you come back to this hospital for treatment?",
-        "kn": "ಚಿಕಿತ್ಸೆಗಾಗಿ ನೀವು ಈ ಆಸ್ಪತ್ರೆಗೆ ಮತ್ತೆ ಬರುತ್ತೀರಾ?",
-    },
+    "open_heading": {"en": "Last {n} — all optional.", "kn": "ಕೊನೆಯ {n} — ಎಲ್ಲವೂ ಐಚ್ಛಿಕ."},  # review (kn, number)
+    "open_heading_required": {"en": "Last {n} questions.", "kn": "ಕೊನೆಯ {n} ಪ್ರಶ್ನೆಗಳು."},  # review
     "open_why": {"en": "Why? (optional)", "kn": "ಏಕೆ? (ಐಚ್ಛಿಕ)"},
-    "open_improve": {
-        "en": "What would you most like to see improved?",
-        "kn": "ಯಾವುದನ್ನು ಸುಧಾರಿಸಬೇಕೆಂದು ನೀವು ಬಯಸುತ್ತೀರಿ?",
-    },
-    "open_chose": {"en": "What made you choose this hospital?", "kn": "ಈ ಆಸ್ಪತ್ರೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಲು ಕಾರಣವೇನು?"},
-    "open_suggest": {"en": "Any other suggestions?", "kn": "ಇನ್ನಾವುದೇ ಸಲಹೆಗಳಿವೆಯೇ?"},
     "yes": {"en": "Yes", "kn": "ಹೌದು"},
     "no": {"en": "No", "kn": "ಇಲ್ಲ"},
     "review_answers": {"en": "Review answers", "kn": "ಉತ್ತರ ಪರಿಶೀಲಿಸಿ"},
     # ── Review ──────────────────────────────────────────────────────
     "review_heading": {"en": "Before you send", "kn": "ಕಳುಹಿಸುವ ಮೊದಲು"},
     "review_lead": {"en": "Tap any line to change it.", "kn": "ಬದಲಾಯಿಸಲು ಯಾವುದೇ ಸಾಲನ್ನು ಒತ್ತಿ."},
-    "review_would_return": {"en": "Would return to this hospital", "kn": "ಈ ಆಸ್ಪತ್ರೆಗೆ ಮತ್ತೆ ಬರುತ್ತೇನೆ"},
     "not_answered": {"en": "Not answered", "kn": "ಉತ್ತರಿಸಿಲ್ಲ"},
     "review_note": {
         "en": "Your feedback is stored without your name attached to the ratings. "

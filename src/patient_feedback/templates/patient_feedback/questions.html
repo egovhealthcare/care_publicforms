@@ -1,0 +1,44 @@
+{% extends "patient_feedback/base.html" %}
+{% load patient_feedback_tags %}
+
+{% block screen %}
+{# Every rating question is on this page; only the current card shows.      #}
+{# kiosk.js steps through the cards without reloading. Without JavaScript,   #}
+{# each button posts to the server, which shows the next card.               #}
+<form id="{{ form_id }}" class="screen screen--question" method="post" data-questions
+      data-start="{{ start_index }}" data-return="{% if from_review %}review{% endif %}"
+      data-progress-base="{{ progress_base }}" data-progress-total="{{ progress_total }}">
+  {% csrf_token %}
+  <input type="hidden" name="current" value="{{ start_index }}" id="qCurrent">
+  {% if from_review %}<input type="hidden" name="return_to" value="review">{% endif %}
+  {% for question in questions %}
+  <input type="hidden" name="rating_{{ question.key }}" id="qValue{{ question.index }}" value="{% if question.selected is not None %}{{ question.selected }}{% endif %}">
+  {% endfor %}
+
+  {% for question in questions %}
+  <section class="qcard{% if question.index == start_index %} is-active{% endif %}" data-index="{{ question.index }}" aria-hidden="{% if question.index == start_index %}false{% else %}true{% endif %}">
+    <div class="qhead">
+      <span class="badge">{% t "question_counter" n=question.number total=total %}</span>
+      <h2 class="qtitle">{{ question.text }}</h2>
+      {% if question.hint %}<p class="qhint">{{ question.hint }}</p>{% endif %}
+    </div>
+
+    <div class="scale" role="group" aria-label="{{ question.label }}">
+      {% for option in question.options %}
+      <button type="submit" name="answer" value="{{ question.key }}:{{ option.value }}"
+              class="rate rate--v{{ option.value }}{% if option.value == 0 %} rate--none{% endif %}{% if option.selected %} is-on{% endif %}"
+              aria-pressed="{{ option.selected|yesno:'true,false' }}">
+        <span class="rate-face{% if option.value == 0 %} rate-face--sm{% endif %}">{% include "patient_feedback/_face.html" with v=option.value %}</span>
+        <span class="rate-label{% if option.value == 0 %} rate-label--sm{% endif %}">{{ option.label }}</span>
+      </button>
+      {% endfor %}
+    </div>
+
+    <div class="navrow">
+      <button type="submit" name="nav" value="back:{{ question.index }}" data-nav="back" class="btn btn--ghost btn--md btn-back">{% t "back" %}</button>
+      <button type="submit" name="nav" value="next:{{ question.index }}" data-nav="next" class="btn btn--primary btn--md btn-next"{% if question.selected is None %} disabled{% endif %}>{% t "next" %}</button>
+    </div>
+  </section>
+  {% endfor %}
+</form>
+{% endblock %}

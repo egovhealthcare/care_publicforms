@@ -1,106 +1,21 @@
 """
-The OPD feedback questionnaire: rating questions, the rating scale and the
-guest-detail choices.
+Turns a configured FeedbackForm into what the kiosk screens need.
 
-Ratings are stored on ``FeedbackResponse.ratings`` keyed by ``Question.key``,
-so keys must never be renamed once responses exist. Bump
-``QUESTIONNAIRE_VERSION`` whenever the wording or the set of questions
-changes, so reports can tell old and new responses apart.
+Questions are grouped by type: choice/date questions are asked together on a
+"few details" screen, each rating gets its own screen, and yes/no and free
+text questions share an "in your own words" screen.
 """
 
-from dataclasses import dataclass, field
+from datetime import date
 
-from django.utils.text import slugify
+from django.db.models import Q
+from django.utils import timezone
 
-QUESTIONNAIRE_VERSION = "opd-v1"
+from patient_feedback.i18n import localize, translate
+from patient_feedback.models import Audience, FeedbackForm, IdentificationMethod, QuestionType
 
-
-@dataclass(frozen=True)
-class Question:
-    key: str
-    text: dict
-    short: dict
-    hint: dict = field(default_factory=dict)
-
-
-RATING_QUESTIONS: list[Question] = [
-    Question(
-        key="information_signage",
-        text={
-            "en": "Was there enough information to find your way around? "
-            "(signages, registration, lab, X-ray, pharmacy)",
-            "kn": "ದಾರಿ ಕಂಡುಕೊಳ್ಳಲು ಸಾಕಷ್ಟು ಮಾಹಿತಿ ಇತ್ತೇ? (ಸೂಚನಾ ಫಲಕ, ನೋಂದಣಿ, ಪ್ರಯೋಗಾಲಯ, ಕ್ಷ-ಕಿರಣ, ಔಷಧಾಲಯ)",
-        },
-        short={"en": "Information & signage", "kn": "ಮಾಹಿತಿ ಮತ್ತು ಫಲಕಗಳು"},
-    ),
-    Question(
-        key="registration_wait",
-        text={"en": "Waiting time at the registration counter", "kn": "ನೋಂದಣಿ ಕೌಂಟರ್‌ನಲ್ಲಿ ಕಾಯುವ ಸಮಯ"},
-        short={"en": "Registration wait", "kn": "ನೋಂದಣಿ ಕಾಯುವಿಕೆ"},
-        hint={
-            "en": "Poor = over 30 minutes · Excellent = seen immediately",
-            "kn": "ಕಳಪೆ = 30 ನಿಮಿಷಕ್ಕಿಂತ ಹೆಚ್ಚು · ಅತ್ಯುತ್ತಮ = ತಕ್ಷಣ",
-        },
-    ),
-    Question(
-        key="staff_behaviour",
-        text={"en": "Behaviour and attitude of the hospital staff", "kn": "ಆಸ್ಪತ್ರೆ ಸಿಬ್ಬಂದಿಯ ವರ್ತನೆ ಮತ್ತು ನಡವಳಿಕೆ"},
-        short={"en": "Staff behaviour", "kn": "ಸಿಬ್ಬಂದಿ ವರ್ತನೆ"},
-    ),
-    Question(
-        key="waiting_area",
-        text={
-            "en": "Amenities in the waiting area (seating, fans, drinking water, clean toilets)",
-            "kn": "ಕಾಯುವ ಸ್ಥಳದ ಸೌಲಭ್ಯಗಳು (ಕುರ್ಚಿ, ಫ್ಯಾನ್, ಕುಡಿಯುವ ನೀರು, ಸ್ವಚ್ಛ ಶೌಚಾಲಯ)",
-        },
-        short={"en": "Waiting area", "kn": "ಕಾಯುವ ಸ್ಥಳ"},
-    ),
-    Question(
-        key="doctor_communication",
-        text={"en": "Attitude and communication of the doctors", "kn": "ವೈದ್ಯರ ನಡವಳಿಕೆ ಮತ್ತು ಸಂವಹನ"},
-        short={"en": "Doctors' communication", "kn": "ವೈದ್ಯರ ಸಂವಹನ"},
-    ),
-    Question(
-        key="consultation_time",
-        text={
-            "en": "Time spent on consultation, examination and counselling",
-            "kn": "ಸಮಾಲೋಚನೆ, ಪರೀಕ್ಷೆ ಮತ್ತು ಸಲಹೆಗೆ ನೀಡಿದ ಸಮಯ",
-        },
-        short={"en": "Consultation time", "kn": "ಸಮಾಲೋಚನೆ ಸಮಯ"},
-    ),
-    Question(
-        key="lab_xray_access",
-        text={
-            "en": "Availability of lab and X-ray facilities inside the hospital",
-            "kn": "ಆಸ್ಪತ್ರೆಯೊಳಗೆ ಪ್ರಯೋಗಾಲಯ ಮತ್ತು ಕ್ಷ-ಕಿರಣ ಸೌಲಭ್ಯಗಳ ಲಭ್ಯತೆ",
-        },
-        short={"en": "Lab & X-ray access", "kn": "ಪ್ರಯೋಗಾಲಯ ಲಭ್ಯತೆ"},
-    ),
-    Question(
-        key="medicine_counter_speed",
-        text={"en": "Promptness at the medicine distribution counter", "kn": "ಔಷಧ ವಿತರಣಾ ಕೌಂಟರ್‌ನಲ್ಲಿ ತ್ವರಿತ ಸೇವೆ"},
-        short={"en": "Medicine counter speed", "kn": "ಔಷಧ ಕೌಂಟರ್ ವೇಗ"},
-    ),
-    Question(
-        key="medicine_availability",
-        text={
-            "en": "Availability of the prescribed medicines at the dispensary",
-            "kn": "ಔಷಧಾಲಯದಲ್ಲಿ ಸೂಚಿಸಿದ ಔಷಧಿಗಳ ಲಭ್ಯತೆ",
-        },
-        short={"en": "Medicines available", "kn": "ಔಷಧಿ ಲಭ್ಯತೆ"},
-    ),
-    Question(
-        key="overall_satisfaction",
-        text={"en": "Your overall satisfaction with today's visit", "kn": "ಇಂದಿನ ಭೇಟಿಯ ಬಗ್ಗೆ ನಿಮ್ಮ ಒಟ್ಟಾರೆ ತೃಪ್ತಿ"},
-        short={"en": "Overall satisfaction", "kn": "ಒಟ್ಟಾರೆ ತೃಪ್ತಿ"},
-    ),
-]
-
-QUESTION_KEYS = [q.key for q in RATING_QUESTIONS]
-
-# 1–5 are scores; 0 means the patient chose "No comments" (answered, but not
-# counted in averages).
 NO_COMMENT = 0
+# Default labels for ratings; a question can override 1–5 with its own.
 SCALE = {
     5: {"en": "Excellent", "kn": "ಅತ್ಯುತ್ತಮ"},
     4: {"en": "Very good", "kn": "ತುಂಬಾ ಚೆನ್ನಾಗಿದೆ"},
@@ -109,54 +24,125 @@ SCALE = {
     1: {"en": "Poor", "kn": "ಕಳಪೆ"},
     NO_COMMENT: {"en": "No comments", "kn": "ಪ್ರತಿಕ್ರಿಯೆ ಇಲ್ಲ"},
 }
-SCALE_VALUES = list(SCALE.keys())  # display order: 5 → 1, then 0
-
-AGE_GROUPS = [
-    ("under_18", {"en": "Under 18", "kn": "18ಕ್ಕಿಂತ ಕಡಿಮೆ"}),
-    ("18_30", {"en": "18–30", "kn": "18–30"}),
-    ("31_45", {"en": "31–45", "kn": "31–45"}),
-    ("46_60", {"en": "46–60", "kn": "46–60"}),
-    ("over_60", {"en": "Over 60", "kn": "60ಕ್ಕಿಂತ ಹೆಚ್ಚು"}),
-]
-
-SEXES = [
-    ("female", {"en": "Female", "kn": "ಮಹಿಳೆ"}),
-    ("male", {"en": "Male", "kn": "ಪುರುಷ"}),
-    ("other", {"en": "Other", "kn": "ಇತರೆ"}),
-]
-
-# Used when a kiosk has no clinic list of its own.
-DEFAULT_CLINICS = [
-    {"en": "General Medicine", "kn": "ಸಾಮಾನ್ಯ ಔಷಧ"},
-    {"en": "General Surgery", "kn": "ಸಾಮಾನ್ಯ ಶಸ್ತ್ರಚಿಕಿತ್ಸೆ"},
-    {"en": "Obstetrics & Gynaecology", "kn": "ಪ್ರಸೂತಿ ಮತ್ತು ಸ್ತ್ರೀರೋಗ"},
-    {"en": "Paediatrics", "kn": "ಮಕ್ಕಳ ವಿಭಾಗ"},
-    {"en": "Orthopaedics", "kn": "ಮೂಳೆ ವಿಭಾಗ"},
-    {"en": "ENT", "kn": "ಕಿವಿ ಮೂಗು ಗಂಟಲು"},
-    {"en": "Ophthalmology", "kn": "ಕಣ್ಣಿನ ವಿಭಾಗ"},
-    {"en": "Dermatology", "kn": "ಚರ್ಮರೋಗ"},
-    {"en": "Dental", "kn": "ದಂತ ವಿಭಾಗ"},
-    {"en": "Psychiatry", "kn": "ಮನೋವೈದ್ಯಕೀಯ"},
-]
+DETAIL_TYPES = {QuestionType.CHOICE, QuestionType.DATE}
+OPEN_TYPES = {QuestionType.YES_NO, QuestionType.TEXT}
+MAX_TEXT_LENGTH = 2000
 
 
-def normalize_clinics(clinics) -> list[tuple[str, dict]]:
+def forms_for_kiosk(kiosk) -> list[FeedbackForm]:
     """
-    Turn a kiosk's clinic config into ``[(code, labels), ...]``.
-
-    Each entry is ``{"en": "...", "kn": "...", "code": "optional"}``; the code
-    defaults to a slug of the English label. Invalid entries are skipped.
+    Active forms offered on a kiosk: the ones picked on the kiosk, or else
+    every shared form plus the facility's own. A facility form replaces a
+    shared form with the same code.
     """
-    result = []
-    seen = set()
-    for item in clinics or DEFAULT_CLINICS:
-        if isinstance(item, str):
-            item = {"en": item}
-        if not isinstance(item, dict) or not item.get("en"):
-            continue
-        code = str(item.get("code") or slugify(item["en"]).replace("-", "_"))[:64]
-        if not code or code in seen:
-            continue
-        seen.add(code)
-        result.append((code, {k: v for k, v in item.items() if k != "code"}))
-    return result
+    if kiosk.forms.exists():
+        candidates = kiosk.forms.filter(is_active=True)
+    else:
+        candidates = FeedbackForm.objects.filter(is_active=True)
+    candidates = candidates.filter(Q(facility__isnull=True) | Q(facility_id=kiosk.facility_id))
+    by_code = {}
+    for form in candidates.order_by("order", "id"):
+        if form.code not in by_code or form.facility_id:
+            by_code[form.code] = form
+    return sorted(by_code.values(), key=lambda f: (f.order, f.id))
+
+
+def comment_key(question) -> str:
+    return f"{question.key}__comment"
+
+
+class FormSpec:
+    """A form's active questions, filtered for how the patient identified."""
+
+    def __init__(self, form: FeedbackForm, method: str | None = None):
+        self.form = form
+        self.method = method
+        self._questions = list(form.questions.filter(is_active=True).order_by("order", "id"))
+
+    def _applies(self, question) -> bool:
+        if question.audience == Audience.GUEST:
+            return self.method == IdentificationMethod.GUEST
+        if question.audience == Audience.IDENTIFIED:
+            return self.method in (IdentificationMethod.SCAN, IdentificationMethod.MANUAL)
+        return True
+
+    @property
+    def questions(self):
+        return [q for q in self._questions if self._applies(q)]
+
+    @property
+    def details(self):
+        return [q for q in self.questions if q.type in DETAIL_TYPES]
+
+    @property
+    def ratings(self):
+        return [q for q in self.questions if q.type == QuestionType.RATING]
+
+    @property
+    def open_questions(self):
+        return [q for q in self.questions if q.type in OPEN_TYPES]
+
+    @property
+    def rating_count_for_everyone(self) -> int:
+        return sum(1 for q in self._questions if q.type == QuestionType.RATING and q.audience == Audience.ALL)
+
+
+def rating_labels(question) -> dict:
+    """{value: {"en": ..., ...}} for 5 → 1, then "No comments" if offered."""
+    labels = {value: SCALE[value] for value in (5, 4, 3, 2, 1)}
+    if question.options and len(question.options) == 5:
+        # options run Poor → Excellent, i.e. 1 → 5
+        labels = {value: question.options[value - 1] for value in (5, 4, 3, 2, 1)}
+    if question.allow_no_comment:
+        labels[NO_COMMENT] = SCALE[NO_COMMENT]
+    return labels
+
+
+def choice_labels(question) -> dict:
+    return {str(o["value"]): {k: v for k, v in o.items() if k != "value"} for o in question.options or []}
+
+
+def clean_text(raw) -> str | None:
+    text = str(raw or "").strip()[:MAX_TEXT_LENGTH]
+    return text or None
+
+
+def parse_answer(question, raw):
+    """Clean a submitted value for ``question``; returns None when unanswered or invalid."""
+    if raw is None:
+        return None
+    if question.type == QuestionType.RATING:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return value if value in rating_labels(question) else None
+    raw = str(raw).strip()
+    if question.type == QuestionType.CHOICE:
+        return raw if raw in choice_labels(question) else None
+    if question.type == QuestionType.DATE:
+        try:
+            value = date.fromisoformat(raw)
+        except ValueError:
+            return None
+        return value.isoformat() if value <= timezone.localdate() else None
+    if question.type == QuestionType.YES_NO:
+        return {"yes": True, "no": False}.get(raw)
+    return clean_text(raw)
+
+
+def display_answer(question, value, lang: str) -> str:
+    if value is None or value == "":
+        return ""
+    if question.type == QuestionType.RATING:
+        return localize(rating_labels(question).get(value, {}), lang)
+    if question.type == QuestionType.CHOICE:
+        return localize(choice_labels(question).get(str(value), {"en": str(value)}), lang)
+    if question.type == QuestionType.DATE:
+        try:
+            return date.fromisoformat(value).strftime("%d %b %Y")
+        except ValueError:
+            return str(value)
+    if question.type == QuestionType.YES_NO:
+        return translate("yes" if value else "no", lang)
+    return str(value)

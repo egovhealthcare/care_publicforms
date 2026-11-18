@@ -1,9 +1,10 @@
 /* ──────────────────────────────────────────────────────────────────
-   OPD Feedback kiosk — progressive enhancement only.
+   Patient feedback kiosk — progressive enhancement only.
 
    Every screen is server-rendered and works without this file. It adds:
      · an idle timer that returns the kiosk to the start screen
-     · a short highlight before a rating is submitted
+     · stepping through the rating questions on one page, with the
+       answers saved in the background
      · the UHID cells + instant on-screen keypad
      · QR scanning with the camera (BarcodeDetector) or a keyboard-mode
        USB/Bluetooth scanner
@@ -59,24 +60,114 @@
     });
   }
 
-  /* ── Rating: show the choice, then submit ────────────────────── */
-  var ratingForm = $('ratingForm');
-  if (ratingForm) {
-    var rateButtons = ratingForm.querySelectorAll('.rate');
-    each(rateButtons, function (button) {
-      button.addEventListener('click', function (event) {
-        event.preventDefault();
-        if (ratingForm.getAttribute('data-submitting')) return;
-        each(rateButtons, function (other) {
-          other.classList.remove('is-on');
-          other.setAttribute('aria-pressed', 'false');
-        });
-        button.classList.add('is-on');
-        button.setAttribute('aria-pressed', 'true');
-        var value = button.value;
-        setTimeout(function () { submitWith(ratingForm, 'rating', value); }, 220);
+  /* ── Rating questions: one page, one card at a time ─────────── */
+  // The server renders every question and marks the current card. Here a
+  // tap stores the answer in a hidden field, saves it in the background and
+  // moves to the next card; the last answer submits the page.
+  var questionsForm = document.querySelector('form[data-questions]');
+  if (questionsForm) {
+    var cards = questionsForm.querySelectorAll('.qcard');
+    var total = cards.length;
+    var current = parseInt(questionsForm.getAttribute('data-start'), 10) || 0;
+    var backToReview = questionsForm.getAttribute('data-return') === 'review';
+    var currentField = $('qCurrent');
+    var progressFill = document.querySelector('.progress-fill');
+    var progressBase = parseFloat(questionsForm.getAttribute('data-progress-base')) || 0;
+    var progressTotal = parseFloat(questionsForm.getAttribute('data-progress-total')) || total;
+    var advanceTimer = null;
+
+    var valueField = function (index) { return $('qValue' + index); };
+
+    var restartAnimation = function (element) {
+      if (!element) return;
+      element.style.animation = 'none';
+      void element.offsetWidth; // reflow so the entrance animation plays again
+      element.style.animation = '';
+    };
+
+    var show = function (index) {
+      if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer = null; }
+      current = index;
+      currentField.value = index;
+      each(cards, function (card, i) {
+        card.classList.toggle('is-active', i === index);
+        card.setAttribute('aria-hidden', i === index ? 'false' : 'true');
       });
+      if (progressFill) {
+        progressFill.style.width = Math.round((progressBase + index + 1) / progressTotal * 100) + '%';
+      }
+      restartAnimation(cards[index].querySelector('.qhead'));
+      window.scrollTo(0, 0);
+      // Keep TV-remote focus on the visible card.
+      var focusTarget = cards[index].querySelector('.rate.is-on') || cards[index].querySelector('.rate');
+      if (focusTarget && document.activeElement && document.activeElement !== body) focusTarget.focus();
+    };
+
+    // Save answers as they are given, so nothing is lost if the patient
+    // switches language or wanders off, and the server knows they're active.
+    var autosave = function () {
+      if (!window.fetch || !window.FormData) return;
+      var data = new FormData(questionsForm);
+      data.append('autosave', '1');
+      try {
+        window.fetch(questionsForm.getAttribute('action') || window.location.href, {
+          method: 'POST', body: data, credentials: 'same-origin', keepalive: true
+        }).catch(function () {});
+      } catch (e) { /* old browser: the final submit still carries every answer */ }
+    };
+
+    var finish = function () { submitWith(questionsForm, 'action', 'done'); };
+    var goNext = function () { if (current < total - 1) show(current + 1); else finish(); };
+
+    each(cards, function (card, index) {
+      var rateButtons = card.querySelectorAll('.rate');
+      var nextButton = card.querySelector('[data-nav="next"]');
+      var backButton = card.querySelector('[data-nav="back"]');
+
+      each(rateButtons, function (button) {
+        button.addEventListener('click', function (event) {
+          event.preventDefault();
+          if (questionsForm.getAttribute('data-submitting')) return;
+          valueField(index).value = button.value.split(':')[1];
+          each(rateButtons, function (other) {
+            other.classList.remove('is-on');
+            other.setAttribute('aria-pressed', 'false');
+          });
+          button.classList.add('is-on');
+          button.setAttribute('aria-pressed', 'true');
+          if (nextButton) nextButton.disabled = false;
+          autosave();
+          if (advanceTimer) clearTimeout(advanceTimer);
+          advanceTimer = setTimeout(function () {
+            advanceTimer = null;
+            if (backToReview) finish(); else goNext();
+          }, 300);
+        });
+      });
+
+      if (nextButton) {
+        nextButton.addEventListener('click', function (event) {
+          event.preventDefault();
+          if (valueField(index).value !== '') goNext();
+        });
+      }
+      if (backButton) {
+        backButton.addEventListener('click', function (event) {
+          event.preventDefault();
+          if (index > 0) show(index - 1);
+          else submitWith(questionsForm, 'nav', 'back:0'); // saves answers, then leaves
+        });
+      }
     });
+
+    // The header's Home button goes back to the first question in place.
+    var homeLink = document.querySelector('.navbtn--home');
+    if (homeLink) {
+      homeLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        show(0);
+      });
+    }
   }
 
   /* ── UHID entry ──────────────────────────────────────────────── */

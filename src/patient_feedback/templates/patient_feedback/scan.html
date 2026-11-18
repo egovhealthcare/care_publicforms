@@ -38,7 +38,7 @@
     {# Receives keystrokes from a keyboard-mode QR scanner; Enter submits. #}
     <input id="scanCode" name="code" class="sr-only" inputmode="none" autocomplete="off" aria-label="QR code" autofocus>
     <a class="btn btn--outline btn--lg btn-wide" href="{{ urls.uhid }}">{% t "scan_to_manual" %}</a>
-    <a class="btn btn--ghost btn--md btn-quiet" href="{{ urls.start }}">{% t "back" %}</a>
+    <a class="btn btn--ghost btn--md btn-quiet" href="{{ back_url }}">{% t "back" %}</a>
   </form>
 </section>
 {% endblock %}

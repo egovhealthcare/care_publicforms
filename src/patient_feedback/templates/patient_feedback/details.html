@@ -1,0 +1,39 @@
+{% extends "patient_feedback/base.html" %}
+{% load patient_feedback_tags %}
+
+{% block screen %}
+<form id="{{ form_id }}" class="screen screen--details" method="post" novalidate>
+  {% csrf_token %}
+  <div class="area-head stack stack--8">
+    <h2 class="h2">{% t "details_heading" %}</h2>
+    <p class="lead-sm">{% if is_guest %}{% t "details_lead_guest" %}{% else %}{% t "details_lead" %}{% endif %}</p>
+  </div>
+
+  <div class="area-body stack stack--24">
+    {% for field in fields %}
+    <fieldset class="group stack stack--10"{% if field.error %} aria-invalid="true"{% endif %}>
+      <legend class="kicker">{{ field.text }}</legend>
+      {% if field.hint %}<p class="lead-sm">{{ field.hint }}</p>{% endif %}
+      {% if field.type == "choice" %}
+      <div class="chips{% if field.compact %} chips--wide chips--num{% endif %}">
+        {% for code, label in field.options %}
+        <label class="chip">
+          <input type="radio" name="{{ field.key }}" value="{{ code }}"{% if code == field.value %} checked{% endif %}>
+          <span class="chip-face">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% elif field.type == "date" %}
+      <input type="date" class="ta ta--date" name="{{ field.key }}" value="{{ field.value|default:'' }}" max="{{ today|date:'Y-m-d' }}" aria-label="{{ field.text }}">
+      {% endif %}
+      {% if field.error %}<p class="err" role="alert">{{ field.error }}</p>{% endif %}
+    </fieldset>
+    {% endfor %}
+  </div>
+
+  <div class="area-nav stack stack--10">
+    <button type="submit" name="action" value="next" class="btn btn--primary btn--lg btn-cta">{% t "start_questions" %}</button>
+    <button type="submit" name="action" value="back" class="btn btn--ghost btn--md btn-quiet">{% t "back" %}</button>
+  </div>
+</form>
+{% endblock %}

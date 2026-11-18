@@ -2,41 +2,43 @@
 {% load patient_feedback_tags %}
 
 {% block screen %}
-<form id="{{ form_id }}" class="screen screen--comments" method="post">
+<form id="{{ form_id }}" class="screen screen--comments" method="post" novalidate>
   {% csrf_token %}
   <div class="area-head stack stack--8">
     <span class="kicker">{% t "open_kicker" %}</span>
-    <h2 class="h2">{% t "open_heading" %}</h2>
+    <h2 class="h2">{{ heading }}</h2>
   </div>
 
-  <fieldset class="area-return group stack stack--12">
-    <legend class="qlabel">{% t "open_would_return" %}</legend>
-    <div class="yesno">
-      <label class="yn">
-        <input type="radio" name="would_return" value="yes"{% if answers.would_return is True %} checked{% endif %}>
-        <span class="ynbtn">{% t "yes" %}</span>
-      </label>
-      <label class="yn">
-        <input type="radio" name="would_return" value="no"{% if answers.would_return is False %} checked{% endif %}>
-        <span class="ynbtn">{% t "no" %}</span>
-      </label>
-    </div>
-    <textarea name="would_return_reason" class="ta" rows="2" maxlength="2000" placeholder="{% t 'open_why' %}" aria-label="{% t 'open_why' %}">{{ answers.would_return_reason }}</textarea>
-  </fieldset>
-
   <div class="area-body stack stack--26">
+    {% for field in fields %}
+    {% if field.type == "yes_no" %}
+    <fieldset class="group stack stack--12"{% if field.error %} aria-invalid="true"{% endif %}>
+      <legend class="qlabel">{{ field.text }}</legend>
+      {% if field.hint %}<p class="lead-sm">{{ field.hint }}</p>{% endif %}
+      <div class="yesno">
+        <label class="yn">
+          <input type="radio" name="{{ field.key }}" value="yes"{% if field.value is True %} checked{% endif %}>
+          <span class="ynbtn">{% t "yes" %}</span>
+        </label>
+        <label class="yn">
+          <input type="radio" name="{{ field.key }}" value="no"{% if field.value is False %} checked{% endif %}>
+          <span class="ynbtn">{% t "no" %}</span>
+        </label>
+      </div>
+      {% if field.allow_comment %}
+      <textarea name="{{ field.comment_key }}" class="ta ta--short" rows="2" maxlength="2000" placeholder="{% t 'open_why' %}" aria-label="{% t 'open_why' %}">{{ field.comment }}</textarea>
+      {% endif %}
+      {% if field.error %}<p class="err" role="alert">{{ field.error }}</p>{% endif %}
+    </fieldset>
+    {% else %}
     <div class="stack stack--10">
-      <label class="qlabel" for="improvement">{% t "open_improve" %}</label>
-      <textarea id="improvement" name="improvement" class="ta" rows="3" maxlength="2000">{{ answers.improvement }}</textarea>
+      <label class="qlabel" for="q-{{ field.key }}">{{ field.text }}</label>
+      {% if field.hint %}<p class="lead-sm">{{ field.hint }}</p>{% endif %}
+      <textarea id="q-{{ field.key }}" name="{{ field.key }}" class="ta" rows="3" maxlength="2000"{% if field.error %} aria-invalid="true"{% endif %}>{{ field.value|default:'' }}</textarea>
+      {% if field.error %}<p class="err" role="alert">{{ field.error }}</p>{% endif %}
     </div>
-    <div class="stack stack--10">
-      <label class="qlabel" for="reasonForChoosing">{% t "open_chose" %}</label>
-      <textarea id="reasonForChoosing" name="reason_for_choosing" class="ta" rows="3" maxlength="2000">{{ answers.reason_for_choosing }}</textarea>
-    </div>
-    <div class="stack stack--10">
-      <label class="qlabel" for="suggestions">{% t "open_suggest" %}</label>
-      <textarea id="suggestions" name="suggestions" class="ta" rows="3" maxlength="2000">{{ answers.suggestions }}</textarea>
-    </div>
+    {% endif %}
+    {% endfor %}
   </div>
 
   <div class="area-nav navrow">

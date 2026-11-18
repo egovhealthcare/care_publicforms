@@ -12,23 +12,19 @@ from django.utils import timezone
 
 from patient_feedback.i18n import normalize_language
 from patient_feedback.models import IdentificationMethod
-from patient_feedback.questionnaire import QUESTION_KEYS, SCALE
-
-OPEN_FIELDS = ("would_return_reason", "improvement", "reason_for_choosing", "suggestions")
-MAX_TEXT_LENGTH = 2000
 
 
-def _blank(lang: str) -> dict:
+def _blank(lang: str, form_id: str | None = None) -> dict:
     return {
         "lang": lang,
+        "form": form_id,  # FeedbackForm.external_id as str
         "method": None,  # IdentificationMethod value once the patient picked a path
         "uhid": "",
         "uhid_input": "",  # partially typed UHID (no-JS keypad / language switch)
         "patient_id": None,
-        "guest": {"clinic": "", "age_group": "", "sex": ""},
-        "ratings": {},
-        "would_return": None,
-        **dict.fromkeys(OPEN_FIELDS, ""),
+        "answers": {},  # {question_key: value}; "<key>__comment" for yes/no reasons
+        "details_done": False,
+        "open_done": False,
         "started_at": None,
         "last_activity": None,
     }
@@ -41,7 +37,7 @@ class Draft:
         self.session_key = f"patient_feedback:{kiosk.external_id}"
         stored = request.session.get(self.session_key)
         self.data = _blank(kiosk.default_language)
-        if isinstance(stored, dict):
+        if isinstance(stored, dict) and "answers" in stored:
             self.data.update(stored)
         self.data["lang"] = normalize_language(self.data.get("lang"), kiosk.default_language)
 
@@ -51,9 +47,9 @@ class Draft:
         self.request.session[self.session_key] = self.data
         self.request.session.modified = True
 
-    def reset(self, keep_language: bool = True):
+    def reset(self, keep_language: bool = True, keep_form: bool = False):
         lang = self.data["lang"] if keep_language else self.kiosk.default_language
-        self.data = _blank(lang)
+        self.data = _blank(lang, self.data["form"] if keep_form else None)
         self.save()
 
     def is_stale(self, idle_seconds: int) -> bool:
@@ -74,6 +70,16 @@ class Draft:
         self.data["lang"] = normalize_language(value, self.kiosk.default_language)
 
     @property
+    def form_id(self) -> str | None:
+        return self.data.get("form")
+
+    def choose_form(self, form_id: str):
+        """Start on a form; switching forms drops answers given for another one."""
+        if self.data.get("form") != form_id:
+            lang = self.data["lang"]
+            self.data = _blank(lang, form_id)
+
+    @property
     def method(self) -> str | None:
         return self.data.get("method")
 
@@ -82,35 +88,30 @@ class Draft:
         return self.method in IdentificationMethod.values
 
     @property
-    def ratings(self) -> dict:
-        return self.data["ratings"]
+    def answers(self) -> dict:
+        return self.data["answers"]
 
-    def set_rating(self, key: str, value: int):
-        if key in QUESTION_KEYS and value in SCALE:
-            self.data["ratings"][key] = value
+    def set_answer(self, key: str, value):
+        if value is None or value == "":
+            self.data["answers"].pop(key, None)
+        else:
+            self.data["answers"][key] = value
 
-    def first_unanswered_index(self) -> int | None:
-        for index, key in enumerate(QUESTION_KEYS):
-            if key not in self.ratings:
-                return index
-        return None
-
-    @property
-    def all_rated(self) -> bool:
-        return self.first_unanswered_index() is None
+    def _set_method(self, method: str):
+        # Details asked depend on how the patient identified (e.g. age and
+        # sex only for guests), so switching path means asking them again.
+        is_guest = method == IdentificationMethod.GUEST
+        was_guest = self.data.get("method") == IdentificationMethod.GUEST
+        if self.data.get("method") is None or is_guest != was_guest:
+            self.data["details_done"] = False
+        self.data["method"] = method
+        self.touch_started()
 
     def set_uhid(self, uhid: str, method: str, patient_id: int | None):
-        self.data.update(method=method, uhid=uhid, uhid_input=uhid, patient_id=patient_id)
-        self.data["guest"] = {"clinic": "", "age_group": "", "sex": ""}
-        self.touch_started()
+        self._set_method(method)
+        self.data.update(uhid=uhid, uhid_input=uhid, patient_id=patient_id)
 
-    def set_guest(self, clinic: str, age_group: str, sex: str):
+    def set_guest(self):
         # The guest path is anonymous: drop any UHID collected so far.
-        self.data.update(method=IdentificationMethod.GUEST.value, uhid="", uhid_input="", patient_id=None)
-        self.data["guest"] = {"clinic": clinic, "age_group": age_group, "sex": sex}
-        self.touch_started()
-
-    def set_open_answers(self, would_return: bool | None, texts: dict):
-        self.data["would_return"] = would_return
-        for field in OPEN_FIELDS:
-            self.data[field] = (texts.get(field) or "").strip()[:MAX_TEXT_LENGTH]
+        self._set_method(IdentificationMethod.GUEST.value)
+        self.data.update(uhid="", uhid_input="", patient_id=None)

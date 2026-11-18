@@ -91,8 +91,9 @@ DEFAULTS = {
     # How the UHID is grouped on screen, e.g. 3-4-4 → "123 4567 8901".
     # Must add up to UHID_LENGTH.
     "UHID_GROUPS": [3, 4, 4],
-    # Prefix of the reference number shown after submitting (OPD-20261118-4821).
-    "REFERENCE_PREFIX": "OPD",
+    # Prefix of the reference number shown after submitting. Empty uses the
+    # form's code, e.g. OPD-20261118-4821 / IPD-20261118-0932.
+    "REFERENCE_PREFIX": "",
     # Seconds without a touch before the kiosk warns, then wipes an unfinished
     # questionnaire and returns to the start screen (browser-side timer).
     "IDLE_TIMEOUT_SECONDS": 90,
@@ -104,8 +105,11 @@ DEFAULTS = {
     # Seconds the "Thank you" screen stays up before returning to the start.
     "DONE_TIMEOUT_SECONDS": 20,
     # How far back to look for the patient's encounter at the kiosk's facility
-    # when linking a UHID response to an encounter. 0 disables linking.
+    # when recording which encounter an OP response is about. 0 disables it.
     "ENCOUNTER_LOOKBACK_DAYS": 1,
+    # Same for inpatient forms, which are usually filled at discharge, days
+    # after admission. Inpatient encounters are preferred.
+    "IP_ENCOUNTER_LOOKBACK_DAYS": 60,
     # Load Figtree (care_fe's font) / Noto Sans Kannada from Google Fonts. Turn off for kiosks
     # without internet access (system fonts are used instead).
     "LOAD_WEB_FONTS": True,

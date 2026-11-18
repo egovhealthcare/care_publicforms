@@ -1,15 +1,14 @@
 /* ──────────────────────────────────────────────────────────────────
-   OPD Feedback kiosk — styled with care_fe's CareUI theme
-   (Figtree, emerald primary, neutral greys, 0.625rem radius).
+   Patient feedback kiosk — the original single-column kiosk design,
+   styled with care_fe's CareUI theme (Figtree, emerald primary, neutral
+   greys, 0.625rem radius).
 
    Colours are the hex equivalents of care_fe's Tailwind palette, because
    older TV browsers can't parse the oklch() values Tailwind v4 emits.
 
-   Sizes are in rem and the root size follows the screen:
-     · phones / small windows ......... 16px, single column
-     · large portrait (TVs, tablets) .. scales to the tighter of width/height
-     · landscape TVs & monitors ....... scales to the tighter of width/height,
-                                         centred card, two-column screens
+   The layout is the same on every screen: one centred column. Sizes are in
+   rem, so on large screens the whole column scales up to fill the height
+   (or width, on tall portrait screens) instead of rearranging.
    No flex `gap`, `clamp()`/`min()`, `aspect-ratio` or `inset`, for older
    TV browsers.
    ────────────────────────────────────────────────────────────────── */
@@ -62,23 +61,23 @@
   --font-sans:'Figtree',ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
 }
 
-/* ── Root size per screen class ─────────────────────────────────── */
+/* ── Root size: scale the column to the screen ──────────────────── */
+/* The tallest common screen (a three-line question) is about 60rem tall and
+   the column 30rem wide, so the root size is the smaller of height/60 and
+   width/32. Long lists (the review) scroll, with "Submit" kept in view.
+     phones & small windows ... 16px (the original design)
+     1920×1080 landscape ...... 17.9px  (column ≈ 540px wide, centred)
+     960×540 (1080p TV, 2×) ... 9px CSS ≈ 18 device px
+     1080×1920 portrait ....... 31.9px  (column fills the width) */
 html{font-size:16px}
-/* Portrait TVs & tablets: the smaller of width/32 and height/62, so a
-   question screen fits without scrolling (1080×1920 → 30.9px). */
-@media (orientation:portrait) and (min-width:600px) and (min-height:1000px){
-  html{font-size:1.61vh}
+@media (orientation:landscape) and (min-height:500px) and (min-width:700px){
+  html{font-size:1.66vh}
 }
-@media (orientation:portrait) and (min-width:600px) and (min-height:1000px) and (max-aspect-ratio:1/2){
+@media (orientation:portrait) and (min-width:600px) and (min-height:960px){
+  html{font-size:1.66vh}
+}
+@media (orientation:portrait) and (min-width:600px) and (min-height:960px) and (max-aspect-ratio:8/15){
   html{font-size:3.125vw}
-}
-/* Landscape TVs & monitors: the smaller of width/69 and height/45.
-   960×540 (a 1080p TV at 2× density) → 11.9px, 1920×1080 → 23.8px. */
-@media (orientation:landscape) and (min-width:900px) and (min-height:500px){
-  html{font-size:1.45vw}
-}
-@media (orientation:landscape) and (min-width:900px) and (min-height:500px) and (min-aspect-ratio:3/2){
-  html{font-size:2.2vh}
 }
 
 /* ── Base ───────────────────────────────────────────────────────── */
@@ -109,6 +108,7 @@ fieldset.group > legend{display:block;width:100%;padding:0;float:none}
 
 @keyframes sweep{0%{top:10%}100%{top:90%}}
 @keyframes rise{from{opacity:0;transform:translateY(.625rem)}to{opacity:1;transform:none}}
+@keyframes breathe{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:.85;transform:scale(1.06)}}
 @keyframes focusIn{from{opacity:0;transform:translateY(.5rem)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
 
@@ -121,12 +121,18 @@ fieldset.group > legend{display:block;width:100%;padding:0;float:none}
 .stack--26 > * + *{margin-top:1.625rem}
 
 /* ── Page frame ─────────────────────────────────────────────────── */
-.page{min-height:100vh;display:flex;justify-content:center}
+.page{
+  min-height:100vh;display:flex;justify-content:center;
+  background:
+    radial-gradient(90% 55% at 18% 0%, rgba(5,150,105,.10), transparent 62%),
+    radial-gradient(80% 50% at 92% 8%, rgba(29,78,216,.07), transparent 60%),
+    var(--muted-background);
+}
 .shell{
   width:100%;max-width:30rem;min-height:100vh;
   display:flex;flex-direction:column;position:relative;
   background:var(--background);
-  box-shadow:var(--shadow-sm);
+  box-shadow:0 1px 2px rgba(0,0,0,.04), 0 .75rem 2.5rem rgba(0,0,0,.06), 0 2.5rem 5.625rem rgba(0,0,0,.04);
 }
 
 /* ── Header ─────────────────────────────────────────────────────── */
@@ -188,15 +194,16 @@ fieldset.group > legend{display:block;width:100%;padding:0;float:none}
 .area-nav{grid-area:nav}
 .area-entry{grid-area:entry}
 .area-pad{grid-area:pad}
-.area-return{grid-area:ret}
 .area-note{grid-area:note}
 
-.screen--start{--screen-gap:1.375rem;grid-template-areas:"head" "body";animation:focusIn .42s var(--ease) both}
+/* Every child with a grid-area must be named here, or the grid adds an
+   implicit column and squeezes the content to one side. */
+.screen--start{--screen-gap:1.375rem;grid-template-areas:"head" "body" "nav";animation:focusIn .42s var(--ease) both}
+.screen--start > .area-nav{margin-top:1.25rem}
 .screen--scan{--screen-gap:1.125rem;grid-template-areas:"head" "body" "nav"}
 .screen--uhid{--screen-gap:1.25rem;grid-template-areas:"head" "entry" "pad" "nav"}
-.screen--guest{--screen-gap:1.5rem;grid-template-areas:"head" "body" "nav"}
-.screen--question{--screen-gap:1.125rem;grid-template-areas:"head" "body" "nav"}
-.screen--comments{--screen-gap:1.625rem;grid-template-areas:"head" "ret" "body" "nav"}
+.screen--details{--screen-gap:1.5rem;grid-template-areas:"head" "body" "nav"}
+.screen--comments{--screen-gap:1.625rem;grid-template-areas:"head" "body" "nav"}
 .screen--review{--screen-gap:1.125rem;grid-template-areas:"head" "body" "note" "nav"}
 
 .kicker{font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--primary-700)}
@@ -236,6 +243,12 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
 
 /* ── Identify ───────────────────────────────────────────────────── */
 .hero{position:relative;display:flex;flex-direction:column}
+.hero-glow{
+  position:absolute;top:-3.5rem;left:-2.875rem;width:15.625rem;height:13.125rem;border-radius:999px;
+  background:radial-gradient(circle at 40% 40%, rgba(6,95,70,.16), rgba(52,211,153,.10) 45%, transparent 70%);
+  filter:blur(1.625rem);animation:breathe 9s ease-in-out infinite;pointer-events:none;
+}
+.hero-title,.hero-lead{position:relative}
 .hero-title{
   margin:0;font-size:2.125rem;font-weight:700;letter-spacing:-.025em;line-height:1.1;color:var(--foreground);
 }
@@ -258,6 +271,11 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
   background:var(--background);color:var(--foreground);
   border:1px solid var(--strong-border);box-shadow:var(--shadow-sm);
 }
+.opt--form{
+  min-height:5rem;padding:.875rem 1.125rem;
+  background:var(--background);color:var(--foreground);
+  border:1px solid var(--strong-border);box-shadow:var(--shadow-sm);
+}
 .opt--guest{
   min-height:4.25rem;padding:.875rem 1.125rem;
   background:var(--soft-background);color:var(--foreground);
@@ -265,7 +283,8 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
 }
 @media (hover:hover){
   .opt--scan:hover{background:#0B6B50}
-  .opt--manual:hover{border-color:var(--stronger-border);box-shadow:var(--shadow-md)}
+  .opt--manual:hover,
+  .opt--form:hover{border-color:var(--stronger-border);box-shadow:var(--shadow-md)}
   .opt--guest:hover{border-color:var(--stronger-border);background:var(--muted-background)}
 }
 .opt:active{transform:translateY(1px)}
@@ -369,7 +388,11 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
 .chip input:focus + .chip-face,
 .yn input:focus + .ynbtn{outline:.125rem solid var(--ring);outline-offset:.125rem}
 
-/* ── Rating question ────────────────────────────────────────────── */
+/* ── Rating questions (one page, one card visible at a time) ────── */
+.screen--question{display:block}
+.qcard{display:none}
+.qcard.is-active{display:flex;flex-direction:column}
+.qcard > * + *{margin-top:1.125rem}
 .qhead{display:flex;flex-direction:column;animation:focusIn .34s var(--ease) both}
 .qhead > * + *{margin-top:.75rem}
 .qtitle{margin:0;font-size:1.5rem;font-weight:600;line-height:1.3;letter-spacing:-.015em;color:var(--foreground);text-wrap:pretty}
@@ -441,6 +464,8 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
   box-shadow:var(--shadow-xs);outline:none;transition:border-color .15s, box-shadow .15s;
 }
 .ta::placeholder{color:var(--placeholder)}
+.ta--short{min-height:0}
+.ta--date{max-width:16rem;min-height:3.25rem;font-feature-settings:'tnum';font-weight:500}
 .ta:focus{border-color:var(--ring);box-shadow:var(--focus-ring)}
 
 /* ── Review ─────────────────────────────────────────────────────── */
@@ -455,6 +480,13 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
 .row-label{flex:1;min-width:0;margin-right:.875rem;font-size:.9375rem;line-height:1.4;color:var(--muted-foreground)}
 .row-value{flex:none;font-size:.9375rem;font-weight:600;text-align:right;color:var(--primary)}
 .row-value.is-empty{color:var(--placeholder);font-weight:500}
+/* Longer screens scroll; their main button stays pinned at the bottom. */
+.screen--review > .area-nav,
+.screen--comments > .area-nav{
+  position:-webkit-sticky;position:sticky;bottom:0;z-index:2;
+  margin:0 -1.125rem -1.625rem;padding:.875rem 1.125rem 1.125rem;
+  background:linear-gradient(to bottom, rgba(255,255,255,0), #fff 1.25rem);
+}
 
 /* ── Done ───────────────────────────────────────────────────────── */
 .screen--done{display:flex;flex-direction:column;padding-top:1.75rem;animation:rise .35s ease both}
@@ -548,100 +580,3 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
   background:var(--background);border:1px solid var(--border);box-shadow:var(--shadow-sm);
 }
 .blocked-card > * + *{margin-top:.75rem}
-
-/* ──────────────────────────────────────────────────────────────────
-   Large portrait screens: the shell becomes a card
-   ────────────────────────────────────────────────────────────────── */
-@media (orientation:portrait) and (min-width:600px) and (min-height:1000px){
-  .page{padding:1rem}
-  .shell{min-height:calc(100vh - 2rem);border:1px solid var(--border);border-radius:var(--radius-2xl)}
-  .hdr{border-radius:var(--radius-2xl) var(--radius-2xl) 0 0}
-  .ftr{border-radius:0 0 var(--radius-2xl) var(--radius-2xl)}
-}
-
-/* ──────────────────────────────────────────────────────────────────
-   Landscape TVs & monitors: centred card, header on one line, and
-   two-column screens whose columns are vertically centred together
-   ────────────────────────────────────────────────────────────────── */
-@media (orientation:landscape) and (min-width:900px) and (min-height:500px){
-  .page{padding:1.5rem 2rem}
-  .shell{
-    max-width:64rem;min-height:calc(100vh - 3rem);
-    border:1px solid var(--border);border-radius:var(--radius-2xl);box-shadow:var(--shadow-md);
-  }
-  .hdr{position:relative;border-radius:var(--radius-2xl) var(--radius-2xl) 0 0}
-  .hdr-row{flex-wrap:nowrap;padding:.875rem 1.75rem}
-  .hdr-nav{order:0;flex:none;padding-top:0;margin-right:1rem}
-  .main{padding:1.75rem 2.25rem}
-  .ftr{padding:.875rem 1.75rem;border-radius:0 0 var(--radius-2xl) var(--radius-2xl)}
-
-  /* UHID becomes a compact pill */
-  .idstrip{align-self:flex-start;width:auto;min-height:2.75rem;padding:.375rem .5rem .375rem .375rem;border-radius:999px;margin-bottom:1rem}
-  .idstrip-body{flex-direction:row;align-items:baseline}
-  .idstrip-kicker{margin-right:.5rem}
-
-  .screen{grid-column-gap:3rem;column-gap:3rem;align-content:center}
-  .screen > .area-body,
-  .screen > .area-pad{align-self:center}
-  .area-nav{margin-top:.5rem}
-
-  .screen--start{
-    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-    grid-template-areas:"head body";
-    align-items:center;
-  }
-  .hero-title{font-size:2.75rem}
-  .hero-lead{font-size:1.0625rem;max-width:30ch}
-
-  .screen--scan{
-    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-    grid-template-areas:"body ." "body head" "body nav" "body .";
-    grid-template-rows:1fr auto auto 1fr;
-  }
-  .screen--scan .cam{max-width:24rem;height:24rem;padding-top:0;margin:0 auto}
-
-  .screen--uhid{
-    grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);
-    grid-template-areas:". pad" "head pad" "entry pad" "nav pad" ". pad";
-    grid-template-rows:1fr auto auto auto 1fr;
-  }
-  .screen--uhid.screen--nopad{
-    grid-template-columns:minmax(0,32rem);justify-content:center;
-    grid-template-areas:"head" "entry" "nav";grid-template-rows:auto;
-  }
-  .screen--uhid .keypad{grid-auto-rows:4.25rem}
-
-  .screen--guest{
-    grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);
-    grid-template-areas:". body" "head body" "nav body" ". body";
-    grid-template-rows:1fr auto auto 1fr;
-  }
-
-  .screen--question{
-    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-    grid-template-areas:". body" "head body" "nav body" ". body";
-    grid-template-rows:1fr auto auto 1fr;
-  }
-  .qtitle{font-size:1.875rem}
-  .qhint{font-size:.9375rem}
-
-  .screen--comments{
-    grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);
-    grid-template-areas:". body" "head body" "ret body" "nav body" ". body";
-    grid-template-rows:1fr auto auto auto 1fr;
-  }
-  /* The tallest screen: trim the right column so it fits a 16:9 screen. */
-  .screen--comments .area-body.stack--26 > * + *{margin-top:1.125rem}
-  .screen--comments .area-body .ta{height:5rem}
-
-  .screen--review{
-    grid-template-columns:minmax(0,.8fr) minmax(0,1.7fr);
-    grid-template-areas:". body" "head body" "note body" "nav body" ". body";
-    grid-template-rows:1fr auto auto auto 1fr;
-  }
-  .screen--review .rows{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
-  .screen--review .row{border-bottom:1px solid var(--border)}
-  .screen--review .row:nth-child(odd){border-right:1px solid var(--border)}
-
-  .screen--done{max-width:30rem;width:100%;margin:0 auto;padding-top:0;justify-content:center}
-}
