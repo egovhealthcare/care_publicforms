@@ -86,8 +86,11 @@ class PluginSettings:  # pragma: no cover
 REQUIRED_SETTINGS = set()
 
 DEFAULTS = {
-    # Language a new patient starts in ("en" or "kn"). A screen can start in
-    # another one with ?lang=kn in its URL.
+    # Languages offered in the header toggle, in order. Each needs its screen
+    # text in i18n.py (built in: "en", "kn"); one language hides the toggle.
+    "LANGUAGES": ["en", "kn"],
+    # Language a new patient starts in; one of LANGUAGES (else the first).
+    # A screen can start in another one with ?lang=kn in its URL.
     "DEFAULT_LANGUAGE": "en",
     # How the QR on the OP slip is read: "camera" (the browser reads it with
     # the screen's camera), "scanner" (a USB/Bluetooth scanner in keyboard

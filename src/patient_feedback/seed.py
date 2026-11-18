@@ -20,6 +20,7 @@ WAIT_LABELS = [  # Poor → Excellent, as in the NQAS format  # review (kn)
 AGE_GROUP = {
     "key": "age_group",
     "type": "choice",
+    "required": True,
     "audience": "guest",
     "text": {"en": "Age group", "kn": "ವಯೋಮಾನ"},
     "options": [
@@ -34,6 +35,7 @@ AGE_GROUP = {
 SEX = {
     "key": "sex",
     "type": "choice",
+    "required": True,
     "audience": "guest",
     "text": {"en": "Sex", "kn": "ಲಿಂಗ"},
     "options": [
@@ -95,6 +97,7 @@ OPD_FORM = {
         {
             "key": "clinic",
             "type": "choice",
+            "required": True,
             "text": {"en": "Clinic visited", "kn": "ಭೇಟಿ ನೀಡಿದ ಚಿಕಿತ್ಸಾಲಯ"},
             "options": [
                 {"value": "general_medicine", "en": "General Medicine", "kn": "ಸಾಮಾನ್ಯ ಔಷಧ"},
@@ -197,6 +200,7 @@ IPD_FORM = {
         {
             "key": "ward",
             "type": "choice",
+            "required": True,
             "text": {"en": "Ward", "kn": "ವಾರ್ಡ್"},
             "options": [
                 {"value": "medicine", "en": "General Medicine", "kn": "ಸಾಮಾನ್ಯ ಔಷಧ"},
@@ -211,6 +215,7 @@ IPD_FORM = {
         {
             "key": "date_of_admission",
             "type": "date",
+            "required": True,
             "text": {"en": "Date of admission", "kn": "ದಾಖಲಾದ ದಿನಾಂಕ"},
         },
         AGE_GROUP,

@@ -9,7 +9,7 @@
   <div class="area-body stack stack--24">
     {% for field in details %}
     <fieldset class="group stack stack--10" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}">
-      <legend class="kicker">{% tr field.text %}</legend>
+      <legend class="kicker">{% tr field.text %}{% if not field.required %} <span class="kicker-note">· {% t "optional" %}</span>{% endif %}</legend>
       <span class="q-label" hidden>{% tr field.label %}</span>
       {% if field.hint %}<p class="lead-sm">{% tr field.hint %}</p>{% endif %}
       {% if field.type == "choice" %}

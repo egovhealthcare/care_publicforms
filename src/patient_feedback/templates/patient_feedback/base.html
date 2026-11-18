@@ -11,14 +11,14 @@
 {% if load_web_fonts %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&amp;family=Noto+Sans+Kannada:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700{% for family in web_fonts %}&amp;family={{ family|urlencode }}:wght@400;500;600;700{% endfor %}&amp;display=swap">
 {% endif %}
 <link rel="stylesheet" href="{% static 'patient_feedback/kiosk.css' %}">
 {# Every string is in the page in each language; show the current one. #}
 <style>.l10n{display:none}{% for language in languages %}html[data-lang="{{ language.code }}"] .l10n--{{ language.code }}{% if not forloop.last %},{% endif %}{% endfor %}{display:inline}</style>
 <script>document.documentElement.className = 'js';</script>
 </head>
-<body data-idle-timeout="{{ idle_timeout }}" data-home-url="{{ home_url }}" data-default-lang="{{ default_lang }}">
+<body data-idle-timeout="{{ idle_timeout }}" data-home-url="{{ home_url }}">
 
 <div class="page">
 <div class="shell">
@@ -32,11 +32,13 @@
 
       {% block header_nav %}{% endblock %}
 
+      {% if languages|length > 1 %}
       <div class="langtog" role="group" aria-label="Language">
         {% for language in languages %}
-        <a href="?lang={{ language.code }}" class="langbtn langbtn--{{ language.code }}{% if language.code == lang %} is-on{% endif %}" lang="{{ language.code }}" data-set-lang="{{ language.code }}" aria-label="{{ language.name }}"{% if language.code == lang %} aria-current="true"{% endif %}>{{ language.label }}</a>
+        <a href="{{ language.url }}" class="langbtn langbtn--{{ language.code }}{% if language.code == lang %} is-on{% endif %}" lang="{{ language.code }}" data-set-lang="{{ language.code }}" aria-label="{{ language.name }}"{% if language.code == lang %} aria-current="true"{% endif %}>{{ language.label }}</a>
         {% endfor %}
       </div>
+      {% endif %}
     </div>
 
     <div class="progress"><div class="progress-fill" id="progressFill" style="width:{{ progress|default:0 }}%"></div></div>

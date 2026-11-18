@@ -2,12 +2,16 @@
 {% load patient_feedback_tags %}
 
 {% block header_nav %}
+{# kiosk.js shows these from the first rating question on (ratings, open questions,   #}
+{# review), as in the original design. Home drops everything entered. Reset clears the #}
+{# ratings and open answers and goes back to the first question (kiosk.js); without    #}
+{# JavaScript both are plain links that reload the form.                               #}
 <nav class="hdr-nav" id="hdrNav" hidden>
-  <button type="button" class="navbtn navbtn--home" data-action="home">
+  <a class="navbtn navbtn--home" href="{{ nav_home_url }}" data-carry-lang>
     <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4v-5.5H9V20H5a1 1 0 0 1-1-1z"/></svg>
     <span>{% t "nav_home" %}</span>
-  </button>
-  <a class="navbtn navbtn--reset" href="{{ home_url }}">
+  </a>
+  <a class="navbtn navbtn--reset" href="{{ reset_url }}" data-action="reset" data-carry-lang>
     <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M19.8 4.2v4h-4"/></svg>
     <span>{% t "nav_reset" %}</span>
   </a>

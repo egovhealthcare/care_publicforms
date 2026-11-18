@@ -2,18 +2,23 @@
 Public, server-rendered feedback pages: no login, kiosk key, session or
 cookies. Anyone in the hospital can open them.
 
-  /facility/<id>/patient_feedback/            form chooser (or straight to the only form)
-  /facility/<id>/patient_feedback/<form>/     the whole questionnaire on one page; POST saves it
-  /facility/<id>/patient_feedback/<form>/done/?ref=…   thank you + reference number
+  /facility/<id>/patient_feedback/                     form chooser (or straight to the only form)
+  /facility/<id>/type/<form>/patient_feedback/         the whole questionnaire on one page; POST saves it
+  /facility/<id>/type/<form>/patient_feedback/done/?ref=…   thank you + reference number
 
 The questionnaire page holds every step (identify, details, ratings, open
-questions, review) and both languages; kiosk.js moves between the steps in
+questions, review) and every offered language; kiosk.js moves between the steps in
 the browser and the page is posted once at the end. Without JavaScript the
 same page is one long form.
 
 A screen can set its own options in the URL: ?lang=kn (starting language),
 ?scan=camera|scanner|off and ?keypad=0|1. A screen opened on a form's URL
 stays on that form; one opened on the chooser returns to the chooser.
+
+The language the patient picks travels with them as ?language=kn: from the
+chooser to the form (and Back / Home / Reset), and through the submit to the
+thank-you page. The idle reset and the thank-you page's return go back to the
+screen's starting language for the next patient.
 """
 
 import math
@@ -30,7 +35,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django_ratelimit.core import is_ratelimited
 
-from patient_feedback.i18n import DEFAULT_LANGUAGE, LANGUAGES, localize, normalize_language
+from patient_feedback.i18n import BASE_LANGUAGE, languages, localize, normalize_language
 from patient_feedback.models import FeedbackSubmission, QuestionType
 from patient_feedback.questionnaire import (
     FormSpec,
@@ -64,6 +69,9 @@ class FeedbackPage(View):
         if not self.forms:
             return self.render_empty("no_forms")
         self.options = self.screen_options(request)
+        # The patient's own language choice, if they made one.
+        params = request.POST if request.method == "POST" else request.GET
+        self.patient_language = params.get("language") if params.get("language") in languages() else None
         self.form = None
         if (code := kwargs.pop("form", None)) is not None:
             self.form = next((f for f in self.forms if f.code == code), None)
@@ -75,7 +83,7 @@ class FeedbackPage(View):
     def screen_options(self, request) -> dict:
         params = request.GET
         options = {}
-        if params.get("lang") in LANGUAGES:
+        if params.get("lang") in languages():
             options["lang"] = params["lang"]
         if params.get("scan") in SCAN_MODES:
             options["scan"] = params["scan"]
@@ -86,6 +94,15 @@ class FeedbackPage(View):
     @property
     def default_language(self) -> str:
         return self.options.get("lang") or normalize_language(plugin_settings.DEFAULT_LANGUAGE)
+
+    @property
+    def language(self) -> str:
+        """The language to show: the patient's choice, else the screen's starting language."""
+        return self.patient_language or self.default_language
+
+    def carry(self) -> dict:
+        """Query that keeps the patient's language on links within their visit."""
+        return {"language": self.patient_language} if self.patient_language else {}
 
     @property
     def scan_mode(self) -> str:
@@ -104,34 +121,46 @@ class FeedbackPage(View):
         query = {**self.options, **(query or {})}
         return f"{url}?{urlencode(query)}" if query else url
 
-    def chooser_url(self) -> str:
-        return self._url("start")
+    def chooser_url(self, **query) -> str:
+        return self._url("start", query)
 
     def form_url(self, form, **query) -> str:
         return self._url("form", query, form=form.code)
 
-    def home_url(self, came_from_chooser: bool) -> str:
+    def home_url(self, came_from_chooser: bool, **query) -> str:
         """Where the next patient starts: the chooser, or this form if the screen was opened on it."""
         if came_from_chooser and len(self.forms) > 1:
-            return self.chooser_url()
-        return self.form_url(self.form)
+            return self.chooser_url(**query)
+        return self.form_url(self.form, **query)
 
     # ── rendering ────────────────────────────────────────────────────
     def render_empty(self, reason: str):
         return render(self.request, "patient_feedback/empty.html", {"reason": reason}, status=404)
 
+    def language_link(self, code) -> str:
+        """The toggle's link without JavaScript: this page in ``code``, keeping its other parameters."""
+        query = self.request.GET.copy()
+        query["language"] = code
+        return f"?{query.urlencode()}"
+
     def base_context(self, title) -> dict:
-        lang = self.default_language
+        lang = self.language
         return {
             "facility_name": self.facility.name,
             "title": title,
             "title_text": localize(title, lang) if isinstance(title, dict) else "",
             "lang": lang,
-            "default_lang": lang,
             "languages": [
-                {"code": code, "label": meta["toggle"], "name": meta["name"], "active": code == lang}
-                for code, meta in LANGUAGES.items()
+                {
+                    "code": code,
+                    "label": meta["toggle"],
+                    "name": meta["name"],
+                    "active": code == lang,
+                    "url": self.language_link(code),
+                }
+                for code, meta in languages().items()
             ],
+            "web_fonts": [meta["font"] for meta in languages().values() if meta["font"]],
             "today": timezone.localdate(),
             "idle_timeout": int(plugin_settings.IDLE_TIMEOUT_SECONDS),
             "load_web_fonts": bool(plugin_settings.LOAD_WEB_FONTS),
@@ -148,7 +177,7 @@ class StartView(FeedbackPage):
                 "title": form.title,
                 "description": form.description,
                 "patient_type": form.patient_type,
-                "url": self.form_url(form, **{"from": "start"}),
+                "url": self.form_url(form, **{"from": "start"}, **self.carry()),
             }
             for form in self.forms
         ]
@@ -181,7 +210,11 @@ class FormView(FeedbackPage):
 
         language = normalize_language(request.POST.get("language"), self.default_language)
         submission = create_submission(self.facility, self.form, language, uhid or "", answers)
-        query = {"ref": submission.reference_number, **({"from": "start"} if came_from_chooser else {})}
+        query = {
+            "ref": submission.reference_number,
+            **({"from": "start"} if came_from_chooser else {}),
+            "language": language,  # the thank-you page stays in the patient's language
+        }
         return HttpResponseRedirect(self._url("done", query, form=self.form.code))
 
     def render_form(self, came_from_chooser: bool, data=None, errors=None, banner=None, status=200):
@@ -215,7 +248,7 @@ class FormView(FeedbackPage):
             elif question.type == QuestionType.CHOICE:
                 options = choice_labels(question)
                 item["options"] = [{"value": code, "label": labels} for code, labels in options.items()]
-                item["compact"] = all(len(localize(labels, DEFAULT_LANGUAGE)) <= 12 for labels in options.values())
+                item["compact"] = all(len(localize(labels, BASE_LANGUAGE)) <= 12 for labels in options.values())
             elif question.type == QuestionType.YES_NO:
                 item.update(
                     allow_comment=question.allow_comment,
@@ -241,11 +274,11 @@ class FormView(FeedbackPage):
                 start_step = "comments"
 
         context = self.base_context(self.form.title)
-        if data.get("language") in LANGUAGES:
-            context["lang"] = data["language"]
         context.update(
-            home_url=self.home_url(came_from_chooser),
-            back_to_chooser=self.chooser_url() if came_from_chooser and len(self.forms) > 1 else None,
+            home_url=self.home_url(came_from_chooser),  # idle reset: the next patient
+            nav_home_url=self.home_url(came_from_chooser, **self.carry()),
+            reset_url=self.form_url(self.form, **({"from": "start"} if came_from_chooser else {}), **self.carry()),
+            back_to_chooser=(self.chooser_url(**self.carry()) if came_from_chooser and len(self.forms) > 1 else None),
             came_from_chooser=came_from_chooser,
             step_number=2 if came_from_chooser and len(self.forms) > 1 else 1,
             details=details,

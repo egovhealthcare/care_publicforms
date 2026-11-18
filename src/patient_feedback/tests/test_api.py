@@ -1,14 +1,15 @@
 from datetime import timedelta
 
 from care.utils.tests.base import CareAPITestBase
+from django.forms.models import model_to_dict
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
 
-from patient_feedback.admin import FeedbackFormForm, QuestionForm
-from patient_feedback.models import FeedbackForm, FeedbackSubmission
-from patient_feedback.tests import PLAIN_STATIC_STORAGES
+from patient_feedback.admin import FeedbackFormForm, QuestionForm, localized_form
+from patient_feedback.models import FeedbackForm, FeedbackQuestion, FeedbackSubmission
+from patient_feedback.tests import PLAIN_STATIC_STORAGES, PLUGIN_DEFAULTS
 
 
 def make_submission(facility, reference, form_code, answers, uhid="", **extra):
@@ -26,6 +27,7 @@ def make_submission(facility, reference, form_code, answers, uhid="", **extra):
     return submission
 
 
+@override_settings(PLUGIN_CONFIGS=PLUGIN_DEFAULTS)
 class FeedbackApiTests(CareAPITestBase):
     def setUp(self):
         super().setUp()
@@ -117,7 +119,7 @@ class FeedbackApiTests(CareAPITestBase):
         self.assertEqual(self.client.get(reverse("patient_feedback_api:health")).status_code, 200)
 
 
-@override_settings(STORAGES=PLAIN_STATIC_STORAGES)
+@override_settings(STORAGES=PLAIN_STATIC_STORAGES, PLUGIN_CONFIGS=PLUGIN_DEFAULTS)
 class AdminTests(CareAPITestBase):
     def setUp(self):
         super().setUp()
@@ -132,12 +134,14 @@ class AdminTests(CareAPITestBase):
         self.assertContains(response, "Title (Kannada)")
         self.assertContains(response, "Question (Kannada)")
         self.assertContains(response, "ಒಪಿಡಿ ಅಭಿಪ್ರಾಯ")
-        self.assertContains(response, escape("/facility/<facility-id>/patient_feedback/opd/"))
+        self.assertContains(response, escape("/facility/<facility-id>/type/opd/patient_feedback/"))
 
     def test_facility_form_shows_its_full_link(self):
         own = FeedbackForm.objects.create(facility=self.facility, code="opd", patient_type="op", title={"en": "Ours"})
         response = self.client.get(reverse("admin:patient_feedback_feedbackform_change", args=[own.pk]))
-        self.assertContains(response, f"http://testserver/facility/{self.facility.external_id}/patient_feedback/opd/")
+        self.assertContains(
+            response, f"http://testserver/facility/{self.facility.external_id}/type/opd/patient_feedback/"
+        )
 
     def test_localized_question_form_packs_languages(self):
         form = QuestionForm(
@@ -158,6 +162,22 @@ class AdminTests(CareAPITestBase):
         question = form.save()
         self.assertEqual(question.text, {"en": "Where did you park?"})
         self.assertEqual(question.short_text, {})
+
+    def test_text_in_languages_not_offered_is_kept(self):
+        with self.settings(PLUGIN_CONFIGS={"patient_feedback": {"LANGUAGES": ["en"]}}):
+            form_class = localized_form(
+                FeedbackQuestion,
+                {"text": ("Question", 2), "short_text": ("Review label", 1), "hint": ("Hint", 1)},
+                required=("text",),
+            )
+        question = self.opd.questions.get(key="clinic")
+        kannada = question.text["kn"]
+        self.assertNotIn("text__kn", form_class().fields)
+        form = form_class(data={**model_to_dict(question), "text__en": "Clinic you visited"}, instance=question)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        question.refresh_from_db()
+        self.assertEqual(question.text, {"en": "Clinic you visited", "kn": kannada})
 
     def test_question_validation(self):
         base = {"form": self.opd.pk, "order": 5, "text__en": "Q?", "audience": "all", "is_active": True}

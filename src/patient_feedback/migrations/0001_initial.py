@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
             name='FeedbackForm',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('code', models.SlugField(help_text="Short, stable id stored with every response and used in the URL, e.g. 'opd' → /facility/<id>/patient_feedback/opd/.")),
+                ('code', models.SlugField(help_text="Short, stable id stored with every response and used in the URL, e.g. 'opd' → /facility/<id>/type/opd/patient_feedback/.")),
                 ('patient_type', models.CharField(choices=[('op', 'Outpatient (OP)'), ('ip', 'Inpatient (IP)')], max_length=8)),
                 ('title', models.JSONField(help_text='Text per language, e.g. {"en": "...", "kn": "..."}.')),
                 ('description', models.JSONField(blank=True, default=dict, help_text='Text per language, e.g. {"en": "...", "kn": "..."}.')),

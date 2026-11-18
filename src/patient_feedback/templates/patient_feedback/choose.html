@@ -12,7 +12,7 @@
   <div class="area-body stack stack--8">
     <span class="kicker">{% t "step_choose" %}</span>
     {% for option in options %}
-    <a class="opt opt--form" href="{{ option.url }}">
+    <a class="opt opt--form" href="{{ option.url }}" data-carry-lang>
       <span class="opt-icon opt-icon--manual">
         {% if option.patient_type == "ip" %}
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6v13M3 15h18v4M21 15v-3a3 3 0 0 0-3-3h-7v6"/><circle cx="7" cy="11" r="2"/></svg>

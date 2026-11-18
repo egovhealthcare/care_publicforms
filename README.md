@@ -11,12 +11,12 @@ satisfaction formats: **OPD feedback** (10 attributes) and **inpatient
 feedback** (20 attributes), each with four open questions and the patient
 details from the paper form.
 
-Flow (bilingual, English / Kannada):
+Flow (English and Kannada by default; the languages are a setting):
 
 ```
 choose form (OP visit / IP stay)        ← skipped on a screen pinned to one form
-  → /<form>/ identify: scan QR on OP slip | type UHID | continue as guest
-  → a few details (clinic / ward, date of admission, age, sex …)
+  → identify: scan QR on OP slip | type UHID | continue as guest
+  → a few details (clinic / ward, date of admission; age and sex for guests)
   → ratings, one card at a time (Poor → Excellent, No comments)
   → open questions → review → thank you + reference number
 ```
@@ -54,6 +54,11 @@ login, kiosk key, session or cookie. Each response is one row in a table
   without scrolling on 1920×1080, 960×540 TV browsers, 1080×1920 portrait
   and tablets. The longer comments and review steps scroll, with their main
   button pinned at the bottom.
+- **Home and Reset.** From the first rating question on (ratings, open
+  questions, review), the header shows *Home*, which drops everything and
+  goes back to the chooser (or the start of a pinned form), and *Reset*,
+  which clears the ratings and open answers and goes back to the first
+  question, keeping the UHID and details.
 - **Unattended use.** Once someone has used the screen, 90 s without a
   touch shows *"Are you still there?"*, then reloads the start page, which
   drops everything entered.
@@ -113,33 +118,40 @@ set it as the browser's start page.
 
 - `…/facility/<facility_id>/patient_feedback/`: patients choose OPD or
   inpatient feedback (opens the form directly if only one is active);
-- `…/facility/<facility_id>/patient_feedback/<form code>/`, e.g. `…/ipd/`:
-  the screen is **pinned to that form**, with no chooser. Idle reset and
-  the thank-you page return to that form.
+- `…/facility/<facility_id>/type/<form code>/patient_feedback/`, e.g.
+  `…/type/ipd/patient_feedback/`: the screen is **pinned to that form**,
+  with no chooser. Idle reset and the thank-you page return to that form.
 
 The Django admin shows each form's link (**Patient Feedback → Feedback
 forms**, open a form). A screen can set its own options in the URL:
 
 | Parameter | What it does |
 | --- | --- |
-| `lang=kn` | Language each new patient starts in (`en` / `kn`). Default: `DEFAULT_LANGUAGE`. |
+| `lang=kn` | Language each new patient starts in, one of `LANGUAGES`. Default: `DEFAULT_LANGUAGE`. |
 | `scan=camera` | The browser reads the QR with the TV's camera (needs HTTPS and a browser with `BarcodeDetector`, e.g. Chrome on Android / ChromeOS / macOS). |
 | `scan=scanner` | A USB/Bluetooth QR scanner in keyboard mode, which works on any browser. A scanner also works on the first step in camera mode. |
 | `scan=off` | Hides the scan option. |
 | `keypad=0` / `keypad=1` | On-screen number pad for the UHID. Keep it on for TVs without a system keyboard. |
 
-For example `…/patient_feedback/ipd/?lang=kn&scan=scanner` pins a ward
-screen to the inpatient form, in Kannada, with a USB scanner.
+For example `…/type/ipd/patient_feedback/?lang=kn&scan=scanner` pins a
+ward screen to the inpatient form, in Kannada, with a USB scanner.
+
+A language the patient picks with the toggle stays with them for their whole
+visit, from the chooser to the thank-you page (it travels as `?language=`).
+The idle reset and the thank-you page's return switch back to the screen's
+starting language for the next patient.
 
 > [!NOTE]
 > The pages are served by the Care **backend**. If your deployment serves
-> care_fe and the backend from the same domain, route
-> `/facility/<id>/patient_feedback/` to the backend, since care_fe also uses
-> `/facility/...` paths.
+> care_fe and the backend from the same domain, route both
+> `/facility/<id>/patient_feedback/…` and `/facility/<id>/type/<form>/patient_feedback/…`
+> to the backend (for example the regex
+> `^/facility/[^/]+/(type/[^/]+/)?patient_feedback/`), since care_fe also
+> uses `/facility/...` paths.
 
 ### Kiosk browser tips
 
-- Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/patient_feedback/opd/"`.
+- Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/type/opd/patient_feedback/"`.
 - The camera only works over HTTPS. Allow camera access for the site once.
 - Following the NQAS guidance, take exit feedback: put the OPD kiosk near
   the pharmacy counter and the inpatient kiosk where patients are discharged.
@@ -172,7 +184,9 @@ In the Django admin under **Patient Feedback → Feedback forms**:
   Each question has a stable `key` (answers are stored under it), an order,
   `required`, active, and an **audience**: everyone, guests only, or
   patients who gave a UHID. The default forms ask age and sex only of
-  guests, since UHID patients already have a record.
+  guests, since UHID patients already have a record. Their details (clinic
+  or ward, date of admission, age, sex) are required; a details question
+  that isn't is marked *optional* on screen.
 
 Responses store only keys and values; the wording and labels come from the
 form. Fixing a typo is fine, but if a question's meaning changes, add a new
@@ -222,7 +236,8 @@ Set in the plug's `configs={}` or as environment variables:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `DEFAULT_LANGUAGE` | `"en"` | Starting language; a screen can override it with `?lang=`. |
+| `LANGUAGES` | `["en", "kn"]` | Languages in the header toggle, in order (env: `LANGUAGES=en,kn`). Each needs its screen text in `i18n.py`; built in: `en`, `kn`. With one language the toggle is hidden. The admin shows a text box for English and each of these. |
+| `DEFAULT_LANGUAGE` | `"en"` | Starting language, one of `LANGUAGES` (otherwise the first); a screen can override it with `?lang=`. |
 | `SCAN_MODE` | `"camera"` | `camera`, `scanner` or `off`; a screen can override it with `?scan=`. |
 | `SHOW_KEYPAD` | `True` | On-screen UHID keypad; a screen can override it with `?keypad=`. |
 | `UHID_LENGTH` | `11` | Digits in a UHID. |
@@ -237,8 +252,10 @@ Set in the plug's `configs={}` or as environment variables:
 
 - Question text is edited per language in the admin. Screen text (buttons,
   headings) is in [`i18n.py`](src/patient_feedback/i18n.py). To add a
-  language, add it to `LANGUAGES` there; the admin then shows a box for it
-  on every question. Missing text falls back to English.
+  language (say Malayalam), add it to `KNOWN_LANGUAGES` there with its
+  strings, then list it in the `LANGUAGES` setting; the admin then shows a
+  box for it on every question. Missing text falls back to English.
+  `manage.py check` warns about codes in `LANGUAGES` without screen text.
 - **Needs a native speaker's check:** Kannada marked `# review` in
   `i18n.py` and [`seed.py`](src/patient_feedback/seed.py). That covers most
   of the inpatient form, the waiting-time labels, the form titles, and the
@@ -250,12 +267,13 @@ Set in the plug's `configs={}` or as environment variables:
 ```
 src/patient_feedback/
 ├── views.py          # the public pages: chooser, questionnaire (GET + one POST), thank you
-├── pages.py          # page URLs, mounted at /facility/<id>/patient_feedback/
+├── pages.py          # page URLs under /facility/<id>/ (patient_feedback/, type/<form>/patient_feedback/)
 ├── urls.py, api.py   # staff API, mounted by Care at /api/patient_feedback/
 ├── questionnaire.py  # a configured form → steps; answer parsing and labels
 ├── services.py       # UHID format, collecting answers, saving submissions
 ├── seed.py           # default OPD / inpatient forms (NQAS format)
-├── i18n.py           # UI strings
+├── i18n.py           # UI strings and the languages they exist in
+├── checks.py         # `manage.py check` warnings for the language settings
 ├── models.py, admin.py, settings.py
 ├── templates/patient_feedback/   # form.html + steps/, choose, done, empty
 ├── static/patient_feedback/      # kiosk.css, kiosk.js

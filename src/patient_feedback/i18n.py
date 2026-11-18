@@ -1,23 +1,39 @@
 """
-UI strings for the kiosk, keyed by language code.
+Screen text for the feedback pages, keyed by language code.
 
-Only one language is rendered per request (the server picks it), so adding a
-language is a matter of adding it to ``LANGUAGES`` and filling in its strings
-here and in ``questionnaire.py``. Missing strings fall back to English.
+Every page carries its text in all offered languages, so switching language
+in the browser is instant. Which languages are offered, and in what order, is
+the LANGUAGES setting; it can use any language listed in ``KNOWN_LANGUAGES``.
+To add one, add it there and give its strings below (missing strings fall
+back to English), then translate the questions in the admin.
 
 Strings marked ``# review`` were added for the kiosk build (they are not in
 the original design file) and need a native-speaker check.
 """
 
-DEFAULT_LANGUAGE = "en"
+# Questions and screen text must exist in English; other languages fall back to it.
+BASE_LANGUAGE = "en"
 
-# Order defines the order of the language toggle in the header.
-LANGUAGES = {
-    "en": {"toggle": "EN", "name": "English"},
-    "kn": {"toggle": "ಕನ್ನಡ", "name": "Kannada"},
+# toggle: the header button; name: for screen readers and the admin;
+# font: Google Fonts family loaded for the script (None: Figtree covers it).
+KNOWN_LANGUAGES = {
+    "en": {"toggle": "EN", "name": "English", "font": None},
+    "kn": {"toggle": "ಕನ್ನಡ", "name": "Kannada", "font": "Noto Sans Kannada"},
 }
 
-LANGUAGE_CHOICES = [(code, meta["name"]) for code, meta in LANGUAGES.items()]
+
+def languages() -> dict:
+    """The offered languages (the LANGUAGES setting), in order; English if none is usable."""
+    from patient_feedback.settings import plugin_settings
+
+    codes = [code for code in plugin_settings.LANGUAGES or [] if code in KNOWN_LANGUAGES]
+    return {code: KNOWN_LANGUAGES[code] for code in dict.fromkeys(codes or [BASE_LANGUAGE])}
+
+
+def admin_languages() -> dict:
+    """Languages with a text box in the admin: English (required) and the offered ones."""
+    return {BASE_LANGUAGE: KNOWN_LANGUAGES[BASE_LANGUAGE], **languages()}
+
 
 STRINGS = {
     # ── Chrome ──────────────────────────────────────────────────────
@@ -155,16 +171,19 @@ STRINGS = {
 }
 
 
-def normalize_language(code: str | None, default: str = DEFAULT_LANGUAGE) -> str:
-    if code in LANGUAGES:
-        return code
-    return default if default in LANGUAGES else DEFAULT_LANGUAGE
+def normalize_language(code: str | None, default: str | None = None) -> str:
+    """``code`` if it is offered, else ``default`` if offered, else the first offered language."""
+    offered = languages()
+    for candidate in (code, default):
+        if candidate in offered:
+            return candidate
+    return next(iter(offered))
 
 
 def localize(value, lang: str) -> str:
     """Pick ``lang`` from a ``{"en": ..., "kn": ...}`` mapping, falling back to English."""
     if isinstance(value, dict):
-        return value.get(lang) or value.get(DEFAULT_LANGUAGE) or ""
+        return value.get(lang) or value.get(BASE_LANGUAGE) or ""
     return "" if value is None else str(value)
 
 

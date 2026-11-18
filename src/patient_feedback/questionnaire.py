@@ -11,7 +11,7 @@ from datetime import date
 from django.db.models import Q
 from django.utils import timezone
 
-from patient_feedback.i18n import DEFAULT_LANGUAGE, localize
+from patient_feedback.i18n import BASE_LANGUAGE, localize
 from patient_feedback.models import Audience, FeedbackForm, QuestionType
 
 NO_COMMENT = 0
@@ -128,7 +128,7 @@ def parse_answer(question, raw):
     return clean_text(raw)
 
 
-def display_answer(question, value, lang: str = DEFAULT_LANGUAGE) -> str:
+def display_answer(question, value, lang: str = BASE_LANGUAGE) -> str:
     """A stored answer as the patient saw it, e.g. ``4 · Very good`` or ``ENT``."""
     if value is None or value == "":
         return ""

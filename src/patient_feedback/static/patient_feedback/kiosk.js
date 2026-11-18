@@ -59,6 +59,23 @@
     });
     var field = $('fLang');
     if (field) field.value = code;
+    // Links within the patient's visit (form choice, Back, Home, Reset) keep it.
+    each(document.querySelectorAll('a[data-carry-lang]'), function (link) {
+      link.setAttribute('href', withLanguage(link.getAttribute('href'), code));
+    });
+  }
+
+  // ``href`` with its ?language= set to ``code`` (other parameters kept).
+  function withLanguage(href, code) {
+    var hash = '';
+    var at = href.indexOf('#');
+    if (at > -1) { hash = href.slice(at); href = href.slice(0, at); }
+    var parts = href.split('?');
+    var params = (parts[1] || '').split('&').filter(function (param) {
+      return param && param.indexOf('language=') !== 0;
+    });
+    params.push('language=' + encodeURIComponent(code));
+    return parts[0] + '?' + params.join('&') + hash;
   }
 
   each(document.querySelectorAll('[data-set-lang]'), function (link) {
@@ -114,6 +131,8 @@
   var progressFill = $('progressFill');
   var headerNav = $('hdrNav');
   var idStrip = $('idStrip');
+  // Home / Reset show from the first rating question on, in every flow.
+  var NAV_STEPS = ['questions', 'comments', 'review'];
 
   var current = null;       // name of the visible step
   var currentCard = 0;      // index into cards
@@ -258,7 +277,7 @@
     if (name === 'scan') startScan();
 
     var inFlow = name !== 'identify' && name !== 'scan' && name !== 'uhid';
-    if (headerNav) headerNav.hidden = name === 'identify';
+    if (headerNav) headerNav.hidden = NAV_STEPS.indexOf(name) < 0;
     if (idStrip) {
       idStrip.hidden = !(inFlow && identified);
       $('idStripValue').textContent = formatUhid(digitsOf(uhidInput.value));
@@ -586,9 +605,33 @@
     }
   });
 
-  if (headerNav) {
-    var home = headerNav.querySelector('[data-action="home"]');
-    if (home) home.addEventListener('click', function () { show('identify'); });
+  // Reset (header): clear the ratings and open answers and start again at the
+  // first question. The UHID (or guest choice) and the details are kept.
+  // Without JavaScript the link reloads the form, which clears everything.
+  function resetAnswers() {
+    each([steps.questions, steps.comments], function (step) {
+      if (!step) return;
+      each(step.querySelectorAll('input, textarea'), function (control) {
+        if (control.type === 'radio' || control.type === 'checkbox') control.checked = false;
+        else control.value = '';
+      });
+      each(step.querySelectorAll('[data-error]'), function (error) { error.hidden = true; });
+    });
+    each(form.querySelectorAll('.banner'), function (banner) { banner.hidden = true; });
+    each(cards, updateNextButton);
+    returnToReview = false;
+    var units = flow();
+    for (var i = 0; i < units.length; i++) {
+      if (units[i][0] !== 'details') { goTo(units[i]); return; }
+    }
+  }
+
+  var resetLink = headerNav && headerNav.querySelector('[data-action="reset"]');
+  if (resetLink) {
+    resetLink.addEventListener('click', function (event) {
+      event.preventDefault();
+      resetAnswers();
+    });
   }
 
   /* ── Submitting ──────────────────────────────────────────────── */

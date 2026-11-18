@@ -7,3 +7,7 @@ PLAIN_STATIC_STORAGES = {
     **settings.STORAGES,
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
+
+# Tests run against the plugin's own defaults, whatever the Care checkout's
+# plug_config.py sets for it (languages, prefixes …).
+PLUGIN_DEFAULTS = {**getattr(settings, "PLUGIN_CONFIGS", {}), "patient_feedback": {}}

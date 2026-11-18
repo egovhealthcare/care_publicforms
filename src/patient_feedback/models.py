@@ -6,7 +6,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
-from patient_feedback.i18n import DEFAULT_LANGUAGE, localize
+from patient_feedback.i18n import BASE_LANGUAGE, localize
 
 
 class PatientType(models.TextChoices):
@@ -57,7 +57,7 @@ class FeedbackForm(models.Model):
         max_length=50,
         help_text=_(
             "Short, stable id stored with every response and used in the URL, e.g. 'opd' → "
-            "/facility/<id>/patient_feedback/opd/."
+            "/facility/<id>/type/opd/patient_feedback/."
         ),
     )
     patient_type = models.CharField(max_length=8, choices=PatientType.choices)
@@ -81,11 +81,11 @@ class FeedbackForm(models.Model):
         ]
 
     def __str__(self):
-        return f"{localize(self.title, DEFAULT_LANGUAGE)} ({self.code})"
+        return f"{localize(self.title, BASE_LANGUAGE)} ({self.code})"
 
     def clean(self):
         errors = {}
-        if not isinstance(self.title, dict) or not self.title.get(DEFAULT_LANGUAGE):
+        if not isinstance(self.title, dict) or not self.title.get(BASE_LANGUAGE):
             errors["title"] = _("An English title is required.")
         if FeedbackForm.objects.filter(code=self.code, facility_id=self.facility_id).exclude(pk=self.pk).exists():
             errors["code"] = _("Another form already uses this code here.")
@@ -143,7 +143,7 @@ class FeedbackQuestion(models.Model):
             and FeedbackQuestion.objects.filter(form_id=self.form_id, key=self.key).exclude(pk=self.pk).exists()
         ):
             errors["key"] = _("Another question in this form already uses this key.")
-        if not isinstance(self.text, dict) or not self.text.get(DEFAULT_LANGUAGE):
+        if not isinstance(self.text, dict) or not self.text.get(BASE_LANGUAGE):
             errors["text"] = _("English question text is required.")
         options = self.options or []
         if not isinstance(options, list):
@@ -153,13 +153,13 @@ class FeedbackQuestion(models.Model):
             if (
                 not options
                 or len(values) != len(options)
-                or not all(isinstance(o, dict) and o.get("value") and o.get(DEFAULT_LANGUAGE) for o in options)
+                or not all(isinstance(o, dict) and o.get("value") and o.get(BASE_LANGUAGE) for o in options)
             ):
                 errors["options"] = _('A choice needs options like [{"value": "ent", "en": "ENT"}].')
             elif len(set(values)) != len(values):
                 errors["options"] = _("Option values must be unique.")
         elif self.type == QuestionType.RATING and options:
-            if len(options) != 5 or not all(isinstance(o, dict) and o.get(DEFAULT_LANGUAGE) for o in options):
+            if len(options) != 5 or not all(isinstance(o, dict) and o.get(BASE_LANGUAGE) for o in options):
                 errors["options"] = _("Give exactly five labels, Poor to Excellent, or leave empty.")
         if errors:
             raise ValidationError(errors)

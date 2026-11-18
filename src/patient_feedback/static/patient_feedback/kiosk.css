@@ -208,6 +208,7 @@ fieldset.group > legend{display:block;width:100%;padding:0;float:none}
 .screen--review{--screen-gap:1.125rem;grid-template-areas:"head" "body" "note" "nav"}
 
 .kicker{font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--primary-700)}
+.kicker-note{font-weight:500;color:var(--placeholder)}
 .badge{
   display:inline-flex;align-items:center;align-self:flex-start;
   padding:.1875rem .5rem;border-radius:var(--radius-md);
@@ -607,6 +608,7 @@ button.row{font:inherit;border:0;border-bottom:1px solid var(--border);border-ra
 .no-js .step[data-step="review"],
 .no-js .lead-sm[data-audience]{display:none !important}
 .no-js .step{flex:none}
+.no-js #hdrNav{display:flex !important}
 .no-js .step + .step{margin-top:2.5rem;padding-top:2rem;border-top:1px solid var(--border)}
 .no-js .qcard + .qcard{margin-top:2.25rem}
 .submit-row{margin-top:2rem}

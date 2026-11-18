@@ -14,10 +14,13 @@ class PatientFeedbackConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
 
     def ready(self):
+        import_module(f"{PLUGIN_NAME}.checks")  # registers the settings checks
+
         # Care mounts `<plugin>.urls` under /api/<plugin>/ for API routes.
-        # The kiosk pages are server-rendered HTML, so they live outside /api/,
-        # scoped to the facility like Care's own facility routes.
+        # The feedback pages are server-rendered HTML, so they live outside
+        # /api/, scoped to the facility like Care's own facility routes (see
+        # pages.py for the paths).
         urlconf = import_module(settings.ROOT_URLCONF)
         urlconf.urlpatterns += [
-            path(f"facility/<uuid:facility_id>/{PLUGIN_NAME}/", include(f"{PLUGIN_NAME}.pages")),
+            path("facility/<uuid:facility_id>/", include(f"{PLUGIN_NAME}.pages")),
         ]

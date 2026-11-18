@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 
-from patient_feedback.i18n import DEFAULT_LANGUAGE, LANGUAGES, localize
+from patient_feedback.i18n import BASE_LANGUAGE, admin_languages, localize
 from patient_feedback.models import FeedbackForm, FeedbackQuestion, FeedbackSubmission
 from patient_feedback.questionnaire import comment_key, display_answer, form_for_submission
 
@@ -27,17 +27,19 @@ def localized_form(model, localized: dict, required: tuple = ()):
     box per configured language, e.g. ``text__en`` and ``text__kn``.
 
     ``localized`` maps field name → (label, rows). Fields in ``required``
-    need their English text.
+    need their English text. There is a box for English and each offered
+    language; text in other languages is kept as it is.
     """
+    codes = admin_languages()
     attrs = {}
     for name, (label, rows) in localized.items():
-        for code, meta in LANGUAGES.items():
+        for code, meta in codes.items():
             widget = (
                 forms.Textarea(attrs={"rows": rows, "cols": 60}) if rows > 1 else forms.TextInput(attrs={"size": 60})
             )
             attrs[f"{name}__{code}"] = forms.CharField(
                 label=f"{label} ({meta['name']})",
-                required=name in required and code == DEFAULT_LANGUAGE,
+                required=name in required and code == BASE_LANGUAGE,
                 widget=widget,
             )
 
@@ -45,18 +47,20 @@ def localized_form(model, localized: dict, required: tuple = ()):
         forms.ModelForm.__init__(self, *args, **kwargs)
         for name in localized:
             current = getattr(self.instance, name, None) or {}
-            for code in LANGUAGES:
+            for code in codes:
                 self.fields[f"{name}__{code}"].initial = current.get(code, "")
 
     def clean(self):
         cleaned = forms.ModelForm.clean(self)
         # Pack before model validation, which checks the English text.
         for name in localized:
-            setattr(
-                self.instance,
-                name,
-                {code: value for code in LANGUAGES if (value := (cleaned.get(f"{name}__{code}") or "").strip())},
-            )
+            text = dict(getattr(self.instance, name, None) or {})
+            for code in codes:
+                if value := (cleaned.get(f"{name}__{code}") or "").strip():
+                    text[code] = value
+                else:
+                    text.pop(code, None)
+            setattr(self.instance, name, text)
         return cleaned
 
     def _update_errors(self, errors):
@@ -64,7 +68,7 @@ def localized_form(model, localized: dict, required: tuple = ()):
         if hasattr(errors, "error_dict"):
             for name in localized:
                 if name in errors.error_dict:
-                    errors.error_dict[f"{name}__{DEFAULT_LANGUAGE}"] = errors.error_dict.pop(name)
+                    errors.error_dict[f"{name}__{BASE_LANGUAGE}"] = errors.error_dict.pop(name)
         forms.ModelForm._update_errors(self, errors)
 
     attrs.update(__init__=__init__, clean=clean, _update_errors=_update_errors)
@@ -73,7 +77,7 @@ def localized_form(model, localized: dict, required: tuple = ()):
 
 
 def language_fields(*names):
-    return tuple(f"{name}__{code}" for name in names for code in LANGUAGES)
+    return tuple(f"{name}__{code}" for name in names for code in admin_languages())
 
 
 QuestionForm = localized_form(
@@ -132,7 +136,7 @@ class FeedbackFormAdmin(admin.ModelAdmin):
 
     @admin.display(description=_("Title"), ordering="code")
     def form_title(self, obj):
-        return localize(obj.title, DEFAULT_LANGUAGE)
+        return localize(obj.title, BASE_LANGUAGE)
 
     @admin.display(description=_("Active questions"), ordering="_questions")
     def question_count(self, obj):
@@ -180,7 +184,7 @@ class FeedbackQuestionAdmin(admin.ModelAdmin):
 
     @admin.display(description=_("Question"))
     def question_text(self, obj):
-        return localize(obj.text, DEFAULT_LANGUAGE)
+        return localize(obj.text, BASE_LANGUAGE)
 
 
 # ── Submissions ───────────────────────────────────────────────────────
@@ -254,7 +258,7 @@ class FeedbackSubmissionAdmin(admin.ModelAdmin):
             value = display_answer(question, answers.pop(question.key))
             if comment := answers.pop(comment_key(question), ""):
                 value = f"{value} — {comment}"
-            rows.append((localize(question.text, DEFAULT_LANGUAGE), value))
+            rows.append((localize(question.text, BASE_LANGUAGE), value))
         rows.extend((key, value) for key, value in answers.items())
         return format_html(
             "<table>{}</table>", format_html_join("", "<tr><td>{}</td><td><strong>{}</strong></td></tr>", rows)
