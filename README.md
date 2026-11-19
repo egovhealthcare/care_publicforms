@@ -25,6 +25,10 @@ The pages are **public**: anyone in the hospital can open them, with no
 login, kiosk key, session or cookie. Each response is one row in a table
 **without foreign keys**.
 
+For how it is built (request flow, the in-browser step machine, languages,
+validation) and the database tables, see
+[docs/architecture.md](docs/architecture.md).
+
 ## How it works
 
 - **One page per form, posted once.** The whole questionnaire (identify,
@@ -40,8 +44,13 @@ login, kiosk key, session or cookie. Each response is one row in a table
   scanning and the idle timer.
 - **Nothing stored until submit.** No session, cookie or draft rows; the
   UHID is stored as entered and is not looked up in Care. Submissions are
-  rate-limited per IP (`SUBMIT_RATE_LIMIT`; Care's `DISABLE_RATELIMIT`
-  turns it off).
+  rate-limited per IP address (`SUBMIT_RATE_LIMIT`; see
+  [Behind a proxy](#behind-a-proxy)).
+- **Checked twice.** The browser checks each step before moving on (required
+  answers, a UHID of the right length, no dates in the future), and the
+  server checks the whole page again on submit. If anything is wrong the page
+  comes back at the first step with a problem, with every answer kept and
+  the problem marked in red.
 - **Configurable forms.** Forms and questions live in the database and are
   edited in the Django admin, with a text box per language. See
   [Forms and questions](#forms-and-questions).
@@ -60,8 +69,14 @@ login, kiosk key, session or cookie. Each response is one row in a table
   which clears the ratings and open answers and goes back to the first
   question, keeping the UHID and details.
 - **Unattended use.** Once someone has used the screen, 90 s without a
-  touch shows *"Are you still there?"*, then reloads the start page, which
-  drops everything entered.
+  touch shows *"Are you still there?"*, then reloads the start page in the
+  screen's own language, which drops everything entered. The timer runs from
+  the moment a page holds a patient's choices (their form, their language,
+  or their answers sent back after a failed submit), so nothing is left on
+  screen for the next patient; an untouched screen never reloads.
+- **Accessible.** Every control has a name in the current language
+  (screen readers, TV remotes), errors are announced, ratings are real
+  radio groups, and a TV remote's OK button picks the focused answer.
 
 ## Installation
 
@@ -170,6 +185,9 @@ In the Django admin under **Patient Feedback → Feedback forms**:
   language, and active / order. A form with no facility is offered
   everywhere; a facility can add its own form with the same code (say, with
   its own clinic list), which replaces the shared one for that facility.
+  Switching that facility form off hides the code there; the shared form
+  doesn't come back. Keep codes short: reference numbers use the first 12
+  characters (`OPD-20261118-4821`).
 - **Questions** (inline on the form, or under *Feedback questions* for every
   option). The type decides where a question appears:
 
@@ -248,6 +266,15 @@ Set in the plug's `configs={}` or as environment variables:
 | `SUBMIT_RATE_LIMIT` | `"60/m"` | Submissions allowed per IP (django-ratelimit rate). A kiosk is one IP, so keep it well above a busy hour. |
 | `LOAD_WEB_FONTS` | `True` | Load Figtree (care_fe's font) / Noto Sans Kannada from Google Fonts. |
 
+### Behind a proxy
+
+The submit limit counts per IP address using django-ratelimit, like Care's
+own login limit. Behind a reverse proxy or load balancer every request comes
+from the proxy's address, so set Django's `RATELIMIT_IP_META_KEY` in Care's
+settings to the header your proxy sets (for example `HTTP_X_REAL_IP`), or
+the kiosks share one limit. Set `SUBMIT_RATE_LIMIT` to `""` to turn the
+plugin's limit off; Care's `DISABLE_RATELIMIT` turns off all limits.
+
 ## Translations
 
 - Question text is edited per language in the admin. Screen text (buttons,
@@ -264,6 +291,10 @@ Set in the plug's `configs={}` or as environment variables:
 
 ## Development
 
+[docs/architecture.md](docs/architecture.md) describes the design, every
+table and JSON column, the API responses, and how to add a language or a
+question type.
+
 ```
 src/patient_feedback/
 ├── views.py          # the public pages: chooser, questionnaire (GET + one POST), thank you
@@ -277,13 +308,43 @@ src/patient_feedback/
 ├── models.py, admin.py, settings.py
 ├── templates/patient_feedback/   # form.html + steps/, choose, done, empty
 ├── static/patient_feedback/      # kiosk.css, kiosk.js
-└── tests/
+└── tests/            # Django tests (pages, API, admin)
+e2e/                  # Playwright tests in a real browser
 ```
 
-Run the tests from the Care checkout with the plugin installed:
+### Django tests
+
+Run them from the Care checkout with the plugin installed:
 
 ```bash
 python manage.py test patient_feedback --keepdb
 ```
 
+They use the plugin's default settings, whatever `plug_config.py` sets.
 Lint with `ruff check src && ruff format src`.
+
+### Browser tests (Playwright)
+
+[`e2e/`](e2e) drives the pages in Chromium against a running Care backend
+with the plugin installed: the patient flows (UHID by keypad and by a
+keyboard QR scanner, guest details, editing from the review, Reset, Home,
+future dates), the language carried to the thank-you page, the idle reset
+(with a mocked clock), the page without JavaScript, and the layout on five
+screen shapes (1080p and 960×540 TVs, a portrait screen, a tablet, a phone:
+no sideways scrolling, nothing clipped, main buttons on screen, unique ids,
+named controls).
+
+```bash
+cd e2e
+npm install
+npx playwright install chromium   # once, if Playwright's Chromium isn't installed
+PF_FACILITY_ID=<facility external id> npx playwright test
+```
+
+- `PF_BASE_URL` is the backend (default `http://localhost:9000`).
+- The tests submit feedback, so use a development database.
+- They open every page with `?lang=en`, so any `LANGUAGES` works; the
+  language tests skip themselves unless Kannada is offered.
+- `npx playwright show-report` opens the last run. The layout test saves a
+  full-page screenshot of every step per screen shape in
+  `e2e/screenshots/`.

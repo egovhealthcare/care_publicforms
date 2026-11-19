@@ -8,7 +8,7 @@
 
   <div class="area-body stack stack--24">
     {% for field in details %}
-    <fieldset class="group stack stack--10" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}">
+    <fieldset class="group stack stack--10{% if field.error %} has-error{% endif %}" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}">
       <legend class="kicker">{% tr field.text %}{% if not field.required %} <span class="kicker-note">· {% t "optional" %}</span>{% endif %}</legend>
       <span class="q-label" hidden>{% tr field.label %}</span>
       {% if field.hint %}<p class="lead-sm">{% tr field.hint %}</p>{% endif %}
@@ -24,7 +24,8 @@
       {% else %}
       <input type="date" class="ta ta--date" name="{{ field.key }}" value="{{ field.value }}" max="{{ today|date:'Y-m-d' }}" {% l10n_attr "aria-label" value=field.text %}>
       {% endif %}
-      <p class="err" data-error role="alert"{% if not field.error %} hidden{% endif %}>{% t "required_error" %}</p>
+      {% if field.type == "date" %}<p class="err" data-error-date role="alert"{% if field.error != "invalid" %} hidden{% endif %}>{% t "date_error" %}</p>{% endif %}
+      <p class="err" data-error role="alert"{% if field.error != "required" %} hidden{% endif %}>{% t "required_error" %}</p>
     </fieldset>
     {% endfor %}
   </div>

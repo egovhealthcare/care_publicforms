@@ -39,29 +39,37 @@ def uhid_groups() -> list[int]:
 # ── Answers ──────────────────────────────────────────────────────────
 def collect_answers(spec: FormSpec, data, identified: bool) -> tuple[dict, dict]:
     """
-    ``({question_key: value}, {question_key: "required"})`` from a submitted
-    form. Questions not meant for this patient (guest-only questions when a
-    UHID was given, and the other way round) are ignored, as are invalid
-    values. Ratings always need an answer.
+    ``({question_key: value}, {question_key: problem})`` from a submitted
+    form, where problem is "required" (no answer) or "invalid" (a date in the
+    future or not a date). Questions not meant for this patient (guest-only
+    questions when a UHID was given, and the other way round) are ignored, as
+    are invalid values of optional questions. Ratings always need an answer.
     """
     answers, missing = {}, {}
     for question in spec.questions:
         if not applies(question, identified):
             continue
-        value = parse_answer(question, data.get(question.key))
+        raw = data.get(question.key)
+        value = parse_answer(question, raw)
         if value is not None:
             answers[question.key] = value
         elif question.required or question.type == QuestionType.RATING:
-            missing[question.key] = "required"
-        if question.type == QuestionType.YES_NO and question.allow_comment:
+            given = question.type == QuestionType.DATE and str(raw or "").strip()
+            missing[question.key] = "invalid" if given else "required"
+        # "Why?" belongs to the yes/no answer; without one it is dropped.
+        if question.type == QuestionType.YES_NO and question.allow_comment and value is not None:
             if comment := clean_text(data.get(comment_key(question))):
                 answers[comment_key(question)] = comment
     return answers, missing
 
 
 # ── Saving ───────────────────────────────────────────────────────────
+# reference_number holds 32 characters: prefix (≤ 12) + "-YYYYMMDD-" + up to 6 digits.
+MAX_REFERENCE_PREFIX = 12
+
+
 def _reference_number(digits: int, form_code: str) -> str:
-    prefix = plugin_settings.REFERENCE_PREFIX or form_code.upper()
+    prefix = (plugin_settings.REFERENCE_PREFIX or form_code.upper())[:MAX_REFERENCE_PREFIX]
     stamp = timezone.localdate().strftime("%Y%m%d")
     number = secrets.randbelow(9 * 10 ** (digits - 1)) + 10 ** (digits - 1)
     return f"{prefix}-{stamp}-{number}"

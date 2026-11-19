@@ -223,12 +223,18 @@ class SubmitTests(PageTestBase):
     def test_invalid_values(self):
         future = (timezone.localdate() + timedelta(days=2)).isoformat()
         response = self.submit("ipd", uhid=UHID, ward="nope", date_of_admission=future, **self.ratings(self.ipd))
-        self.assertEqual(response.context["errors"], dict.fromkeys(("ward", "date_of_admission"), "required"))
+        self.assertEqual(response.context["errors"], {"ward": "required", "date_of_admission": "invalid"})
+        # A future date gets its own message, not "needs an answer".
+        self.assertContains(response, 'data-error-date role="alert">')
         response = self.submit("ipd", uhid=UHID, **{**self.answers(self.ipd), "diet": "9"})
         self.assertEqual(response.context["errors"], {"diet": "required"})
         # An invalid optional answer is dropped.
         self.submit("ipd", uhid=UHID, would_return="maybe", **self.answers(self.ipd))
         self.assertEqual(FeedbackSubmission.objects.get().answers, self.answers(self.ipd))
+
+    def test_why_without_yes_or_no_is_dropped(self):
+        self.submit(uhid=UHID, would_return__comment="Kind staff", **self.answers(self.opd))
+        self.assertNotIn("would_return__comment", FeedbackSubmission.objects.get().answers)
 
     def test_reference_number_uses_the_form_code(self):
         self.submit(uhid=UHID, **self.answers(self.opd))
@@ -239,6 +245,16 @@ class SubmitTests(PageTestBase):
     def test_reference_prefix_setting(self):
         self.submit("ipd", **self.answers(self.ipd, identified=False))
         self.assertTrue(FeedbackSubmission.objects.get().reference_number.startswith("PF-"))
+
+    def test_long_form_code_still_fits_the_reference(self):
+        long_form = FeedbackForm.objects.create(
+            code="general_medicine_ward_feedback", patient_type="ip", title={"en": "Ward"}
+        )
+        FeedbackQuestion.objects.create(form=long_form, key="care", type=QuestionType.RATING, text={"en": "Care"})
+        self.assertEqual(self.submit(long_form.code, care="4").status_code, 302)
+        reference = FeedbackSubmission.objects.get().reference_number
+        self.assertTrue(reference.startswith("GENERAL_MEDI-"))
+        self.assertLessEqual(len(reference), FeedbackSubmission._meta.get_field("reference_number").max_length)
 
     def test_reference_collisions_are_retried(self):
         with mock.patch("patient_feedback.services.secrets.randbelow", side_effect=[1111, 1111, 2222]):
@@ -255,7 +271,22 @@ class SubmitTests(PageTestBase):
             response = self.submit(uhid=UHID, **self.answers(self.opd))
         self.assertEqual(response.status_code, 429)
         self.assertEqual(response.context["banner"], "too_many")
+        # Answers are kept and the page opens on the review, ready to submit again.
+        self.assertEqual(response.context["start_step"], "review")
         self.assertFalse(FeedbackSubmission.objects.exists())
+
+    @override_settings(DISABLE_RATELIMIT=False, PLUGIN_CONFIGS={"patient_feedback": {"SUBMIT_RATE_LIMIT": ""}})
+    def test_empty_rate_limit_turns_it_off(self):
+        with mock.patch("patient_feedback.views.is_ratelimited", return_value=True):
+            self.assertEqual(self.submit(uhid=UHID, **self.answers(self.opd)).status_code, 302)
+
+    def test_idle_timer_starts_at_once_on_a_patients_page(self):
+        armed, unarmed = 'data-idle-armed="1"', 'data-idle-armed="0"'
+        self.assertContains(self.client.get(self.url("form", "opd")), unarmed)  # fresh screen
+        self.assertContains(self.client.get(self.url()), unarmed)
+        self.assertContains(self.client.get(self.url(language="kn")), armed)  # their language
+        self.assertContains(self.client.get(self.url("form", "opd", **{"from": "start"})), armed)  # their form
+        self.assertContains(self.submit(uhid=UHID), armed)  # their answers, after a failed submit
 
 
 class DoneTests(PageTestBase):
@@ -285,6 +316,13 @@ class DoneTests(PageTestBase):
 class ConfigurationTests(PageTestBase):
     def add_question(self, form, key, **fields):
         return FeedbackQuestion.objects.create(form=form, key=key, text={"en": key.title()}, **fields)
+
+    def test_switching_off_a_facility_form_hides_the_code(self):
+        FeedbackForm.objects.create(
+            facility=self.facility, code="opd", patient_type="op", title={"en": "Our OPD"}, is_active=False
+        )
+        self.assertRedirects(self.client.get(self.url()), self.url("form", "ipd"), fetch_redirect_response=False)
+        self.assertRedirects(self.client.get(self.url("form", "opd")), self.url(), fetch_redirect_response=False)
 
     def test_facility_form_replaces_the_shared_one(self):
         own = FeedbackForm.objects.create(

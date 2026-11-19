@@ -30,13 +30,17 @@ MAX_TEXT_LENGTH = 2000
 
 
 def forms_for_facility(facility) -> list[FeedbackForm]:
-    """Active forms for a facility: shared ones, replaced by the facility's own form with the same code."""
-    candidates = FeedbackForm.objects.filter(is_active=True).filter(Q(facility__isnull=True) | Q(facility=facility))
+    """
+    Active forms for a facility: the shared ones, each replaced by the
+    facility's own form with the same code. A facility form that is switched
+    off hides that code for the facility; the shared one does not come back.
+    """
+    candidates = FeedbackForm.objects.filter(Q(facility__isnull=True) | Q(facility=facility))
     by_code = {}
     for form in candidates.order_by("order", "id"):
         if form.code not in by_code or form.facility_id:
             by_code[form.code] = form
-    return sorted(by_code.values(), key=lambda f: (f.order, f.id))
+    return sorted((f for f in by_code.values() if f.is_active), key=lambda f: (f.order, f.id))
 
 
 def form_for_submission(facility_external_id, form_code) -> FeedbackForm | None:

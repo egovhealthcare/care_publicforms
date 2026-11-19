@@ -218,7 +218,17 @@ fieldset.group > legend{display:block;width:100%;padding:0;float:none}
 }
 .h2{margin:0;font-size:1.5rem;font-weight:600;letter-spacing:-.015em;line-height:1.25;color:var(--foreground)}
 .lead-sm{margin:0;font-size:.9375rem;line-height:1.55;color:var(--soft-foreground)}
-.err{margin:.625rem 0 0;font-size:.875rem;font-weight:500;color:var(--destructive-text)}
+.err{margin:.625rem 0 0;font-size:.875rem;font-weight:500;line-height:1.45;color:var(--destructive-text)}
+/* Alert icon before every error message (care_fe's destructive colour). */
+.err::before{
+  content:"";display:inline-block;width:1.0625rem;height:1.0625rem;margin-right:.375rem;vertical-align:-.2em;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23DC2626' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5M12 16.5h.01'/%3E%3C/svg%3E") no-repeat center/contain;
+}
+/* A question with a problem: its answers get a red outline too. */
+.has-error .chip-face,
+.has-error .ynbtn,
+.qcard.has-error .rate{border-color:var(--destructive-border)}
+.has-error .ta:not([data-comment]){border-color:#F87171}
 html[lang="kn"] .kicker,
 html[lang="kn"] .idstrip-kicker{letter-spacing:normal;text-transform:none}
 html[lang="kn"] .h2,
@@ -370,7 +380,7 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
 .key svg{width:1.625rem;height:1.625rem}
 
 /* ── Choices (guest details, yes/no) — radio inputs, no JS needed ── */
-.chips{display:flex;flex-wrap:wrap}
+.chips{display:flex;flex-wrap:wrap;margin-bottom:-.5rem} /* cancels the last row's chip margin */
 .chip{position:relative;display:inline-block;margin:0 .5rem .5rem 0}
 .chip input,
 .yn input{position:absolute;top:0;left:0;width:1px;height:1px;opacity:0;margin:0}
@@ -493,6 +503,12 @@ button.row{font:inherit;border:0;border-bottom:1px solid var(--border);border-ra
 .row-label{flex:1;min-width:0;margin-right:.875rem;font-size:.9375rem;line-height:1.4;color:var(--muted-foreground)}
 .row-value{flex:none;font-size:.9375rem;font-weight:600;text-align:right;color:var(--primary)}
 .row-value.is-empty{color:var(--placeholder);font-weight:500}
+/* Rows open their question: a chevron says so. */
+button.row::after{
+  content:"";flex:none;width:.5rem;height:.5rem;margin-left:.875rem;
+  border-right:.125rem solid var(--stronger-border);border-bottom:.125rem solid var(--stronger-border);
+  transform:rotate(-45deg);
+}
 .row-note{display:block;max-width:12rem;margin-top:.125rem;font-size:.8125rem;font-weight:400;color:var(--soft-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Longer screens scroll; their main button stays pinned at the bottom. */
 .screen--review > .area-nav,
@@ -512,6 +528,16 @@ button.row{font:inherit;border:0;border-bottom:1px solid var(--border);border-ra
   box-shadow:0 0 0 .5rem var(--primary-100), var(--shadow-md);
 }
 .done-check svg{width:2rem;height:2rem}
+
+/* On TVs and large portrait screens, the chooser, the first step and the
+   thank-you page sit just above the middle instead of leaving the bottom
+   third empty. Steps with questions stay top-aligned, so answers don't move
+   between cards. */
+@media (orientation:landscape) and (min-height:500px) and (min-width:700px),
+       (orientation:portrait) and (min-width:600px) and (min-height:960px){
+  .screen--start{align-content:center;padding-bottom:7vh}
+  .screen--done{justify-content:center;padding-bottom:7vh}
+}
 .done-title{margin:0;font-size:1.875rem;font-weight:700;letter-spacing:-.02em;line-height:1.15;color:var(--foreground)}
 .done-lead{margin:0;font-size:1rem;line-height:1.6;color:var(--soft-foreground);max-width:40ch}
 .token-card{

@@ -18,7 +18,7 @@
 <style>.l10n{display:none}{% for language in languages %}html[data-lang="{{ language.code }}"] .l10n--{{ language.code }}{% if not forloop.last %},{% endif %}{% endfor %}{display:inline}</style>
 <script>document.documentElement.className = 'js';</script>
 </head>
-<body data-idle-timeout="{{ idle_timeout }}" data-home-url="{{ home_url }}">
+<body data-idle-timeout="{{ idle_timeout }}" data-idle-armed="{{ idle_armed|yesno:'1,0' }}" data-home-url="{{ home_url }}">
 
 <div class="page">
 <div class="shell">

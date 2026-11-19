@@ -3,15 +3,15 @@
   {# kiosk.js renumbers the cards from this when some only apply to guests or identified patients. #}
   <span id="counterTemplate" hidden>{% t "question_counter" n="{n}" total="{total}" %}</span>
   {% for question in ratings %}
-  <div class="qcard" data-card data-question-key="{{ question.key }}" data-audience="{{ question.audience }}" data-required="1">
+  <div class="qcard{% if question.error %} has-error{% endif %}" data-card data-question-key="{{ question.key }}" data-audience="{{ question.audience }}" data-required="1">
     <div class="qhead">
       <span class="badge" data-counter>{% t "question_counter" n=question.number total=ratings|length %}</span>
-      <h2 class="qtitle">{% tr question.text %}</h2>
+      <h2 class="qtitle" id="qt-{{ question.key }}">{% tr question.text %}</h2>
       {% if question.hint %}<p class="qhint">{% tr question.hint %}</p>{% endif %}
       <span class="q-label" hidden>{% tr question.label %}</span>
     </div>
 
-    <div class="scale" role="radiogroup">
+    <div class="scale" role="radiogroup" aria-labelledby="qt-{{ question.key }}">
       {% for option in question.options %}
       <label class="rate-option">
         <input type="radio" name="{{ question.key }}" value="{{ option.value }}"{% if option.value == question.value %} checked{% endif %}>

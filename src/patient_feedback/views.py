@@ -182,7 +182,8 @@ class StartView(FeedbackPage):
             for form in self.forms
         ]
         context = self.base_context(None)
-        context.update(options=options, home_url=self.chooser_url(), idle_timeout=0)
+        # A patient who switched language here and left: back to the screen's language.
+        context.update(options=options, home_url=self.chooser_url(), idle_armed=bool(self.patient_language))
         return render(request, "patient_feedback/choose.html", context)
 
 
@@ -194,19 +195,17 @@ class FormView(FeedbackPage):
 
     def post(self, request, **kwargs):
         came_from_chooser = request.POST.get("from") == "start"
-        if not getattr(settings, "DISABLE_RATELIMIT", False) and is_ratelimited(
-            request, group="patient_feedback.submit", key="ip", rate=plugin_settings.SUBMIT_RATE_LIMIT, increment=True
-        ):
-            return self.render_form(came_from_chooser, data=request.POST, banner="too_many", status=429)
-
         spec = FormSpec(self.form)
+        if self.rate_limited(request):
+            return self.render_form(came_from_chooser, spec, data=request.POST, banner="too_many", status=429)
+
         raw_uhid = digits_of(request.POST.get("uhid"))
         uhid = parse_uhid(raw_uhid) if raw_uhid else ""
         answers, missing = collect_answers(spec, request.POST, identified=bool(uhid))
         if uhid is None:
             missing["uhid"] = "length"
         if missing:
-            return self.render_form(came_from_chooser, data=request.POST, errors=missing, banner="error_summary")
+            return self.render_form(came_from_chooser, spec, data=request.POST, errors=missing, banner="error_summary")
 
         language = normalize_language(request.POST.get("language"), self.default_language)
         submission = create_submission(self.facility, self.form, language, uhid or "", answers)
@@ -217,10 +216,18 @@ class FormView(FeedbackPage):
         }
         return HttpResponseRedirect(self._url("done", query, form=self.form.code))
 
-    def render_form(self, came_from_chooser: bool, data=None, errors=None, banner=None, status=200):
+    @staticmethod
+    def rate_limited(request) -> bool:
+        """Per IP address (see README for proxies); an empty SUBMIT_RATE_LIMIT turns it off."""
+        rate = plugin_settings.SUBMIT_RATE_LIMIT
+        if not rate or getattr(settings, "DISABLE_RATELIMIT", False):
+            return False
+        return is_ratelimited(request, group="patient_feedback.submit", key="ip", rate=rate, increment=True)
+
+    def render_form(self, came_from_chooser: bool, spec=None, data=None, errors=None, banner=None, status=200):
         data = data or {}
         errors = errors or {}
-        spec = FormSpec(self.form)
+        spec = spec or FormSpec(self.form)
         uhid = digits_of(data.get("uhid"))[: uhid_length()]
         gaps, position = set(), 0
         for size in uhid_groups()[:-1]:
@@ -237,7 +244,7 @@ class FormView(FeedbackPage):
                 "audience": question.audience,
                 "required": question.required or question.type == QuestionType.RATING,
                 "value": str(data.get(question.key, "")),
-                "error": question.key in errors,
+                "error": errors.get(question.key),  # "required", "invalid" or None
             }
             if question.type == QuestionType.RATING:
                 item.update(
@@ -261,9 +268,12 @@ class FormView(FeedbackPage):
         details = [field(q) for q in spec.details]
         open_questions = [field(q) for q in spec.open_questions]
 
-        # After a failed submit, open the first step with a problem.
+        # After a failed submit, open the first step with a problem; when only
+        # rate-limited, the review, so the patient can simply submit again.
         start_step, start_card = "identify", 0
-        if errors:
+        if banner == "too_many":
+            start_step = "review"
+        elif errors:
             if "uhid" in errors:
                 start_step = "uhid"
             elif any(f["error"] for f in details):
@@ -276,6 +286,9 @@ class FormView(FeedbackPage):
         context = self.base_context(self.form.title)
         context.update(
             home_url=self.home_url(came_from_chooser),  # idle reset: the next patient
+            # Start the idle timer at once when the page holds a patient's choices
+            # (their answers after a failed submit, their language, their form).
+            idle_armed=bool(data) or bool(self.patient_language) or came_from_chooser,
             nav_home_url=self.home_url(came_from_chooser, **self.carry()),
             reset_url=self.form_url(self.form, **({"from": "start"} if came_from_chooser else {}), **self.carry()),
             back_to_chooser=(self.chooser_url(**self.carry()) if came_from_chooser and len(self.forms) > 1 else None),

@@ -94,7 +94,9 @@
     var overlay = $('idleOverlay');
     var overlayText = $('idleBody');
     var warnSeconds = Math.min(15, Math.floor(idleSeconds / 3));
-    var lastActivity = 0;
+    // Armed from the start when the page holds a patient's choices (their
+    // answers after a failed submit, their language); otherwise on first touch.
+    var lastActivity = body.getAttribute('data-idle-armed') === '1' ? Date.now() : 0;
     var leaving = false;
 
     var activity = function () {
@@ -137,7 +139,9 @@
   var current = null;       // name of the visible step
   var currentCard = 0;      // index into cards
   var identified = digitsOf(uhidInput.value).length === uhidLength;
-  var returnToReview = false;
+  var returnToReview = false;  // an edit from the review goes back to it
+  var resumeAtReview = false;  // left the review to change the UHID: come back to it
+  var started = false;
   var submitting = false;
   var advanceTimer = null;
 
@@ -197,18 +201,56 @@
   function showError(question, on) {
     var error = question.querySelector('[data-error]');
     if (error) error.hidden = !on;
+    var dateError = question.querySelector('[data-error-date]');
+    if (dateError && !on) dateError.hidden = true;
+    question.classList.toggle('has-error', !!on);
   }
 
-  // Shows the error under each required question left empty; true if none.
+  function isMissing(question) {
+    return question.getAttribute('data-required') === '1' && !hasAnswer(question);
+  }
+
+  // A date after its max (today), which the server would refuse.
+  function hasFutureDate(question) {
+    var input = question.querySelector('input[type=date]');
+    return !!(input && input.value && input.max && input.value > input.max);
+  }
+
+  // Shows the error under each required question left empty (or given a
+  // future date); true if none.
   function checkRequired(step) {
     var first = null;
     each(visible(step.querySelectorAll('[data-question-key]')), function (question) {
-      var missing = question.getAttribute('data-required') === '1' && !hasAnswer(question);
+      var missing = isMissing(question);
+      var future = !missing && hasFutureDate(question);
       showError(question, missing);
-      if (missing && !first) first = question;
+      var dateError = question.querySelector('[data-error-date]');
+      if (dateError) dateError.hidden = !future;
+      if (future) question.classList.add('has-error');
+      if ((missing || future) && !first) first = question;
     });
     if (first && first.scrollIntoView) first.scrollIntoView({ block: 'center' });
     return !first;
+  }
+
+  function stepComplete(step) {
+    var questions = visible(step.querySelectorAll('[data-question-key]'));
+    for (var i = 0; i < questions.length; i++) {
+      if (isMissing(questions[i]) || hasFutureDate(questions[i])) return false;
+    }
+    return true;
+  }
+
+  // The first step (or rating card) that still needs an answer, if any.
+  function firstIncomplete() {
+    var units = flow();
+    for (var i = 0; i < units.length; i++) {
+      var name = units[i][0];
+      if (name === 'questions' ? !hasAnswer(cards[units[i][1]]) : name !== 'review' && !stepComplete(steps[name])) {
+        return units[i];
+      }
+    }
+    return null;
   }
 
   /* Moving between steps */
@@ -235,8 +277,9 @@
   }
 
   function next() {
-    var units = flow();
-    goTo(returnToReview ? ['review', 0] : units[position() + 1]);
+    // Back to the review after an edit, via anything that still needs an answer.
+    if (returnToReview) goTo(firstIncomplete() || ['review', 0]);
+    else goTo(flow()[position() + 1]);
   }
 
   function back() {
@@ -255,6 +298,13 @@
     if (!steps[name]) return;
     if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer = null; }
     if (current === 'scan' && name !== 'scan') stopCamera();
+    // Leaving the review (or an edit from it) to identify again: come back to it after.
+    if ((name === 'identify' || name === 'uhid' || name === 'scan') && (current === 'review' || returnToReview)) {
+      resumeAtReview = true;
+      returnToReview = false;
+    }
+    // The server's error / "too many" banner is about the page as it loaded.
+    if (started) each(form.querySelectorAll('.banner'), function (banner) { banner.hidden = true; });
     current = name;
     for (var key in steps) {
       if (steps.hasOwnProperty(key)) steps[key].classList.toggle('is-active', key === name);
@@ -299,7 +349,15 @@
   // After the patient identified themselves (or chose not to).
   function startQuestions() {
     applyAudience();
-    goTo(flow()[0]);
+    if (resumeAtReview) {
+      // Back to the review, via any question that now needs an answer
+      // (e.g. age and sex after switching to guest).
+      resumeAtReview = false;
+      returnToReview = true;
+      goTo(firstIncomplete() || ['review', 0]);
+    } else {
+      goTo(flow()[0]);
+    }
   }
 
   function continueAsGuest() {
@@ -616,10 +674,12 @@
         else control.value = '';
       });
       each(step.querySelectorAll('[data-error]'), function (error) { error.hidden = true; });
+      each(step.querySelectorAll('.has-error'), function (question) { question.classList.remove('has-error'); });
     });
     each(form.querySelectorAll('.banner'), function (banner) { banner.hidden = true; });
     each(cards, updateNextButton);
     returnToReview = false;
+    resumeAtReview = false;
     var units = flow();
     for (var i = 0; i < units.length; i++) {
       if (units[i][0] !== 'details') { goTo(units[i]); return; }
@@ -670,4 +730,5 @@
   // After a failed submit some of the server's errors may be on questions
   // that no longer apply; start from the step it pointed at.
   show(steps[startStep] ? startStep : 'identify', startCard);
+  started = true;
 })();

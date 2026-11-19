@@ -11,6 +11,8 @@ Strings marked ``# review`` were added for the kiosk build (they are not in
 the original design file) and need a native-speaker check.
 """
 
+from functools import lru_cache
+
 # Questions and screen text must exist in English; other languages fall back to it.
 BASE_LANGUAGE = "en"
 
@@ -26,7 +28,13 @@ def languages() -> dict:
     """The offered languages (the LANGUAGES setting), in order; English if none is usable."""
     from patient_feedback.settings import plugin_settings
 
-    codes = [code for code in plugin_settings.LANGUAGES or [] if code in KNOWN_LANGUAGES]
+    return _offered(tuple(plugin_settings.LANGUAGES or ()))
+
+
+@lru_cache(maxsize=8)
+def _offered(configured: tuple) -> dict:
+    # Called for every string on a page, so built once per LANGUAGES value. Don't mutate the result.
+    codes = [code for code in configured if code in KNOWN_LANGUAGES]
     return {code: KNOWN_LANGUAGES[code] for code in dict.fromkeys(codes or [BASE_LANGUAGE])}
 
 
@@ -120,6 +128,7 @@ STRINGS = {
     },
     "start_questions": {"en": "Start the questions", "kn": "ಪ್ರಶ್ನೆಗಳನ್ನು ಪ್ರಾರಂಭಿಸಿ"},
     "required_error": {"en": "This question needs an answer.", "kn": "ಈ ಪ್ರಶ್ನೆಗೆ ಉತ್ತರ ಅಗತ್ಯವಿದೆ."},  # review
+    "date_error": {"en": "Choose today or an earlier date.", "kn": "ಇಂದಿನ ಅಥವಾ ಹಿಂದಿನ ದಿನಾಂಕವನ್ನು ಆಯ್ಕೆಮಾಡಿ."},  # review
     "error_summary": {  # review
         "en": "Please answer the questions marked below.",
         "kn": "ಕೆಳಗೆ ಗುರುತಿಸಿದ ಪ್ರಶ್ನೆಗಳಿಗೆ ಉತ್ತರಿಸಿ.",
