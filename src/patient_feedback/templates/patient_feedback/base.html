@@ -8,6 +8,10 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="same-origin">
 {% block head_extra %}{% endblock %}
+{% if idle_timeout and idle_armed %}
+{# Without JavaScript: start over for the next patient if this step is left alone. #}
+<noscript><meta http-equiv="refresh" content="{{ idle_timeout }};url={{ home_url }}"></noscript>
+{% endif %}
 {% if load_web_fonts %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,6 +23,12 @@
 <script>document.documentElement.className = 'js';</script>
 </head>
 <body data-idle-timeout="{{ idle_timeout }}" data-idle-armed="{{ idle_armed|yesno:'1,0' }}" data-home-url="{{ home_url }}">
+{% if language_form %}
+{# Enter (a keyboard, a USB scanner) presses the form's first submit button. This is #}
+{# it ("go on from here"), placed before the header's language buttons, which also  #}
+{# belong to the form.                                                                #}
+<button type="submit" form="{{ language_form }}" name="nav" value="default" class="sr-only" tabindex="-1" aria-hidden="true"></button>
+{% endif %}
 
 <div class="page">
 <div class="shell">
@@ -35,7 +45,12 @@
       {% if languages|length > 1 %}
       <div class="langtog" role="group" aria-label="Language">
         {% for language in languages %}
+        {% if language_form %}
+        {# Posts the questionnaire (without JavaScript), so switching keeps the answers. #}
+        <button type="submit" form="{{ language_form }}" name="nav" value="lang:{{ language.code }}" class="langbtn langbtn--{{ language.code }}{% if language.code == lang %} is-on{% endif %}" lang="{{ language.code }}" data-set-lang="{{ language.code }}" aria-label="{{ language.name }}"{% if language.code == lang %} aria-current="true"{% endif %}>{{ language.label }}</button>
+        {% else %}
         <a href="{{ language.url }}" class="langbtn langbtn--{{ language.code }}{% if language.code == lang %} is-on{% endif %}" lang="{{ language.code }}" data-set-lang="{{ language.code }}" aria-label="{{ language.name }}"{% if language.code == lang %} aria-current="true"{% endif %}>{{ language.label }}</a>
+        {% endif %}
         {% endfor %}
       </div>
       {% endif %}

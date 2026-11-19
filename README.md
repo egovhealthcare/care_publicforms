@@ -38,10 +38,14 @@ validation) and the database tables, see
   reaches the server until the patient taps *Submit feedback*, which posts
   the page once. The server validates it and either saves it and shows the
   thank-you page, or shows the page again at the first step with a problem.
-- **JavaScript is optional.** Without it the same page is one long form
-  (UHID, details, every rating, open questions, submit). `kiosk.js` (ES5, no
-  dependencies) adds the steps, the UHID cells and on-screen keypad, QR
-  scanning and the idle timer.
+- **JavaScript is optional.** Without it the kiosk still goes step by step,
+  with the same screens, checks, review and guest option: each step button
+  posts the page (every answer so far travels in it) and the server shows the
+  next step, still with no session. `kiosk.js` (ES5, no dependencies) makes
+  the steps instant (no reload) and adds the UHID cells and on-screen keypad,
+  QR scanning, auto-advance on ratings and the idle warning. Without
+  JavaScript a UHID is typed in a plain field (or by a keyboard-mode scanner)
+  and an idle step starts over after `IDLE_TIMEOUT_SECONDS`.
 - **Nothing stored until submit.** No session, cookie or draft rows; the
   UHID is stored as entered and is not looked up in Care. Submissions are
   rate-limited per IP address (`SUBMIT_RATE_LIMIT`; see
@@ -302,6 +306,7 @@ src/patient_feedback/
 ├── urls.py, api.py   # staff API, mounted by Care at /api/patient_feedback/
 ├── questionnaire.py  # a configured form → steps; answer parsing and labels
 ├── services.py       # UHID format, collecting answers, saving submissions
+├── steps.py          # the steps on the server (without JavaScript); mirrors kiosk.js
 ├── seed.py           # default OPD / inpatient forms (NQAS format)
 ├── i18n.py           # UI strings and the languages they exist in
 ├── checks.py         # `manage.py check` warnings for the language settings
@@ -329,7 +334,7 @@ Lint with `ruff check src && ruff format src`.
 with the plugin installed: the patient flows (UHID by keypad and by a
 keyboard QR scanner, guest details, editing from the review, Reset, Home,
 future dates), the language carried to the thank-you page, the idle reset
-(with a mocked clock), the page without JavaScript, and the layout on five
+(with a mocked clock), the step-by-step flow without JavaScript, and the layout on five
 screen shapes (1080p and 960×540 TVs, a portrait screen, a tablet, a phone:
 no sideways scrolling, nothing clipped, main buttons on screen, unique ids,
 named controls).

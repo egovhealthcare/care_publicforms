@@ -1,16 +1,15 @@
 {% load patient_feedback_tags %}
-<section class="step screen screen--uhid{% if not show_keypad %} screen--nopad{% endif %}" data-step="uhid">
+<section class="step screen screen--uhid{% if not show_keypad %} screen--nopad{% endif %}{% if current_step == "uhid" %} is-active{% endif %}" data-step="uhid">
   <div class="area-head stack stack--8">
     <h2 class="h2">{% t "uhid_heading" %}</h2>
-    <p class="lead-sm js-only">{% t "uhid_lead" n=uhid_length %}</p>
-    <label class="lead-sm no-js-only" for="uhidInput">{% t "uhid_optional" %}</label>
+    <p class="lead-sm">{% t "uhid_lead" n=uhid_length %}</p>
   </div>
 
   <div class="area-entry">
     <div class="uhid" id="uhidWrap">
       {% for cell in uhid_cells %}<span class="uhid-cell{% if cell.gap %} uhid-cell--gap{% endif %}{% if cell.digit %} is-filled{% endif %}" aria-hidden="true">{{ cell.digit }}</span>{% endfor %}
       <input id="uhidInput" name="uhid" value="{{ uhid }}" class="uhid-input"
-             inputmode="{% if show_keypad %}none{% else %}numeric{% endif %}" pattern="[0-9]*"
+             inputmode="numeric" pattern="[0-9]*"{% if show_keypad %} data-keypad{% endif %}
              maxlength="{{ uhid_length }}" autocomplete="off"
              {% l10n_attr "aria-label" "uhid_label" n=uhid_length %}>
     </div>
@@ -28,8 +27,8 @@
   </div>
   {% endif %}
 
-  <div class="area-nav stack stack--10 js-only">
-    <button type="button" class="btn btn--primary btn--lg btn-cta" data-action="uhid-continue">{% t "continue" %}</button>
-    <button type="button" class="btn btn--ghost btn--md btn-link" data-action="guest">{% t "no_uhid" %}</button>
+  <div class="area-nav stack stack--10">
+    <button type="submit" name="nav" value="uhid" class="btn btn--primary btn--lg btn-cta" data-action="uhid-continue">{% t "continue" %}</button>
+    <button type="submit" name="nav" value="guest" class="btn btn--ghost btn--md btn-link" data-action="guest">{% t "no_uhid" %}</button>
   </div>
 </section>

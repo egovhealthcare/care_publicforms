@@ -1,5 +1,5 @@
 {% load patient_feedback_tags %}
-<section class="step screen screen--start" data-step="identify">
+<section class="step screen screen--start{% if current_step == "identify" %} is-active{% endif %}" data-step="identify">
   <div class="area-head hero">
     <span class="hero-glow" aria-hidden="true"></span>
     <h1 class="hero-title">{% t "hero_title" %}</h1>
@@ -10,7 +10,8 @@
     <span class="kicker">{% t "step_identify" n=step_number %}</span>
 
     {% if scan_mode != "off" %}
-    <button type="button" class="opt opt--scan" data-go="scan">
+    {# The camera and scanner need JavaScript. #}
+    <button type="button" class="opt opt--scan js-only" data-go="scan">
       <span class="opt-icon opt-icon--scan">
         <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
           <path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8"/><path d="M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8"/>
@@ -25,7 +26,7 @@
     </button>
     {% endif %}
 
-    <button type="button" class="opt opt--manual" data-go="uhid">
+    <button type="submit" name="nav" value="go:uhid" class="opt opt--manual" data-go="uhid">
       <span class="opt-icon opt-icon--manual">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
           <rect x="2.5" y="6.5" width="19" height="11" rx="2.5"/><path d="M6.5 11h1M10 11h1M13.5 11h1M17 11h.5M8 14.5h8"/>
@@ -43,7 +44,7 @@
       <span class="or-rule"></span>
     </div>
 
-    <button type="button" class="opt opt--guest" data-action="guest">
+    <button type="submit" name="nav" value="guest" class="opt opt--guest" data-action="guest">
       <span class="opt-icon opt-icon--guest">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.7-3.6 3.7-5.6 7.2-5.6s6.5 2 7.2 5.6"/></svg>
       </span>

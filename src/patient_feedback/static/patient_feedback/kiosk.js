@@ -2,10 +2,13 @@
    Patient feedback kiosk — progressive enhancement only.
 
    The questionnaire is one server-rendered form holding every step and
-   every language. Without this file it is one long form. With it:
-     · one step at a time (identify → details → one card per rating →
-       open questions → review), switched in the page; the form controls
-       are the only state and the page is posted once, from the review
+   every language, with the current step marked by the server. Without
+   this file every step button posts the form and the server shows the
+   next step (steps.py). With it:
+     · the same steps (identify → details → one card per rating → open
+       questions → review), switched in the page without reloading; the
+       form controls are the only state and the page is posted once, from
+       the review
      · the UHID cells, on-screen keypad and QR scanning (camera via
        BarcodeDetector, or a keyboard-mode USB/Bluetooth scanner)
      · questions shown only to guests or only to identified patients
@@ -135,6 +138,13 @@
   var idStrip = $('idStrip');
   // Home / Reset show from the first rating question on, in every flow.
   var NAV_STEPS = ['questions', 'comments', 'review'];
+
+  // The step buttons are submit buttons for the page without JavaScript;
+  // here they move in the page instead (only the final Submit posts).
+  var stepField = $('fStep');
+  var cardField = $('fCard');
+  var returnField = $('fReturn');
+  if (uhidInput.hasAttribute('data-keypad')) uhidInput.setAttribute('inputmode', 'none');
 
   var current = null;       // name of the visible step
   var currentCard = 0;      // index into cards
@@ -306,12 +316,14 @@
     // The server's error / "too many" banner is about the page as it loaded.
     if (started) each(form.querySelectorAll('.banner'), function (banner) { banner.hidden = true; });
     current = name;
+    if (stepField) stepField.value = name;
     for (var key in steps) {
       if (steps.hasOwnProperty(key)) steps[key].classList.toggle('is-active', key === name);
     }
 
     if (name === 'questions') {
       currentCard = cardIndex || 0;
+      if (cardField) cardField.value = currentCard;
       each(cards, function (card, i) {
         card.classList.toggle('is-active', i === currentCard);
         card.setAttribute('aria-hidden', i === currentCard ? 'false' : 'true');
@@ -645,6 +657,9 @@
 
   /* ── Buttons ─────────────────────────────────────────────────── */
   form.addEventListener('click', function (event) {
+    // Step buttons post the page only without JavaScript; Submit still posts.
+    var navButton = closest(event.target, 'button[name="nav"]');
+    if (navButton && navButton.value !== 'submit') event.preventDefault();
     var button = closest(event.target, '[data-go], [data-action]');
     if (!button || !form.contains(button)) return;
     var go = button.getAttribute('data-go');
@@ -713,6 +728,7 @@
   form.addEventListener('submit', function (event) {
     if (current !== 'review' || submitting) { event.preventDefault(); return; }
     if (!identified) uhidInput.value = '';
+    if (returnField) returnField.value = '';
     submitting = true;
   });
 

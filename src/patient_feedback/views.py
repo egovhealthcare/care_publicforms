@@ -8,8 +8,9 @@ cookies. Anyone in the hospital can open them.
 
 The questionnaire page holds every step (identify, details, ratings, open
 questions, review) and every offered language; kiosk.js moves between the steps in
-the browser and the page is posted once at the end. Without JavaScript the
-same page is one long form.
+the browser and the page is posted once at the end. Without JavaScript each
+step button posts the page and the server shows the next step (steps.py):
+the same steps, one page per step, still with no session.
 
 A screen can set its own options in the URL: ?lang=kn (starting language),
 ?scan=camera|scanner|off and ?keypad=0|1. A screen opened on a form's URL
@@ -39,6 +40,7 @@ from patient_feedback.i18n import BASE_LANGUAGE, languages, localize, normalize_
 from patient_feedback.models import FeedbackSubmission, QuestionType
 from patient_feedback.questionnaire import (
     FormSpec,
+    applies,
     choice_labels,
     comment_key,
     forms_for_facility,
@@ -53,6 +55,7 @@ from patient_feedback.services import (
     uhid_length,
 )
 from patient_feedback.settings import plugin_settings
+from patient_feedback.steps import FLOW_STEPS, NAV_STEPS, Place, flow_units, navigate, review_rows
 
 SCAN_MODES = ("camera", "scanner", "off")
 SECONDS_PER_QUESTION = 12  # for "about N minutes"
@@ -196,6 +199,9 @@ class FormView(FeedbackPage):
     def post(self, request, **kwargs):
         came_from_chooser = request.POST.get("from") == "start"
         spec = FormSpec(self.form)
+        nav = request.POST.get("nav") or "submit"
+        if nav != "submit":
+            return self.navigate(came_from_chooser, spec, nav)
         if self.rate_limited(request):
             return self.render_form(came_from_chooser, spec, data=request.POST, banner="too_many", status=429)
 
@@ -216,6 +222,16 @@ class FormView(FeedbackPage):
         }
         return HttpResponseRedirect(self._url("done", query, form=self.form.code))
 
+    def navigate(self, came_from_chooser, spec, nav):
+        """Without JavaScript: a step button was pressed; show the step it leads to (nothing is saved)."""
+        data = self.request.POST.copy()
+        if nav.startswith("lang:") and nav[len("lang:") :] in languages():
+            self.patient_language = data["language"] = nav[len("lang:") :]
+        raw_uhid = digits_of(data.get("uhid"))
+        uhid_valid = parse_uhid(raw_uhid) is not None if raw_uhid else False
+        place, errors, _ = navigate(spec, data, nav, identified=uhid_valid, uhid_valid=uhid_valid)
+        return self.render_form(came_from_chooser, spec, data=data, errors=errors, place=place)
+
     @staticmethod
     def rate_limited(request) -> bool:
         """Per IP address (see README for proxies); an empty SUBMIT_RATE_LIMIT turns it off."""
@@ -224,15 +240,19 @@ class FormView(FeedbackPage):
             return False
         return is_ratelimited(request, group="patient_feedback.submit", key="ip", rate=rate, increment=True)
 
-    def render_form(self, came_from_chooser: bool, spec=None, data=None, errors=None, banner=None, status=200):
+    def render_form(
+        self, came_from_chooser: bool, spec=None, data=None, errors=None, banner=None, status=200, place=None
+    ):
         data = data or {}
         errors = errors or {}
         spec = spec or FormSpec(self.form)
         uhid = digits_of(data.get("uhid"))[: uhid_length()]
+        identified = len(uhid) == uhid_length()
         gaps, position = set(), 0
         for size in uhid_groups()[:-1]:
             position += size
             gaps.add(position)
+        shown_ratings = [q for q in spec.ratings if applies(q, identified)]
 
         def field(question, index=None):
             item = {
@@ -245,11 +265,13 @@ class FormView(FeedbackPage):
                 "required": question.required or question.type == QuestionType.RATING,
                 "value": str(data.get(question.key, "")),
                 "error": errors.get(question.key),  # "required", "invalid" or None
+                # Asked of this patient (guest or identified)? kiosk.js recomputes it as they go.
+                "shown": applies(question, identified),
             }
             if question.type == QuestionType.RATING:
                 item.update(
                     index=index,
-                    number=index + 1,
+                    number=shown_ratings.index(question) + 1 if question in shown_ratings else index + 1,
                     options=[{"value": str(v), "label": label} for v, label in rating_labels(question).items()],
                 )
             elif question.type == QuestionType.CHOICE:
@@ -268,20 +290,26 @@ class FormView(FeedbackPage):
         details = [field(q) for q in spec.details]
         open_questions = [field(q) for q in spec.open_questions]
 
-        # After a failed submit, open the first step with a problem; when only
-        # rate-limited, the review, so the patient can simply submit again.
-        start_step, start_card = "identify", 0
-        if banner == "too_many":
-            start_step = "review"
-        elif errors:
-            if "uhid" in errors:
-                start_step = "uhid"
-            elif any(f["error"] for f in details):
-                start_step = "details"
-            elif any(r["error"] for r in ratings):
-                start_step, start_card = "questions", next(r["index"] for r in ratings if r["error"])
-            else:
-                start_step = "comments"
+        if place is None:
+            # After a failed submit, open the first step with a problem; when only
+            # rate-limited, the review, so the patient can simply submit again.
+            place = Place()
+            if banner == "too_many":
+                place.step = "review"
+            elif errors:
+                if "uhid" in errors:
+                    place.step = "uhid"
+                elif any(f["error"] for f in details):
+                    place.step = "details"
+                elif any(r["error"] for r in ratings):
+                    place.step, place.card = "questions", next(r["index"] for r in ratings if r["error"])
+                else:
+                    place.step = "comments"
+        in_flow = place.step in FLOW_STEPS
+        units = flow_units(spec, identified)
+        progress = 0
+        if in_flow and place.unit in units:
+            progress = round((units.index(place.unit) + 1) / (len(units) + 1) * 100)
 
         context = self.base_context(self.form.title)
         context.update(
@@ -308,8 +336,20 @@ class FormView(FeedbackPage):
             scan_mode=self.scan_mode,
             errors=errors,
             banner=banner,
-            start_step=start_step,
-            start_card=start_card,
+            # Where the page opens; without JavaScript, the only step shown.
+            current_step=place.step,
+            current_card=place.card,
+            returning=place.returning,
+            identified=identified,
+            rating_total=len(shown_ratings),
+            progress=progress,
+            nav_shown=place.step in NAV_STEPS,
+            id_strip_shown=identified and in_flow,
+            uhid_display=" ".join(
+                uhid[start:end] for start, end in zip([0, *sorted(gaps)], [*sorted(gaps), len(uhid)], strict=False)
+            ),
+            review_rows=review_rows(spec, data, identified),
+            language_form="feedback",  # the language toggle posts the form, keeping the answers
         )
         return render(self.request, "patient_feedback/form.html", context, status=status)
 

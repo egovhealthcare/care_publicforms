@@ -27,7 +27,7 @@ test("the patient's language lasts until the thank-you page, then resets", async
   await rateAll(page, 5);
   await page.locator('[data-action="comments-next"]').click();
   await expectStep(page, "review");
-  await page.locator('[data-step="review"] button[type="submit"]').click();
+  await page.locator('[data-step="review"] button[value="submit"]').click();
 
   // …and the thank-you page stays in it.
   await expect(page).toHaveURL(/\/done\/\?.*language=kn/);

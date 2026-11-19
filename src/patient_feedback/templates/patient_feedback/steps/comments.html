@@ -1,5 +1,5 @@
 {% load patient_feedback_tags %}
-<section class="step screen screen--comments" data-step="comments">
+<section class="step screen screen--comments{% if current_step == "comments" %} is-active{% endif %}" data-step="comments">
   <div class="area-head stack stack--8">
     <span class="kicker">{% t "open_kicker" %}</span>
     <h2 class="h2">{% if open_questions_required %}{% t "open_heading_required" n=open_questions|length %}{% else %}{% t "open_heading" n=open_questions|length %}{% endif %}</h2>
@@ -8,7 +8,7 @@
   <div class="area-body stack stack--26">
     {% for field in open_questions %}
     {% if field.type == "yes_no" %}
-    <fieldset class="group stack stack--12{% if field.error %} has-error{% endif %}" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}">
+    <fieldset class="group stack stack--12{% if field.error %} has-error{% endif %}" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}"{% if not field.shown %} hidden{% endif %}>
       <legend class="qlabel">{% tr field.text %}</legend>
       <span class="q-label" hidden>{% tr field.label %}</span>
       {% if field.hint %}<p class="lead-sm">{% tr field.hint %}</p>{% endif %}
@@ -28,7 +28,7 @@
       <p class="err" data-error role="alert"{% if not field.error %} hidden{% endif %}>{% t "required_error" %}</p>
     </fieldset>
     {% else %}
-    <div class="stack stack--10{% if field.error %} has-error{% endif %}" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}">
+    <div class="stack stack--10{% if field.error %} has-error{% endif %}" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}"{% if not field.shown %} hidden{% endif %}>
       <label class="qlabel" for="q-{{ field.key }}">{% tr field.text %}</label>
       <span class="q-label" hidden>{% tr field.label %}</span>
       {% if field.hint %}<p class="lead-sm">{% tr field.hint %}</p>{% endif %}
@@ -39,8 +39,8 @@
     {% endfor %}
   </div>
 
-  <div class="area-nav navrow js-only">
-    <button type="button" class="btn btn--ghost btn--md btn-back" data-action="comments-back">{% t "back" %}</button>
-    <button type="button" class="btn btn--primary btn--lg btn-cta btn-cta--grow" data-action="comments-next">{% t "review_answers" %}</button>
+  <div class="area-nav navrow">
+    <button type="submit" name="nav" value="back" class="btn btn--ghost btn--md btn-back" data-action="comments-back">{% t "back" %}</button>
+    <button type="submit" name="nav" value="next" class="btn btn--primary btn--lg btn-cta btn-cta--grow" data-action="comments-next">{% t "review_answers" %}</button>
   </div>
 </section>

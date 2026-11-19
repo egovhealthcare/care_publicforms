@@ -137,10 +137,6 @@ STRINGS = {
         "en": "Too many responses from this screen just now. Please wait a minute and try again.",
         "kn": "ಈ ಪರದೆಯಿಂದ ಇದೀಗ ಹೆಚ್ಚು ಪ್ರತಿಕ್ರಿಯೆಗಳು ಬಂದಿವೆ. ಒಂದು ನಿಮಿಷ ಕಾದು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     },
-    "uhid_optional": {  # review; shown only when JavaScript is off
-        "en": "UHID (leave empty to stay anonymous)",
-        "kn": "UHID (ಅನಾಮಧೇಯವಾಗಿರಲು ಖಾಲಿ ಬಿಡಿ)",
-    },
     "optional": {"en": "optional", "kn": "ಐಚ್ಛಿಕ"},
     # ── Rating ──────────────────────────────────────────────────────
     "question_counter": {"en": "Question {n} of {total}", "kn": "ಪ್ರಶ್ನೆ {n} / {total}"},

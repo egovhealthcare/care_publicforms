@@ -157,6 +157,7 @@ fieldset.group > legend{display:block;width:100%;padding:0;float:none}
   transition:background .15s, color .15s, box-shadow .15s;
 }
 .langbtn + .langbtn{margin-left:.125rem}
+button.langbtn{border:0;font-family:inherit;line-height:inherit;cursor:pointer;-webkit-appearance:none;appearance:none}
 .langbtn--en{min-width:2.75rem;font-size:.8125rem}
 .langbtn--kn{min-width:3.5rem;font-size:.875rem;font-family:'Noto Sans Kannada','Figtree',sans-serif}
 .langbtn.is-on{background:var(--background);color:var(--foreground);box-shadow:var(--shadow-sm)}
@@ -406,9 +407,8 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
 
 /* ── Rating questions (one card visible at a time) ──────────────── */
 .screen--question{display:block}
-.js .qcard{display:none}
-.js .qcard.is-active{display:flex;flex-direction:column}
-.qcard{display:flex;flex-direction:column}
+.qcard{display:none}
+.qcard.is-active{display:flex;flex-direction:column}
 .qcard > * + *{margin-top:1.125rem}
 .qhead{display:flex;flex-direction:column;animation:focusIn .34s var(--ease) both}
 .qhead > * + *{margin-top:.75rem}
@@ -621,20 +621,12 @@ button.row::after{
 }
 .blocked-card > * + *{margin-top:.75rem}
 
-/* ── One page, many steps ───────────────────────────────────────── */
-/* With JavaScript one step is shown at a time; without it the page is a
-   single long form (UHID, details, every rating, open questions, submit). */
+/* ── One page, one step at a time ───────────────────────────────── */
+/* The page holds every step; only the active one shows. The server marks it
+   (and the active rating card); kiosk.js moves it without reloading. Without
+   JavaScript each step button posts the page and the server marks the next. */
 #feedback{flex:1 0 auto;display:flex;flex-direction:column}
 .banner{margin-bottom:1.125rem}
-.js .step:not(.is-active){display:none !important}
+.step:not(.is-active){display:none !important}
 .js .no-js-only{display:none !important}
-.no-js .js-only,
-.no-js .step[data-step="identify"],
-.no-js .step[data-step="scan"],
-.no-js .step[data-step="review"],
-.no-js .lead-sm[data-audience]{display:none !important}
-.no-js .step{flex:none}
-.no-js #hdrNav{display:flex !important}
-.no-js .step + .step{margin-top:2.5rem;padding-top:2rem;border-top:1px solid var(--border)}
-.no-js .qcard + .qcard{margin-top:2.25rem}
-.submit-row{margin-top:2rem}
+.no-js .js-only{display:none !important}

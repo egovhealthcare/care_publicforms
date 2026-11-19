@@ -199,7 +199,7 @@ class SubmitTests(PageTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(FeedbackSubmission.objects.exists())
         self.assertEqual(response.context["errors"], {first_missing: "required"})
-        self.assertEqual((response.context["start_step"], response.context["start_card"]), ("questions", 2))
+        self.assertEqual((response.context["current_step"], response.context["current_card"]), ("questions", 2))
         self.assertEqual(response.context["banner"], "error_summary")
         # What was entered is kept.
         self.assertContains(response, f'value="{UHID}"')
@@ -208,13 +208,13 @@ class SubmitTests(PageTestBase):
     def test_bad_uhid_opens_the_uhid_step(self):
         response = self.submit(uhid="123", **self.ratings(self.opd))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["start_step"], "uhid")
+        self.assertEqual(response.context["current_step"], "uhid")
         self.assertFalse(FeedbackSubmission.objects.exists())
 
     def test_details_need_answers(self):
         guest = self.submit(**self.ratings(self.opd, identified=False))
         self.assertEqual(guest.context["errors"], dict.fromkeys(("clinic", "age_group", "sex"), "required"))
-        self.assertEqual(guest.context["start_step"], "details")
+        self.assertEqual(guest.context["current_step"], "details")
         identified = self.submit(uhid=UHID, **self.ratings(self.opd))  # age and sex are asked of guests only
         self.assertEqual(identified.context["errors"], {"clinic": "required"})
         self.assertContains(identified, 'data-question-key="clinic" data-audience="all" data-required="1"')
@@ -272,7 +272,7 @@ class SubmitTests(PageTestBase):
         self.assertEqual(response.status_code, 429)
         self.assertEqual(response.context["banner"], "too_many")
         # Answers are kept and the page opens on the review, ready to submit again.
-        self.assertEqual(response.context["start_step"], "review")
+        self.assertEqual(response.context["current_step"], "review")
         self.assertFalse(FeedbackSubmission.objects.exists())
 
     @override_settings(DISABLE_RATELIMIT=False, PLUGIN_CONFIGS={"patient_feedback": {"SUBMIT_RATE_LIMIT": ""}})
@@ -352,7 +352,7 @@ class ConfigurationTests(PageTestBase):
         self.assertContains(page, 'name="parking"')
         response = self.submit(uhid=UHID, **self.answers(self.opd))
         self.assertEqual(response.context["errors"], {"parking": "required"})
-        self.assertEqual(response.context["start_step"], "comments")
+        self.assertEqual(response.context["current_step"], "comments")
         self.submit(uhid=UHID, parking="Inside", **self.answers(self.opd))
         self.assertEqual(FeedbackSubmission.objects.get().answers["parking"], "Inside")
 
@@ -378,8 +378,9 @@ class LanguageTests(PageTestBase):
         self.assertContains(page, 'name="language" value="kn"')
         self.assertContains(page, f'href="{self.url(language="kn")}" data-carry-lang', count=2)  # Back, Home
         self.assertContains(page, escape(self.url("form", "opd", **start, language="kn")) + '" data-action="reset"')
-        # Without JavaScript the toggle reloads the page in the other language, keeping its parameters.
-        self.assertContains(page, f'href="{escape("?from=start&language=en")}"')
+        # Without JavaScript the toggle posts the form, so the answers stay; on the chooser it is a link.
+        self.assertContains(page, 'form="feedback" name="nav" value="lang:en"')
+        self.assertContains(chooser, 'href="?language=en"')
         # The idle reset is for the next patient: the screen's own language.
         self.assertContains(page, f'data-home-url="{self.url()}"')
         # Submitted in it, the thank-you page stays in it; its return does not.
@@ -424,3 +425,107 @@ class LanguageTests(PageTestBase):
 
     def test_defaults_raise_no_warnings(self):
         self.assertEqual(check_languages(None), [])
+
+
+class StepByStepWithoutJavaScriptTests(PageTestBase):
+    """Without JavaScript every step button posts the page; the server shows the step it leads to."""
+
+    def press(self, nav, form="opd", **data):
+        return self.client.post(self.url("form", form), {"nav": nav, **data})
+
+    def place(self, response):
+        return response.context["current_step"], response.context["current_card"]
+
+    def test_the_first_page_offers_uhid_and_guest(self):
+        page = self.client.get(self.url("form", "opd"))
+        self.assertEqual(self.place(page), ("identify", 0))
+        self.assertContains(page, 'class="step screen screen--start is-active"')
+        self.assertContains(page, 'name="nav" value="go:uhid"')
+        self.assertContains(page, 'name="nav" value="guest"')
+        self.assertContains(page, 'class="opt opt--scan js-only"')  # the camera needs JavaScript
+        # Enter presses the form's first submit button: it must be "default", not a language button.
+        content = page.content.decode()
+        self.assertLess(content.index('name="nav" value="default"'), content.index('name="nav" value="lang:'))
+
+    def test_an_identified_patient_walks_every_step(self):
+        keys = list(self.ratings(self.opd))
+        self.assertEqual(self.place(self.press("go:uhid", step="identify")), ("uhid", 0))
+        wrong = self.press("uhid", step="uhid", uhid="12345")
+        self.assertEqual((self.place(wrong), wrong.context["errors"]), (("uhid", 0), {"uhid": "length"}))
+        # Enter in the UHID field presses the hidden first button: "default" continues.
+        details = self.press("default", step="uhid", uhid=UHID)
+        self.assertEqual(self.place(details), ("details", 0))
+        self.assertContains(details, 'id="idStripValue">123 4567 8901<')
+        self.assertContains(details, 'data-question-key="age_group" data-audience="guest" data-required="1" hidden')
+
+        missing = self.press("next", step="details", uhid=UHID)
+        self.assertEqual((self.place(missing), missing.context["errors"]), (("details", 0), {"clinic": "required"}))
+        answers = {"uhid": UHID, "clinic": "ent"}
+        first = self.press("next", step="details", **answers)
+        self.assertEqual(self.place(first), ("questions", 0))
+        self.assertContains(first, '<nav class="hdr-nav" id="hdrNav">')
+        unanswered = self.press("next", step="questions", card=0, **answers)
+        self.assertEqual(unanswered.context["errors"], {keys[0]: "required"})
+
+        for card, key in enumerate(keys):
+            answers[key] = "4"
+            response = self.press("next", step="questions", card=card, **answers)
+            expected = ("questions", card + 1) if card + 1 < len(keys) else ("comments", 0)
+            self.assertEqual(self.place(response), expected)
+        review = self.press("next", step="comments", would_return="yes", **answers)
+        self.assertEqual(self.place(review), ("review", 0))
+        self.assertEqual(len(review.context["review_rows"]), 1 + len(keys) + 4)
+        self.assertContains(review, 'name="nav" value="edit:registration_wait"')
+
+        # Editing from the review comes straight back to it.
+        card = keys.index("registration_wait")
+        edit = self.press("edit:registration_wait", step="review", **answers)
+        self.assertEqual((self.place(edit), edit.context["returning"]), (("questions", card), True))
+        back = self.press(
+            "next", step="questions", card=card, **{**answers, "registration_wait": "2", "return": "review"}
+        )
+        self.assertEqual((self.place(back), back.context["returning"]), (("review", 0), False))
+
+        self.assertFalse(FeedbackSubmission.objects.exists())  # nothing saved until Submit
+        self.assertEqual(self.press("submit", **answers).status_code, 302)
+        self.assertEqual(FeedbackSubmission.objects.get().answers["clinic"], "ent")
+
+    def test_back_walks_the_steps_in_reverse(self):
+        answers = {"uhid": UHID, "clinic": "ent"}
+        self.assertEqual(self.place(self.press("back", step="questions", card=2, **answers)), ("questions", 1))
+        self.assertEqual(self.place(self.press("back", step="questions", card=0, **answers)), ("details", 0))
+        self.assertEqual(self.place(self.press("back", step="details", **answers)), ("identify", 0))
+
+    def test_a_guest_answers_the_guest_details(self):
+        details = self.press("guest", step="identify", uhid="12345")
+        self.assertEqual(self.place(details), ("details", 0))
+        self.assertContains(details, 'name="uhid" value=""')
+        self.assertNotContains(details, 'data-question-key="age_group" data-audience="guest" data-required="1" hidden')
+        missing = self.press("next", step="details")
+        self.assertEqual(missing.context["errors"], dict.fromkeys(("clinic", "age_group", "sex"), "required"))
+
+    def test_changing_the_uhid_from_the_review_comes_back_to_it(self):
+        answers = self.answers(self.opd)
+        uhid_step = self.press("go:uhid", step="review", uhid=UHID, **answers)
+        self.assertEqual((self.place(uhid_step), uhid_step.context["returning"]), (("uhid", 0), True))
+        # As a guest, age and sex now need answers first.
+        guest = self.press("guest", step="uhid", uhid=UHID, **{**answers, "return": "review"})
+        self.assertEqual(self.place(guest), ("details", 0))
+        review = self.press(
+            "next", step="details", **{**answers, "age_group": "18_30", "sex": "male", "return": "review"}
+        )
+        self.assertEqual(self.place(review), ("review", 0))
+
+    def test_switching_language_keeps_the_step_and_answers(self):
+        page = self.press("lang:kn", step="details", uhid=UHID, clinic="ent", language="en")
+        self.assertEqual(self.place(page), ("details", 0))
+        self.assertContains(page, 'data-lang="kn"')
+        self.assertContains(page, 'name="language" value="kn"')
+        self.assertContains(page, 'value="ent" checked')
+
+    def test_moving_between_steps_is_not_rate_limited(self):
+        with (
+            mock.patch("patient_feedback.views.is_ratelimited", return_value=True),
+            self.settings(DISABLE_RATELIMIT=False),
+        ):
+            self.assertEqual(self.press("go:uhid", step="identify").status_code, 200)
