@@ -444,8 +444,68 @@
   });
 
   /* ── QR scanning ─────────────────────────────────────────────── */
+  // In camera mode "Scan the QR" is offered only while scanning can work:
+  // the browser reads QR codes, a camera is connected and camera permission
+  // isn't denied. A scan that fails (permission refused, no camera) hides it
+  // as well and sends the patient to typing the UHID. Each check updates
+  // when its answer changes (permission changed, camera plugged in).
+  var scanOption = form.querySelector('.opt[data-go="scan"]');
+  var cameraBlocked = {};  // reason → true
+
+  function blockCamera(reason, blocked) {
+    cameraBlocked[reason] = blocked !== false;
+    if (!scanOption) return;
+    var hide = false;
+    for (var key in cameraBlocked) {
+      if (cameraBlocked.hasOwnProperty(key) && cameraBlocked[key]) hide = true;
+    }
+    scanOption.hidden = hide;
+  }
+
+  function checkCamera() {
+    if (scanMode !== 'camera' || !scanOption) return;
+    var media = navigator.mediaDevices;
+    if (!window.BarcodeDetector || !media || !media.getUserMedia) {
+      blockCamera('support');
+      return;
+    }
+    try {
+      if (window.BarcodeDetector.getSupportedFormats) {
+        window.BarcodeDetector.getSupportedFormats().then(function (formats) {
+          blockCamera('support', formats.indexOf('qr_code') < 0);
+        }, function () {});
+      }
+    } catch (e) { /* assume QR codes are supported */ }
+    var checkDevices = function () {
+      if (!media.enumerateDevices) return;
+      media.enumerateDevices().then(function (devices) {
+        var found = false;
+        each(devices, function (device) { if (device.kind === 'videoinput') found = true; });
+        blockCamera('device', !found);
+      }, function () {});
+    };
+    checkDevices();
+    if (media.addEventListener) media.addEventListener('devicechange', checkDevices);
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions.query({ name: 'camera' }).then(function (status) {
+          var apply = function () { blockCamera('permission', status.state === 'denied'); };
+          apply();
+          status.onchange = apply;
+        }, function () {});
+      }
+    } catch (e) { /* this browser can't report camera permission */ }
+  }
+
   function scanned(raw) {
     if (continueWithUhid(raw)) return;
+    // A keyboard scanner read something that isn't a UHID. Show the scan
+    // step's message, unless the camera can't be used: then the UHID step.
+    if (scanOption && scanOption.hidden) {
+      show('uhid');
+      $('uhidErr').hidden = false;
+      return;
+    }
     if (current !== 'scan') show('scan');
     var error = $('scanError');
     if (error) error.hidden = false;
@@ -499,12 +559,17 @@
     var error = $('scanError');
     if (error) error.hidden = true;
     if (scanMode !== 'camera' || stream) return;
-    var callout = $('camCallout');
     var detector = null;
     var busy = false;
-    var unavailable = function () {
+    var unavailable = function (error) {
       stopCamera();
-      if (callout) callout.hidden = false;
+      var name = error && error.name;
+      if (name === 'NotAllowedError' || name === 'SecurityError') blockCamera('permission');
+      else if (name === 'NotFoundError' || name === 'OverconstrainedError' || name === 'NotReadableError') {
+        blockCamera('device');
+      } else blockCamera('support');
+      // Scanning can't work here: let the patient type the UHID instead.
+      if (current === 'scan') show('uhid');
     };
     try {
       detector = new window.BarcodeDetector({ formats: ['qr_code'] });
@@ -738,6 +803,7 @@
   });
 
   /* ── Start ───────────────────────────────────────────────────── */
+  checkCamera();
   applyAudience();
   paintUhid();
   each(cards, updateNextButton);

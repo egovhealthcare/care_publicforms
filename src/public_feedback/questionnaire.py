@@ -24,8 +24,13 @@ SCALE = {
     1: {"en": "Poor", "kn": "ಕಳಪೆ"},
     NO_COMMENT: {"en": "No comments", "kn": "ಪ್ರತಿಕ್ರಿಯೆ ಇಲ್ಲ"},
 }
-DETAIL_TYPES = {QuestionType.CHOICE, QuestionType.DATE}
-OPEN_TYPES = {QuestionType.BOOLEAN, QuestionType.TEXT}
+
+
+def asked_on_open_step(question) -> bool:
+    """Free text, and choices marked "step": "open" (e.g. yes/no), go on the "in your own words" step."""
+    return question.type == QuestionType.TEXT or (question.type == QuestionType.CHOICE and question.step == "open")
+
+
 MAX_TEXT_LENGTH = 2000
 
 
@@ -79,7 +84,11 @@ class FormSpec:
 
     @property
     def details(self):
-        return [q for q in self.questions if q.type in DETAIL_TYPES]
+        return [
+            q
+            for q in self.questions
+            if q.type in (QuestionType.CHOICE, QuestionType.DATE) and not asked_on_open_step(q)
+        ]
 
     @property
     def ratings(self):
@@ -87,7 +96,7 @@ class FormSpec:
 
     @property
     def open_questions(self):
-        return [q for q in self.questions if q.type in OPEN_TYPES]
+        return [q for q in self.questions if asked_on_open_step(q)]
 
     @property
     def rating_count_for_everyone(self) -> int:
@@ -133,6 +142,4 @@ def parse_answer(question, raw):
         except ValueError:
             return None
         return value.isoformat() if value <= timezone.localdate() else None
-    if question.type == QuestionType.BOOLEAN:
-        return {"yes": True, "no": False}.get(raw)
     return clean_text(raw)

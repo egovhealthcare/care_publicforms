@@ -50,15 +50,14 @@ def stored_answer(question, value, data) -> dict:
     """
     One answer as it is saved: with its question (in English), so the
     submission reads the same after the form changes. ``answer`` is the label
-    picked (ratings and choices); ``comment`` the "Why?" of a yes/no.
+    picked (ratings and choices); ``comment`` the "Why?" of a choice that asks it.
     """
     entry = {"question": localize(question.text, BASE_LANGUAGE), "type": question.type, "value": value}
     if question.type == QuestionType.RATING:
         entry["answer"] = localize(rating_labels(question)[value], BASE_LANGUAGE)
     elif question.type == QuestionType.CHOICE:
         entry["answer"] = localize(choice_labels(question)[value], BASE_LANGUAGE)
-    elif question.type == QuestionType.BOOLEAN and question.allow_comment:
-        if comment := clean_text(data.get(comment_key(question))):
+        if question.allow_comment and (comment := clean_text(data.get(comment_key(question)))):
             entry["comment"] = comment
     return entry
 

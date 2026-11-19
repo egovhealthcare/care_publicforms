@@ -52,7 +52,7 @@ class FeedbackApiTests(CareAPITestBase):
                 "information_signage": 5,
                 "registration_wait": 2,
                 "overall_satisfaction": 4,
-                "would_return": True,
+                "would_return": "yes",
             },
             uhid="12345678901",
         )
@@ -65,7 +65,7 @@ class FeedbackApiTests(CareAPITestBase):
                 "information_signage": 3,
                 "registration_wait": 0,
                 "overall_satisfaction": 3,
-                "would_return": False,
+                "would_return": "no",
             },
         )
         make_submission(self.facility, "IPD-1", "ipd", {"ward_cleanliness": 2, "diet": 1, "overall_satisfaction": 5})
@@ -237,7 +237,7 @@ class AdminTests(CareAPITestBase):
             self.facility,
             "OPD-1",
             "opd",
-            {"clinic": "ent", "information_signage": 4, "would_return": True, "would_return__comment": "Kind staff"},
+            {"clinic": "ent", "information_signage": 4, "would_return": "yes", "would_return__comment": "Kind staff"},
         )
         # Rewording the question later doesn't change what was answered.
         for question in self.opd.questions:
@@ -262,7 +262,7 @@ class AdminTests(CareAPITestBase):
             self.facility,
             "OPD-1",
             "opd",
-            {"information_signage": 4, "would_return": True, "would_return__comment": "=cmd()"},
+            {"information_signage": 4, "would_return": "yes", "would_return__comment": "=cmd()"},
             uhid="12345678901",
         )
         make_submission(self.facility, "IPD-1", "ipd", {"diet": 2})

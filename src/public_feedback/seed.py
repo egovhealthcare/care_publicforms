@@ -50,8 +50,13 @@ SEX = {
 OPEN_QUESTIONS = [
     {
         "key": "would_return",
-        "type": "boolean",
+        "type": "choice",
+        "step": "open",
         "allow_comment": True,
+        "options": [
+            {"value": "yes", "en": "Yes", "kn": "ಹೌದು"},
+            {"value": "no", "en": "No", "kn": "ಇಲ್ಲ"},
+        ],
         "text": {
             "en": "Would you come back to this hospital for treatment?",
             "kn": "ಚಿಕಿತ್ಸೆಗಾಗಿ ನೀವು ಈ ಆಸ್ಪತ್ರೆಗೆ ಮತ್ತೆ ಬರುತ್ತೀರಾ?",

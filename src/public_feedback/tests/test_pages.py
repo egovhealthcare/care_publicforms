@@ -167,7 +167,7 @@ class SubmitTests(PageTestBase):
         )
         self.assertEqual(
             self.values(submission.answers),
-            {**self.ratings(self.opd, 4), "clinic": "ent", "would_return": True},
+            {**self.ratings(self.opd, 4), "clinic": "ent", "would_return": "yes"},
         )
         # Each answer keeps its question as asked, in English, with the label picked.
         self.assertEqual(
@@ -187,8 +187,9 @@ class SubmitTests(PageTestBase):
             submission.answers["would_return"],
             {
                 "question": "Would you come back to this hospital for treatment?",
-                "type": "boolean",
-                "value": True,
+                "type": "choice",
+                "value": "yes",
+                "answer": "Yes",
                 "comment": "Friendly staff",
             },
         )
@@ -595,7 +596,21 @@ class QuestionsJsonTests(PageTestBase):
                 {"key": "wait", "type": "rating", "text": {"en": "Wait"}, "options": [{"en": "a"}]},
                 {"key": "visit", "type": "date", "text": {"kn": "ದಿನಾಂಕ"}, "requried": True},
                 {"key": "mood", "type": "smiley", "text": {"en": "Mood"}},
-                {"key": "why", "type": "boolean", "text": {"en": "Why"}, "required": "yes"},
+                {
+                    "key": "why",
+                    "type": "choice",
+                    "text": {"en": "Why"},
+                    "required": "yes",
+                    "options": [{"value": "a", "en": "A"}],
+                },
+                {"key": "stay", "type": "text", "text": {"en": "Stay"}, "step": "details", "allow_comment": True},
+                {
+                    "key": "back",
+                    "type": "choice",
+                    "text": {"en": "Back?"},
+                    "step": "later",
+                    "options": [{"value": "y", "en": "Y"}],
+                },
             ]
         )
         expected = [
@@ -607,6 +622,9 @@ class QuestionsJsonTests(PageTestBase):
             "“visit”: text needs the English question",
             "“mood”: type must be one of",
             "“why”: required must be true or false",
+            "“stay”: step is for choices only",
+            "“stay”: allow_comment (“Why?”) is for choices only",
+            "“back”: step is for choices only: details or open",
         ]
         for start in expected:
             self.assertTrue(any(p.startswith(start) for p in problems), (start, problems))
@@ -628,3 +646,23 @@ class QuestionsJsonTests(PageTestBase):
         with self.assertRaises(ProtectedError):
             self.opd.delete()
         self.ipd.delete()  # no feedback yet: fine
+
+    def test_a_yes_no_question_is_an_open_choice(self):
+        page = self.client.get(self.url("form", "opd"))
+        spec = FormSpec(self.opd)
+        self.assertIn("would_return", [q.key for q in spec.open_questions])
+        self.assertNotIn("would_return", [q.key for q in spec.details])
+        # Two options on the "in your own words" step: large Yes / No buttons, with "Why?".
+        self.assertContains(page, '<input type="radio" name="would_return" value="yes">')
+        self.assertContains(page, 'name="would_return__comment"')
+        self.submit(uhid=UHID, would_return="no", would_return__comment="Long queue", **self.answers(self.opd))
+        self.assertEqual(
+            FeedbackSubmission.objects.get().answers["would_return"],
+            {
+                "question": "Would you come back to this hospital for treatment?",
+                "type": "choice",
+                "value": "no",
+                "answer": "No",
+                "comment": "Long queue",
+            },
+        )

@@ -80,11 +80,6 @@ STRINGS = {
     "opt_guest_sub": {"en": "No UHID needed. Stays anonymous.", "kn": "UHID ಬೇಕಿಲ್ಲ. ಅನಾಮಧೇಯವಾಗಿರುತ್ತದೆ."},
     # ── Scan ────────────────────────────────────────────────────────
     "scan_heading": {"en": "Point at the QR code", "kn": "QR ಕೋಡ್‌ನ ಕಡೆಗೆ ಹಿಡಿಯಿರಿ"},
-    "scan_camera_unavailable": {
-        "en": "The camera isn't available on this device or permission was declined. "
-        "You can enter your UHID instead, or continue as a guest.",
-        "kn": "ಈ ಸಾಧನದಲ್ಲಿ ಕ್ಯಾಮೆರಾ ಲಭ್ಯವಿಲ್ಲ ಅಥವಾ ಅನುಮತಿ ನಿರಾಕರಿಸಲಾಗಿದೆ. ಬದಲಿಗೆ UHID ನಮೂದಿಸಿ ಅಥವಾ ಅತಿಥಿಯಾಗಿ ಮುಂದುವರಿಯಿರಿ.",
-    },
     "scanner_heading": {  # review
         "en": "Hold your QR code under the scanner",
         "kn": "QR ಕೋಡ್ ಅನ್ನು ಸ್ಕ್ಯಾನರ್ ಕೆಳಗೆ ಹಿಡಿಯಿರಿ",
@@ -145,8 +140,6 @@ STRINGS = {
     "open_heading": {"en": "Last {n} — all optional.", "kn": "ಕೊನೆಯ {n} — ಎಲ್ಲವೂ ಐಚ್ಛಿಕ."},  # review (kn, number)
     "open_heading_required": {"en": "Last {n} questions.", "kn": "ಕೊನೆಯ {n} ಪ್ರಶ್ನೆಗಳು."},  # review
     "open_why": {"en": "Why? (optional)", "kn": "ಏಕೆ? (ಐಚ್ಛಿಕ)"},
-    "yes": {"en": "Yes", "kn": "ಹೌದು"},
-    "no": {"en": "No", "kn": "ಇಲ್ಲ"},
     "review_answers": {"en": "Review answers", "kn": "ಉತ್ತರ ಪರಿಶೀಲಿಸಿ"},
     # ── Review ──────────────────────────────────────────────────────
     "review_heading": {"en": "Before you send", "kn": "ಕಳುಹಿಸುವ ಮೊದಲು"},

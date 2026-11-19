@@ -151,7 +151,7 @@ forms**, open a form). A screen can set its own options in the URL:
 | Parameter | What it does |
 | --- | --- |
 | `lang=kn` | Language each new patient starts in, one of `LANGUAGES`. Default: `DEFAULT_LANGUAGE`. |
-| `scan=camera` | The browser reads the QR with the TV's camera (needs HTTPS and a browser with `BarcodeDetector`, e.g. Chrome on Android / ChromeOS / macOS). |
+| `scan=camera` | The browser reads the QR with the TV's camera (needs HTTPS and a browser with `BarcodeDetector`, e.g. Chrome on Android / ChromeOS / macOS). The scan option is hidden when that can't work: no camera, camera permission denied, or a browser that can't read QR codes; patients then type their UHID or continue as guests. |
 | `scan=scanner` | A USB/Bluetooth QR scanner in keyboard mode, which works on any browser. A scanner also works on the first step in camera mode. |
 | `scan=off` | Hides the scan option. |
 | `keypad=0` / `keypad=1` | On-screen number pad for the UHID. Keep it on for TVs without a system keyboard. |
@@ -175,7 +175,8 @@ starting language for the next patient.
 ### Kiosk browser tips
 
 - Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/type/opd/public_feedback/"`.
-- The camera only works over HTTPS. Allow camera access for the site once.
+- The camera only works over HTTPS. Allow camera access for the site once;
+  if it is denied, the scan option disappears until access is allowed again.
 - Following the NQAS guidance, take exit feedback: put the OPD kiosk near
   the pharmacy counter and the inpatient kiosk where patients are discharged.
 - QR payloads count as a UHID when they contain exactly 11 digits once other
@@ -212,33 +213,34 @@ In the Django admin under **Public Feedback → Feedback forms**:
      "short_text": {"en": "Registration wait"},
      "options": [{"en": "More than 30 mins"}, {"en": "10–30 mins"}, {"en": "5–10 mins"},
                  {"en": "Within 5 mins"}, {"en": "Immediate"}]},
-    {"key": "would_return", "type": "boolean", "allow_comment": true,
-     "text": {"en": "Would you come back to this hospital for treatment?"}}
+    {"key": "would_return", "type": "choice", "step": "open", "allow_comment": true,
+     "text": {"en": "Would you come back to this hospital for treatment?"},
+     "options": [{"value": "yes", "en": "Yes", "kn": "ಹೌದು"}, {"value": "no", "en": "No", "kn": "ಇಲ್ಲ"}]}
   ]
   ```
 
   | Field | Default | Meaning |
   | --- | --- | --- |
   | `key` | required | Stable id the answer is stored under: lowercase letters, digits, `_` |
-  | `type` | required | `rating`, `choice`, `date`, `boolean` or `text` (see below) |
+  | `type` | required | `rating`, `choice`, `date` or `text` (see below) |
   | `text` | required | The question per language; English required |
   | `short_text` | `{}` | Shorter label for the review step |
   | `hint` | `{}` | Hint under the question |
   | `options` | `[]` | Choices, or five rating labels (see below) |
   | `required` | `false` | Needs an answer (ratings always do) |
   | `audience` | `"all"` | `all`, `guest` (no UHID) or `identified` (gave a UHID) |
+  | `step` | `"details"` | Choices: `details` ("A few details") or `open` ("In your own words", before the review) |
   | `allow_no_comment` | `true` | Ratings: offer "No comments" |
-  | `allow_comment` | `false` | Yes/no: also ask "Why?" |
+  | `allow_comment` | `false` | Choices: also ask "Why?" under the answer |
   | `active` | `true` | `false` keeps the question in the form without asking it |
 
   The type decides where a question appears:
 
   | Type | Step | Notes |
   | --- | --- | --- |
-  | `choice` | A few details | `options`: `[{"value": "ent", "en": "ENT", "kn": "..."}]` |
+  | `choice` | A few details, or In your own words with `"step": "open"` | `options`: `[{"value": "ent", "en": "ENT", "kn": "..."}]`. On the open step, 2–3 options show as large buttons. A **yes/no** question is a choice with the options `yes` and `no` (see `would_return` above) |
   | `date` | A few details | e.g. date of admission; future dates are refused |
   | `rating` | One card at a time | Poor → Excellent plus "No comments" (can be turned off). `options` can relabel the five steps, e.g. waiting time "More than 30 mins" … "Immediate". Ratings always need an answer. |
-  | `boolean` | In your own words | Yes / No buttons, stored as `true` / `false`; `allow_comment` adds a "Why?" box |
   | `text` | In your own words | free text |
 
   The default forms ask age and sex only of guests, since UHID patients
@@ -270,16 +272,17 @@ as it was asked**:
   "registration_wait": {"question": "Waiting time at the registration counter",
                         "type": "rating", "value": 2, "answer": "10–30 mins"},
   "would_return": {"question": "Would you come back to this hospital for treatment?",
-                   "type": "boolean", "value": true, "comment": "Friendly staff"},
+                   "type": "choice", "value": "yes", "answer": "Yes", "comment": "Friendly staff"},
   "improvement": {"question": "What would you most like to see improved?",
                   "type": "text", "value": "Shorter queue at registration"}
 }
 ```
 
 - `value`: ratings `0`–`5` (`0` = *No comments*, left out of averages),
-  the choice's code, `YYYY-MM-DD`, `true`/`false`, or text as typed.
+  the choice's code (`"yes"` / `"no"` for a yes/no question), `YYYY-MM-DD`,
+  or text as typed.
 - `answer` (ratings and choices only): the label the patient picked.
-- `comment` (yes/no only, when given): the "Why?" text.
+- `comment` (choices that ask "Why?", when given): the reason.
 - `question` and `answer` are in English; the patient's language is in the
   `language` column. Questions not answered are left out.
 
@@ -383,7 +386,8 @@ Lint with `ruff check src && ruff format src`.
 [`e2e/`](e2e) drives the pages in Chromium against a running Care backend
 with the plugin installed: the patient flows (UHID by keypad and by a
 keyboard QR scanner, guest details, editing from the review, Reset, Home,
-future dates), the language carried to the thank-you page, the idle reset
+future dates), the scan option hiding when the camera can't be used, the
+language carried to the thank-you page, the idle reset
 (with a mocked clock), the step-by-step flow without JavaScript, and the layout on five
 screen shapes (1080p and 960×540 TVs, a portrait screen, a tablet, a phone:
 no sideways scrolling, nothing clipped, main buttons on screen, unique ids,

@@ -338,7 +338,6 @@ html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
   position:absolute;left:8%;right:8%;top:50%;height:.125rem;
   background:var(--primary-400);opacity:.9;animation:sweep 2.2s ease-in-out infinite alternate;
 }
-.no-js .cam-callout{display:block !important}
 
 /* ── UHID entry ─────────────────────────────────────────────────── */
 .uhid{position:relative;display:flex;align-items:center;width:100%;cursor:text}

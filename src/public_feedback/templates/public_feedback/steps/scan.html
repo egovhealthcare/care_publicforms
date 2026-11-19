@@ -8,9 +8,6 @@
     <p class="lead-sm">{% t "scanner_lead" %}</p>
     {% endif %}
     <div class="callout callout--error" id="scanError" role="alert" hidden>{% t "scan_unreadable" %}</div>
-    {% if scan_mode == "camera" %}
-    <div class="callout" id="camCallout" role="status" hidden>{% t "scan_camera_unavailable" %}</div>
-    {% endif %}
   </div>
 
   <div class="area-body">

@@ -276,10 +276,11 @@ class FormView(FeedbackPage):
                 )
             elif question.type == QuestionType.CHOICE:
                 options = choice_labels(question)
-                item["options"] = [{"value": code, "label": labels} for code, labels in options.items()]
-                item["compact"] = all(len(localize(labels, BASE_LANGUAGE)) <= 12 for labels in options.values())
-            elif question.type == QuestionType.BOOLEAN:
                 item.update(
+                    options=[{"value": code, "label": labels} for code, labels in options.items()],
+                    compact=all(len(localize(labels, BASE_LANGUAGE)) <= 12 for labels in options.values()),
+                    # On the "in your own words" step, 2–3 options are large buttons (e.g. Yes / No).
+                    buttons=question.step == "open" and 2 <= len(options) <= 3,
                     allow_comment=question.allow_comment,
                     comment_key=comment_key(question),
                     comment=data.get(comment_key(question), ""),

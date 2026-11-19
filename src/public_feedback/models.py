@@ -16,12 +16,13 @@ class PatientType(models.TextChoices):
 class QuestionType(models.TextChoices):
     # Where a question is asked follows from its type:
     #   choice, date   → "a few details" step, after identification
+    #                    (a choice with "step": "open" → "in your own words")
     #   rating         → one card at a time
-    #   boolean, text   → "in your own words" step, before review
+    #   text           → "in your own words" step, before review
+    # A yes/no question is a choice with the options yes and no.
     RATING = "rating", _("Rating: Poor → Excellent")
-    CHOICE = "choice", _("Single choice (details)")
+    CHOICE = "choice", _("Single choice")
     DATE = "date", _("Date (details)")
-    BOOLEAN = "boolean", _("Yes / No")
     TEXT = "text", _("Free text")
 
 
@@ -118,12 +119,12 @@ class FeedbackSubmission(models.Model):
 
         {"registration_wait": {"question": "Waiting time at the registration counter",
                                "type": "rating", "value": 2, "answer": "10–30 mins"},
-         "would_return": {"question": "Would you come back…?", "type": "boolean",
-                          "value": true, "comment": "Friendly staff"}}
+         "would_return": {"question": "Would you come back…?", "type": "choice",
+                          "value": "yes", "answer": "Yes", "comment": "Friendly staff"}}
 
     ``value``: rating 0–5 (0 = "No comments"), choice code, ``YYYY-MM-DD``,
-    true/false, or text as typed. ``answer`` (ratings and choices): the label
-    picked. ``comment`` (yes/no): the "Why?" text. Question and labels are in
+    or text as typed. ``answer`` (ratings and choices): the label picked.
+    ``comment`` (choices that ask "Why?"): the reason given. Question and labels are in
     English; the patient's language is ``language``. Questions not answered
     are left out.
     """

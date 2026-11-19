@@ -21,7 +21,7 @@ from rest_framework.views import APIView
 from public_feedback.models import FeedbackSubmission, PatientType, QuestionType
 from public_feedback.questionnaire import NO_COMMENT, question_order
 
-SUMMARISED_TYPES = (QuestionType.RATING, QuestionType.BOOLEAN, QuestionType.CHOICE)
+SUMMARISED_TYPES = (QuestionType.RATING, QuestionType.CHOICE)
 LOWEST_ATTRIBUTES = 2  # NQAS "Check" step: root-cause the two lowest-scoring attributes
 
 

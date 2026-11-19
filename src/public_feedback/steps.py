@@ -24,7 +24,6 @@ and ``("review", 0)``. The identify, scan and UHID steps come before them.
 
 from dataclasses import dataclass
 
-from public_feedback.i18n import languages, translate
 from public_feedback.models import QuestionType
 from public_feedback.questionnaire import (
     FormSpec,
@@ -161,10 +160,6 @@ def navigate(spec: FormSpec, data, nav: str, identified: bool, uhid_valid: bool)
 
 
 # ── The review, rendered on the server ─────────────────────────────────
-def _in_every_language(key: str) -> dict:
-    return {code: translate(key, code) for code in languages()}
-
-
 def answer_label(question, value):
     """The answer as shown on the review: per-language text, plain text, or None if unanswered."""
     if value is None:
@@ -173,8 +168,6 @@ def answer_label(question, value):
         return rating_labels(question).get(value)
     if question.type == QuestionType.CHOICE:
         return choice_labels(question).get(value)
-    if question.type == QuestionType.BOOLEAN:
-        return _in_every_language("yes" if value else "no")
     if question.type == QuestionType.DATE:
         year, month, day = value.split("-")
         return f"{day}/{month}/{year}"
@@ -189,7 +182,7 @@ def review_rows(spec: FormSpec, data, identified: bool) -> list[dict]:
             continue
         value = answer_label(question, parse_answer(question, data.get(question.key)))
         note = ""
-        if question.type == QuestionType.BOOLEAN and value is not None:
+        if question.allow_comment and value is not None:
             note = clean_text(data.get(comment_key(question))) or ""
             if len(note) > 60:
                 note = note[:57] + "…"

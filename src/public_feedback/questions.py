@@ -12,8 +12,9 @@ with their default value can be left out::
        "text": {"en": "Waiting time at the registration counter"},
        "short_text": {"en": "Registration wait"},
        "options": [{"en": "More than 30 mins"}, …five labels, Poor → Excellent]},
-      {"key": "would_return", "type": "boolean", "allow_comment": true,
-       "text": {"en": "Would you come back to this hospital for treatment?"}}
+      {"key": "would_return", "type": "choice", "step": "open", "allow_comment": true,
+       "text": {"en": "Would you come back to this hospital for treatment?"},
+       "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]}
     ]
 
 Fields: see ``FIELDS``. Submissions keep their own copy of each question's
@@ -28,11 +29,12 @@ from public_feedback.i18n import BASE_LANGUAGE
 from public_feedback.models import Audience, QuestionType
 
 KEY_PATTERN = re.compile(r"[a-z][a-z0-9_]{0,63}")
+STEPS = ("details", "open")  # where a choice is asked
 
 # field → (default, description); the description is shown in the admin.
 FIELDS = {
     "key": (None, "Stable id the answer is stored under, e.g. 'ward_cleanliness'. Required; don't change it."),
-    "type": (None, "rating, choice, date, boolean or text. Required; also decides the step it is asked on."),
+    "type": (None, "rating, choice, date or text. Required; also decides the step it is asked on."),
     "text": (None, 'The question per language, e.g. {"en": "…", "kn": "…"}. English is required.'),
     "short_text": ({}, "Shorter label for the review step, per language."),
     "hint": ({}, "Hint under the question, per language."),
@@ -44,7 +46,12 @@ FIELDS = {
     "required": (False, "Needs an answer (ratings always do)."),
     "audience": ("all", "all, guest (no UHID) or identified (gave a UHID)."),
     "allow_no_comment": (True, "rating: offer “No comments” (stored as 0)."),
-    "allow_comment": (False, "boolean: also ask “Why?”."),
+    "step": (
+        "details",
+        "choice: details (“A few details”, after identification) or open (“In your own words”, before the "
+        "review, as large buttons when it has 2–3 options). A yes/no question is an open choice.",
+    ),
+    "allow_comment": (False, "choice: also ask “Why?” under the answer."),
     "active": (True, "false: not asked, but kept in the form."),
 }
 
@@ -60,6 +67,7 @@ class Question:
     required: bool = False
     audience: str = Audience.ALL
     allow_no_comment: bool = True
+    step: str = "details"
     allow_comment: bool = False
     active: bool = True
 
@@ -130,6 +138,10 @@ def question_errors(raw) -> list[str]:
         elif kind == QuestionType.RATING and options:
             if len(options) != 5 or any(not str(o.get(BASE_LANGUAGE, "")).strip() for o in options):
                 errors.append(f"{name}: give exactly five labels with English text, Poor → Excellent, or none.")
-        elif kind in (QuestionType.DATE, QuestionType.BOOLEAN, QuestionType.TEXT) and options:
+        elif kind in (QuestionType.DATE, QuestionType.TEXT) and options:
             errors.append(f"{name}: a {kind} question has no options.")
+        if "step" in item and (kind != QuestionType.CHOICE or item["step"] not in STEPS):
+            errors.append(f"{name}: step is for choices only: {' or '.join(STEPS)}.")
+        if item.get("allow_comment") and kind != QuestionType.CHOICE:
+            errors.append(f"{name}: allow_comment (“Why?”) is for choices only.")
     return errors
