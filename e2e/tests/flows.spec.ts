@@ -24,7 +24,7 @@ test.beforeEach(needsFacility);
 test("an identified patient answers everything and gets a reference", async ({ page }) => {
   await page.goto(chooserUrl());
   await page.getByRole("link", { name: /OPD feedback/ }).click();
-  await expect(page).toHaveURL(/\/type\/opd\/patient_feedback\/\?.*from=start/);
+  await expect(page).toHaveURL(/\/type\/opd\/public_feedback\/\?.*from=start/);
   await expectStep(page, "identify");
   await expect(headerNav(page)).toBeHidden();
 
@@ -70,7 +70,7 @@ test("an identified patient answers everything and gets a reference", async ({ p
   await expect(reviewRow(page, "Registration wait")).toContainText("10–30 mins");
 
   await page.getByRole("button", { name: "Submit feedback" }).click();
-  await expect(page).toHaveURL(/\/type\/opd\/patient_feedback\/done\/\?.*ref=OPD-\d{8}-\d{4}/);
+  await expect(page).toHaveURL(/\/type\/opd\/public_feedback\/done\/\?.*ref=OPD-\d{8}-\d{4}/);
   await expect(page.locator(".token")).toHaveText(/^OPD-\d{8}-\d{4}$/);
   await expect(page.locator("h2.done-title")).toHaveText("Thank you.", shown);
   // The next patient starts at the chooser.

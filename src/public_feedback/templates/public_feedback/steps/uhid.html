@@ -1,0 +1,34 @@
+{% load public_feedback_tags %}
+<section class="step screen screen--uhid{% if not show_keypad %} screen--nopad{% endif %}{% if current_step == "uhid" %} is-active{% endif %}" data-step="uhid">
+  <div class="area-head stack stack--8">
+    <h2 class="h2">{% t "uhid_heading" %}</h2>
+    <p class="lead-sm">{% t "uhid_lead" n=uhid_length %}</p>
+  </div>
+
+  <div class="area-entry">
+    <div class="uhid" id="uhidWrap">
+      {% for cell in uhid_cells %}<span class="uhid-cell{% if cell.gap %} uhid-cell--gap{% endif %}{% if cell.digit %} is-filled{% endif %}" aria-hidden="true">{{ cell.digit }}</span>{% endfor %}
+      <input id="uhidInput" name="uhid" value="{{ uhid }}" class="uhid-input"
+             inputmode="numeric" pattern="[0-9]*"{% if show_keypad %} data-keypad{% endif %}
+             maxlength="{{ uhid_length }}" autocomplete="off"
+             {% l10n_attr "aria-label" "uhid_label" n=uhid_length %}>
+    </div>
+    <p class="err" id="uhidErr" role="alert"{% if not errors.uhid %} hidden{% endif %}>{% t "uhid_error_length" n=uhid_length %}</p>
+  </div>
+
+  {% if show_keypad %}
+  <div class="area-pad keypad js-only" id="keypad">
+    {% for key in keypad %}<button type="button" data-key="{{ key }}" class="key">{{ key }}</button>{% endfor %}
+    <button type="button" data-key="clear" class="key key--fn">{% t "keypad_clear" %}</button>
+    <button type="button" data-key="0" class="key">0</button>
+    <button type="button" data-key="back" class="key key--fn" {% l10n_attr "aria-label" "keypad_delete" %}>
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h10.5A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5H9l-6-7z"/><path d="M12.5 9.5l5 5M17.5 9.5l-5 5"/></svg>
+    </button>
+  </div>
+  {% endif %}
+
+  <div class="area-nav stack stack--10">
+    <button type="submit" name="nav" value="uhid" class="btn btn--primary btn--lg btn-cta" data-action="uhid-continue">{% t "continue" %}</button>
+    <button type="submit" name="nav" value="guest" class="btn btn--ghost btn--md btn-link" data-action="guest">{% t "no_uhid" %}</button>
+  </div>
+</section>

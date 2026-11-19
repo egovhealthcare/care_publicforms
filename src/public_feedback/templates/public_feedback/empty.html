@@ -1,0 +1,24 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Patient feedback</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="{% static 'public_feedback/kiosk.css' %}">
+</head>
+<body>
+<div class="page page--blocked">
+  <div class="blocked-card">
+    <span class="kicker">Patient feedback</span>
+    {% if reason == "no_forms" %}
+    <h1 class="h2">No feedback forms are set up for this facility.</h1>
+    <p class="lead-sm">In the Care admin, check Public Feedback → Feedback forms: at least one form must be active.</p>
+    {% else %}
+    <h1 class="h2">This facility wasn't found.</h1>
+    <p class="lead-sm">Check the facility id in the link.</p>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>

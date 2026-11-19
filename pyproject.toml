@@ -1,7 +1,7 @@
 [project]
-name = "patient_feedback"
+name = "public_feedback"
 version = "0.1.0"
-description = "A Care plugin that serves server-rendered patient feedback kiosks (OPD questionnaire) for touch-screen TVs"
+description = "Public feedback: a Care plugin that serves server-rendered patient satisfaction surveys (OPD and inpatient) on touch-screen TV kiosks"
 readme = "README.md"
 authors = [{ name = "Open Healthcare Network", email = "support@ohc.network" }]
 maintainers = [
@@ -17,7 +17,7 @@ test = [
 ]
 
 [project.urls]
-homepage = "https://github.com/ohcnetwork/care_patient_feedback"
+homepage = "https://github.com/ohcnetwork/care_public_feedback"
 
 [build-system]
 requires = ["setuptools>=64"]
@@ -27,11 +27,11 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-patient_feedback = ["templates/**/*", "static/**/*"]
+public_feedback = ["templates/**/*", "static/**/*"]
 
 [tool.ruff]
 line-length = 120
-extend-exclude = ["src/patient_feedback/migrations"]
+extend-exclude = ["src/public_feedback/migrations"]
 
 [tool.ruff.lint]
 select = [
@@ -44,7 +44,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["patient_feedback"]
+known-first-party = ["public_feedback"]
 known-third-party = ["care"]
 
 [tool.uv]

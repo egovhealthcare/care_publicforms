@@ -1,7 +1,8 @@
-# care_patient_feedback
+# care_public_feedback
 
-A [Care](https://github.com/ohcnetwork/care) plugin that runs **patient
-satisfaction surveys (OPD and inpatient) on touch-screen TV kiosks**. The
+**Public feedback** is a [Care](https://github.com/ohcnetwork/care) plugin
+that runs **patient satisfaction surveys (OPD and inpatient) on touch-screen
+TV kiosks**. The
 pages are rendered on the server (Django templates), so it needs no frontend
 build and works on the limited browsers built into TVs and signage players,
 even with JavaScript switched off.
@@ -22,8 +23,11 @@ choose form (OP visit / IP stay)        ← skipped on a screen pinned to one fo
 ```
 
 The pages are **public**: anyone in the hospital can open them, with no
-login, kiosk key, session or cookie. Each response is one row in a table
-**without foreign keys**.
+login, kiosk key, session or cookie. The plugin has **two tables**: forms
+(each with its questions as one JSON list) and submissions (one row per
+response, each answer saved with its question). The **only relation** is
+between them: each submission belongs to its form. **Nothing links to
+Care's tables**: facilities are kept by their id.
 
 For how it is built (request flow, the in-browser step machine, languages,
 validation) and the database tables, see
@@ -89,13 +93,13 @@ validation) and the database tables, see
 Add the plug to [`plug_config.py`](https://github.com/ohcnetwork/care/blob/develop/plug_config.py) in Care:
 
 ```python
-patient_feedback_plug = Plug(
-    name="patient_feedback",
-    package_name="git+https://github.com/ohcnetwork/care_patient_feedback.git",
+public_feedback_plug = Plug(
+    name="public_feedback",
+    package_name="git+https://github.com/ohcnetwork/care_public_feedback.git",
     version="@main",
     configs={},  # see Settings below
 )
-plugs = [patient_feedback_plug]
+plugs = [public_feedback_plug]
 ```
 
 Then rebuild the image and run migrations. Care's start scripts run
@@ -104,23 +108,23 @@ Then rebuild the image and run migrations. Care's start scripts run
 ### Local development (Care in Docker)
 
 1. Put the plugin inside the Care checkout so it is mounted into the
-   container at `/app/care_patient_feedback`:
+   container at `/app/care_public_feedback`:
 
    ```bash
    cd care
-   git clone <this repo> care_patient_feedback
+   git clone <this repo> care_public_feedback
    ```
 
 2. Register it in `plug_config.py`:
 
    ```python
-   patient_feedback_plug = Plug(
-       name="patient_feedback",
-       package_name="/app/care_patient_feedback",
+   public_feedback_plug = Plug(
+       name="public_feedback",
+       package_name="/app/care_public_feedback",
        version="",  # empty for a local path
        configs={},
    )
-   plugs = [patient_feedback_plug]
+   plugs = [public_feedback_plug]
    ```
 
 3. Install in editable mode by adding `-e` in `plugs/manager.py`
@@ -135,13 +139,13 @@ Then rebuild the image and run migrations. Care's start scripts run
 There is nothing to register: open the page for the facility on the TV and
 set it as the browser's start page.
 
-- `…/facility/<facility_id>/patient_feedback/`: patients choose OPD or
+- `…/facility/<facility_id>/public_feedback/`: patients choose OPD or
   inpatient feedback (opens the form directly if only one is active);
-- `…/facility/<facility_id>/type/<form code>/patient_feedback/`, e.g.
-  `…/type/ipd/patient_feedback/`: the screen is **pinned to that form**,
+- `…/facility/<facility_id>/type/<form code>/public_feedback/`, e.g.
+  `…/type/ipd/public_feedback/`: the screen is **pinned to that form**,
   with no chooser. Idle reset and the thank-you page return to that form.
 
-The Django admin shows each form's link (**Patient Feedback → Feedback
+The Django admin shows each form's link (**Public Feedback → Feedback
 forms**, open a form). A screen can set its own options in the URL:
 
 | Parameter | What it does |
@@ -152,7 +156,7 @@ forms**, open a form). A screen can set its own options in the URL:
 | `scan=off` | Hides the scan option. |
 | `keypad=0` / `keypad=1` | On-screen number pad for the UHID. Keep it on for TVs without a system keyboard. |
 
-For example `…/type/ipd/patient_feedback/?lang=kn&scan=scanner` pins a
+For example `…/type/ipd/public_feedback/?lang=kn&scan=scanner` pins a
 ward screen to the inpatient form, in Kannada, with a USB scanner.
 
 A language the patient picks with the toggle stays with them for their whole
@@ -163,14 +167,14 @@ starting language for the next patient.
 > [!NOTE]
 > The pages are served by the Care **backend**. If your deployment serves
 > care_fe and the backend from the same domain, route both
-> `/facility/<id>/patient_feedback/…` and `/facility/<id>/type/<form>/patient_feedback/…`
+> `/facility/<id>/public_feedback/…` and `/facility/<id>/type/<form>/public_feedback/…`
 > to the backend (for example the regex
-> `^/facility/[^/]+/(type/[^/]+/)?patient_feedback/`), since care_fe also
+> `^/facility/[^/]+/(type/[^/]+/)?public_feedback/`), since care_fe also
 > uses `/facility/...` paths.
 
 ### Kiosk browser tips
 
-- Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/type/opd/patient_feedback/"`.
+- Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/type/opd/public_feedback/"`.
 - The camera only works over HTTPS. Allow camera access for the site once.
 - Following the NQAS guidance, take exit feedback: put the OPD kiosk near
   the pharmacy counter and the inpatient kiosk where patients are discharged.
@@ -182,75 +186,120 @@ starting language for the next patient.
 
 ## Forms and questions
 
-In the Django admin under **Patient Feedback → Feedback forms**:
+In the Django admin under **Public Feedback → Feedback forms**:
 
 - **Form**: a code stored with every response and used in the URL (`opd`,
   `ipd`), the patient type (**OP** or **IP**), a title and description per
-  language, and active / order. A form with no facility is offered
-  everywhere; a facility can add its own form with the same code (say, with
-  its own clinic list), which replaces the shared one for that facility.
+  language, and active / order. A form with no **facility id** is offered
+  everywhere; a facility can have its own form with the same code (say,
+  with its own clinic list), which replaces the shared one for that
+  facility. Enter the facility's id (the UUID in its Care URL); the admin
+  checks it exists and shows the facility's name.
   Switching that facility form off hides the code there; the shared form
   doesn't come back. Keep codes short: reference numbers use the first 12
   characters (`OPD-20261118-4821`).
-- **Questions** (inline on the form, or under *Feedback questions* for every
-  option). The type decides where a question appears:
+- **Questions**: one JSON list on the form, in the order they are asked
+  (the admin checks it on save and names the question in every error).
+  Fields left out take their default:
+
+  ```json
+  [
+    {"key": "clinic", "type": "choice", "required": true,
+     "text": {"en": "Clinic visited", "kn": "ಭೇಟಿ ನೀಡಿದ ಚಿಕಿತ್ಸಾಲಯ"},
+     "options": [{"value": "ent", "en": "ENT", "kn": "ಕಿವಿ ಮೂಗು ಗಂಟಲು"}]},
+    {"key": "registration_wait", "type": "rating",
+     "text": {"en": "Waiting time at the registration counter"},
+     "short_text": {"en": "Registration wait"},
+     "options": [{"en": "More than 30 mins"}, {"en": "10–30 mins"}, {"en": "5–10 mins"},
+                 {"en": "Within 5 mins"}, {"en": "Immediate"}]},
+    {"key": "would_return", "type": "boolean", "allow_comment": true,
+     "text": {"en": "Would you come back to this hospital for treatment?"}}
+  ]
+  ```
+
+  | Field | Default | Meaning |
+  | --- | --- | --- |
+  | `key` | required | Stable id the answer is stored under: lowercase letters, digits, `_` |
+  | `type` | required | `rating`, `choice`, `date`, `boolean` or `text` (see below) |
+  | `text` | required | The question per language; English required |
+  | `short_text` | `{}` | Shorter label for the review step |
+  | `hint` | `{}` | Hint under the question |
+  | `options` | `[]` | Choices, or five rating labels (see below) |
+  | `required` | `false` | Needs an answer (ratings always do) |
+  | `audience` | `"all"` | `all`, `guest` (no UHID) or `identified` (gave a UHID) |
+  | `allow_no_comment` | `true` | Ratings: offer "No comments" |
+  | `allow_comment` | `false` | Yes/no: also ask "Why?" |
+  | `active` | `true` | `false` keeps the question in the form without asking it |
+
+  The type decides where a question appears:
 
   | Type | Step | Notes |
   | --- | --- | --- |
   | `choice` | A few details | `options`: `[{"value": "ent", "en": "ENT", "kn": "..."}]` |
   | `date` | A few details | e.g. date of admission; future dates are refused |
   | `rating` | One card at a time | Poor → Excellent plus "No comments" (can be turned off). `options` can relabel the five steps, e.g. waiting time "More than 30 mins" … "Immediate". Ratings always need an answer. |
-  | `yes_no` | In your own words | `allow_comment` adds a "Why?" box |
+  | `boolean` | In your own words | Yes / No buttons, stored as `true` / `false`; `allow_comment` adds a "Why?" box |
   | `text` | In your own words | free text |
 
-  Each question has a stable `key` (answers are stored under it), an order,
-  `required`, active, and an **audience**: everyone, guests only, or
-  patients who gave a UHID. The default forms ask age and sex only of
-  guests, since UHID patients already have a record. Their details (clinic
-  or ward, date of admission, age, sex) are required; a details question
-  that isn't is marked *optional* on screen.
+  The default forms ask age and sex only of guests, since UHID patients
+  already have a record. Their details (clinic or ward, date of admission,
+  age, sex) are required; a details question that isn't is marked
+  *optional* on screen.
 
-Responses store only keys and values; the wording and labels come from the
-form. Fixing a typo is fine, but if a question's meaning changes, add a new
-question with a new key and switch the old one off, so earlier answers
-aren't read against the new wording. `python manage.py seed_feedback_forms`
-re-creates either default form if it was deleted.
+Every submission saves each answer **with its question as asked**, so
+editing, reordering or removing questions never changes feedback already
+given. Statistics group answers by `key`: fixing a typo keeps them together,
+while a question with a new meaning should get a new key.
+`python manage.py seed_feedback_forms` re-creates either default form if it
+was deleted.
 
 ## Viewing feedback
 
-Responses go to `FeedbackSubmission` (`patient_feedback_feedbacksubmission`),
-which has **no foreign keys** and only these columns: `external_id`,
-`reference_number`, `facility_external_id`, `form_code`, `patient_type`,
-`language`, `uhid` (empty for guests), `answers` and `submitted_at`.
+Responses go to the `public_feedback_submission` table, with only these
+columns: `external_id`, `reference_number`, `facility_external_id` (not
+linked to Care), `form` (the form answered; its code and OP/IP type come from
+there), `language`, `uhid` (empty for guests), `answers` and `submitted_at`.
+A form that has feedback can't be deleted; switch it off instead.
 
-`answers` is a flat `{question_key: value}` object, for example:
+`answers` holds every answered question under its key, **with the question
+as it was asked**:
 
 ```json
-{"clinic": "ent", "information_signage": 4, "registration_wait": 0,
- "would_return": true, "would_return__comment": "Friendly staff"}
+{
+  "clinic": {"question": "Clinic visited", "type": "choice", "value": "ent", "answer": "ENT"},
+  "registration_wait": {"question": "Waiting time at the registration counter",
+                        "type": "rating", "value": 2, "answer": "10–30 mins"},
+  "would_return": {"question": "Would you come back to this hospital for treatment?",
+                   "type": "boolean", "value": true, "comment": "Friendly staff"},
+  "improvement": {"question": "What would you most like to see improved?",
+                  "type": "text", "value": "Shorter queue at registration"}
+}
 ```
 
-Ratings are `0`–`5` (`0` = *No comments*, left out of averages), choices
-their option value, dates `YYYY-MM-DD`, yes/no `true`/`false` (the "Why?"
-text under `<key>__comment`) and free text as typed. Unanswered questions
-are left out.
+- `value`: ratings `0`–`5` (`0` = *No comments*, left out of averages),
+  the choice's code, `YYYY-MM-DD`, `true`/`false`, or text as typed.
+- `answer` (ratings and choices only): the label the patient picked.
+- `comment` (yes/no only, when given): the "Why?" text.
+- `question` and `answer` are in English; the patient's language is in the
+  `language` column. Questions not answered are left out.
 
 - **Django admin → Feedback submissions**: filter by OP/IP, form and
   language; search by reference number or UHID; each submission shows its
-  answers with the form's wording. **Export selected as CSV** gives one
-  column per answer key. Submissions are read-only there.
+  answers with the questions as they were asked. **Export selected as CSV**
+  gives one column per answer key (the `value`; a "Why?" in
+  `<key>__comment`). Submissions are read-only there.
 - **API** (Care auth; needs permission to view questionnaire responses for
   the facility):
-  - `GET /api/patient_feedback/facility/<facility_id>/responses/`: paginated
+  - `GET /api/public_feedback/facility/<facility_id>/responses/`: paginated
     submissions, with the fields above
-  - `GET /api/patient_feedback/facility/<facility_id>/summary/`: one block
+  - `GET /api/public_feedback/facility/<facility_id>/summary/`: one block
     per form with the overall score, attribute-wise averages and
     distributions, the **two lowest-scoring attributes** (the NQAS "Check"
     step) and counts for yes/no and choice questions
 
   Both accept `patient_type` (`op` | `ip`), `form` (code) and
   `submitted_after` / `submitted_before` (YYYY-MM-DD).
-  `GET /api/patient_feedback/health` returns `OK`.
+  `GET /api/public_feedback/health` returns `OK`.
 
 ## Settings
 
@@ -282,13 +331,13 @@ plugin's limit off; Care's `DISABLE_RATELIMIT` turns off all limits.
 ## Translations
 
 - Question text is edited per language in the admin. Screen text (buttons,
-  headings) is in [`i18n.py`](src/patient_feedback/i18n.py). To add a
+  headings) is in [`i18n.py`](src/public_feedback/i18n.py). To add a
   language (say Malayalam), add it to `KNOWN_LANGUAGES` there with its
   strings, then list it in the `LANGUAGES` setting; the admin then shows a
   box for it on every question. Missing text falls back to English.
   `manage.py check` warns about codes in `LANGUAGES` without screen text.
 - **Needs a native speaker's check:** Kannada marked `# review` in
-  `i18n.py` and [`seed.py`](src/patient_feedback/seed.py). That covers most
+  `i18n.py` and [`seed.py`](src/public_feedback/seed.py). That covers most
   of the inpatient form, the waiting-time labels, the form titles, and the
   kiosk-specific messages (scanner, keypad, idle warning, errors). The OPD
   questions use the Kannada from the original design.
@@ -300,19 +349,20 @@ table and JSON column, the API responses, and how to add a language or a
 question type.
 
 ```
-src/patient_feedback/
+src/public_feedback/
 ├── views.py          # the public pages: chooser, questionnaire (GET + one POST), thank you
-├── pages.py          # page URLs under /facility/<id>/ (patient_feedback/, type/<form>/patient_feedback/)
-├── urls.py, api.py   # staff API, mounted by Care at /api/patient_feedback/
+├── pages.py          # page URLs under /facility/<id>/ (public_feedback/, type/<form>/public_feedback/)
+├── urls.py, api.py   # staff API, mounted by Care at /api/public_feedback/
+├── questions.py      # the questions JSON: fields, defaults, validation
 ├── questionnaire.py  # a configured form → steps; answer parsing and labels
 ├── services.py       # UHID format, collecting answers, saving submissions
 ├── steps.py          # the steps on the server (without JavaScript); mirrors kiosk.js
-├── seed.py           # default OPD / inpatient forms (NQAS format)
+├── seed.py           # default OPD / inpatient forms (NQAS format), as questions JSON
 ├── i18n.py           # UI strings and the languages they exist in
 ├── checks.py         # `manage.py check` warnings for the language settings
 ├── models.py, admin.py, settings.py
-├── templates/patient_feedback/   # form.html + steps/, choose, done, empty
-├── static/patient_feedback/      # kiosk.css, kiosk.js
+├── templates/public_feedback/   # form.html + steps/, choose, done, empty
+├── static/public_feedback/      # kiosk.css, kiosk.js
 └── tests/            # Django tests (pages, API, admin)
 e2e/                  # Playwright tests in a real browser
 ```
@@ -322,7 +372,7 @@ e2e/                  # Playwright tests in a real browser
 Run them from the Care checkout with the plugin installed:
 
 ```bash
-python manage.py test patient_feedback --keepdb
+python manage.py test public_feedback --keepdb
 ```
 
 They use the plugin's default settings, whatever `plug_config.py` sets.
