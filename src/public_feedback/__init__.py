@@ -1,4 +1,4 @@
-"""Top-level package for care_public_feedback."""
+"""The public_feedback Django app of the care_publicforms plugin."""
 
 __author__ = """Open Healthcare Network"""
 __email__ = "support@ohc.network"

@@ -1,4 +1,4 @@
-# care_public_feedback
+# care_publicforms
 
 **Public feedback** is a [Care](https://github.com/ohcnetwork/care) plugin
 that runs **patient satisfaction surveys (OPD and inpatient) on touch-screen
@@ -88,6 +88,10 @@ validation) and the database tables, see
 
 ## Installation
 
+The repository and Python package are `care_publicforms`. The Django app
+inside is `public_feedback`, so that is the plug's `name`, and it also names
+the URLs, the tables and the `configs` key.
+
 ### Production
 
 Add the plug to [`plug_config.py`](https://github.com/ohcnetwork/care/blob/develop/plug_config.py) in Care:
@@ -95,7 +99,7 @@ Add the plug to [`plug_config.py`](https://github.com/ohcnetwork/care/blob/devel
 ```python
 public_feedback_plug = Plug(
     name="public_feedback",
-    package_name="git+https://github.com/ohcnetwork/care_public_feedback.git",
+    package_name="git+https://github.com/egovhealthcare/care_publicforms.git",
     version="@main",
     configs={},  # see Settings below
 )
@@ -108,11 +112,11 @@ Then rebuild the image and run migrations. Care's start scripts run
 ### Local development (Care in Docker)
 
 1. Put the plugin inside the Care checkout so it is mounted into the
-   container at `/app/care_public_feedback`:
+   container at `/app/care_publicforms`:
 
    ```bash
    cd care
-   git clone <this repo> care_public_feedback
+   git clone https://github.com/egovhealthcare/care_publicforms.git
    ```
 
 2. Register it in `plug_config.py`:
@@ -120,7 +124,7 @@ Then rebuild the image and run migrations. Care's start scripts run
    ```python
    public_feedback_plug = Plug(
        name="public_feedback",
-       package_name="/app/care_public_feedback",
+       package_name="/app/care_publicforms",
        version="",  # empty for a local path
        configs={},
    )

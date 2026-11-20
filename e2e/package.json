@@ -1,5 +1,5 @@
 {
-  "name": "care-patient-feedback-e2e",
+  "name": "care-publicforms-e2e",
   "private": true,
   "description": "Playwright end-to-end tests for the patient feedback pages",
   "scripts": {

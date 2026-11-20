@@ -1,5 +1,5 @@
 [project]
-name = "public_feedback"
+name = "care_publicforms"
 version = "0.1.0"
 description = "Public feedback: a Care plugin that serves server-rendered patient satisfaction surveys (OPD and inpatient) on touch-screen TV kiosks"
 readme = "README.md"
@@ -17,7 +17,7 @@ test = [
 ]
 
 [project.urls]
-homepage = "https://github.com/ohcnetwork/care_public_feedback"
+homepage = "https://github.com/egovhealthcare/care_publicforms"
 
 [build-system]
 requires = ["setuptools>=64"]
