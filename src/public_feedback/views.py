@@ -158,6 +158,8 @@ class FeedbackPage(View):
                     "code": code,
                     "label": meta["toggle"],
                     "name": meta["name"],
+                    "font": meta["font"],
+                    "tall_script": meta["tall_script"],
                     "active": code == lang,
                     "url": self.language_link(code),
                 }

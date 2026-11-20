@@ -11,19 +11,11 @@ from datetime import date
 from django.db.models import Q
 from django.utils import timezone
 
+from public_feedback.i18n import default_rating_labels
 from public_feedback.models import Audience, FeedbackForm, QuestionType
 from public_feedback.questions import parse_questions
 
-NO_COMMENT = 0
-# Default labels for ratings; a question can override 1–5 with its own.
-SCALE = {
-    5: {"en": "Excellent", "kn": "ಅತ್ಯುತ್ತಮ"},
-    4: {"en": "Very good", "kn": "ತುಂಬಾ ಚೆನ್ನಾಗಿದೆ"},
-    3: {"en": "Good", "kn": "ಚೆನ್ನಾಗಿದೆ"},
-    2: {"en": "Fair", "kn": "ಸಾಧಾರಣ"},
-    1: {"en": "Poor", "kn": "ಕಳಪೆ"},
-    NO_COMMENT: {"en": "No comments", "kn": "ಪ್ರತಿಕ್ರಿಯೆ ಇಲ್ಲ"},
-}
+NO_COMMENT = 0  # the "No comments" rating; default rating labels are in the locale files
 
 
 def asked_on_open_step(question) -> bool:
@@ -105,12 +97,13 @@ class FormSpec:
 
 def rating_labels(question) -> dict:
     """{value: {"en": ..., ...}} for 5 → 1, then "No comments" if offered."""
-    labels = {value: SCALE[value] for value in (5, 4, 3, 2, 1)}
+    defaults = default_rating_labels()  # from the locale files
+    labels = {value: defaults[value] for value in (5, 4, 3, 2, 1)}
     if question.options and len(question.options) == 5:
         # options run Poor → Excellent, i.e. 1 → 5
         labels = {value: question.options[value - 1] for value in (5, 4, 3, 2, 1)}
     if question.allow_no_comment:
-        labels[NO_COMMENT] = SCALE[NO_COMMENT]
+        labels[NO_COMMENT] = defaults[NO_COMMENT]
     return labels
 
 

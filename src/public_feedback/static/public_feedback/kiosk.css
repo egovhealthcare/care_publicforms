@@ -92,7 +92,6 @@ body{
   /* Kiosk: no accidental text selection or long-press menus */
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
 }
-html[lang="kn"] body{font-family:'Noto Sans Kannada','Figtree',ui-sans-serif,system-ui,Arial,sans-serif}
 input,textarea{-webkit-user-select:text;user-select:text}
 button,input,textarea,select{font-family:inherit;margin:0}
 button.opt,button.idstrip{font:inherit;cursor:pointer;-webkit-appearance:none;appearance:none}
@@ -158,8 +157,8 @@ fieldset.group > legend{display:block;width:100%;padding:0;float:none}
 }
 .langbtn + .langbtn{margin-left:.125rem}
 button.langbtn{border:0;font-family:inherit;line-height:inherit;cursor:pointer;-webkit-appearance:none;appearance:none}
-.langbtn--en{min-width:2.75rem;font-size:.8125rem}
-.langbtn--kn{min-width:3.5rem;font-size:.875rem;font-family:'Noto Sans Kannada','Figtree',sans-serif}
+.langbtn{min-width:2.75rem;font-size:.875rem;white-space:nowrap}
+/* Each language's font and script rules are generated from its locale file (base.html). */
 .langbtn.is-on{background:var(--background);color:var(--foreground);box-shadow:var(--shadow-sm)}
 
 .hdr-nav{order:3;flex:0 0 100%;display:flex;align-items:center;padding-top:.75rem}
@@ -230,12 +229,6 @@ button.langbtn{border:0;font-family:inherit;line-height:inherit;cursor:pointer;-
 .has-error .ynbtn,
 .qcard.has-error .rate{border-color:var(--destructive-border)}
 .has-error .ta:not([data-comment]){border-color:#F87171}
-html[lang="kn"] .kicker,
-html[lang="kn"] .idstrip-kicker{letter-spacing:normal;text-transform:none}
-html[lang="kn"] .h2,
-html[lang="kn"] .hero-title,
-html[lang="kn"] .qtitle,
-html[lang="kn"] .done-title{line-height:1.45;letter-spacing:normal}
 
 /* ── UHID pill above the questions ──────────────────────────────── */
 .idstrip{

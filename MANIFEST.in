@@ -5,3 +5,4 @@ recursive-exclude * *.py[co]
 
 recursive-include src/public_feedback/templates *
 recursive-include src/public_feedback/static *
+recursive-include src/public_feedback/locale *.json

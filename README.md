@@ -310,7 +310,8 @@ Set in the plug's `configs={}` or as environment variables:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `LANGUAGES` | `["en", "kn"]` | Languages in the header toggle, in order (env: `LANGUAGES=en,kn`). Each needs its screen text in `i18n.py`; built in: `en`, `kn`. With one language the toggle is hidden. The admin shows a text box for English and each of these. |
+| `LANGUAGES` | `["en", "kn"]` | Languages in the header toggle, in order (env: `LANGUAGES=en,kn`). Each needs a locale file (see [Translations](#translations)); built in: `en`, `kn`. With one language the toggle is hidden. The admin shows a text box for English and each of these. |
+| `LOCALE_DIRS` | `[]` | Extra folders of locale files (`<code>.json`), read after the plugin's own: add a language or correct strings without changing the plugin. Restart after editing them. |
 | `DEFAULT_LANGUAGE` | `"en"` | Starting language, one of `LANGUAGES` (otherwise the first); a screen can override it with `?lang=`. |
 | `SCAN_MODE` | `"camera"` | `camera`, `scanner` or `off`; a screen can override it with `?scan=`. |
 | `SHOW_KEYPAD` | `True` | On-screen UHID keypad; a screen can override it with `?keypad=`. |
@@ -333,17 +334,48 @@ plugin's limit off; Care's `DISABLE_RATELIMIT` turns off all limits.
 
 ## Translations
 
-- Question text is edited per language in the admin. Screen text (buttons,
-  headings) is in [`i18n.py`](src/public_feedback/i18n.py). To add a
-  language (say Malayalam), add it to `KNOWN_LANGUAGES` there with its
-  strings, then list it in the `LANGUAGES` setting; the admin then shows a
-  box for it on every question. Missing text falls back to English.
-  `manage.py check` warns about codes in `LANGUAGES` without screen text.
-- **Needs a native speaker's check:** Kannada marked `# review` in
-  `i18n.py` and [`seed.py`](src/public_feedback/seed.py). That covers most
-  of the inpatient form, the waiting-time labels, the form titles, and the
-  kiosk-specific messages (scanner, keypad, idle warning, errors). The OPD
-  questions use the Kannada from the original design.
+Question text is edited per language in the admin. **Screen text** (buttons,
+headings, messages, default rating labels) is **one JSON file per language**
+in [`src/public_feedback/locale/`](src/public_feedback/locale): `en.json`,
+`kn.json`.
+
+```json
+{
+  "language": {"name": "Kannada", "toggle": "ಕನ್ನಡ", "font": "Noto Sans Kannada", "tall_script": true},
+  "strings": {"back": "ಹಿಂದೆ", "next": "ಮುಂದೆ", "…": "…"},
+  "ratings": {"5": "ಅತ್ಯುತ್ತಮ", "4": "…", "3": "…", "2": "…", "1": "…", "0": "ಪ್ರತಿಕ್ರಿಯೆ ಇಲ್ಲ"}
+}
+```
+
+| Part | Meaning |
+| --- | --- |
+| `language.name` | For screen readers and the admin's text boxes |
+| `language.toggle` | The header button, in the language itself |
+| `language.font` | A Google Fonts family for the script, loaded and applied automatically (`null`: Figtree covers it) |
+| `language.tall_script` | `true` for scripts with tall letters and no capitals (Kannada, Malayalam, …): small labels aren't uppercased and headings get more line height |
+| `strings` | The screen text by key, as in `en.json`. Keep placeholders such as `{n}` exactly |
+| `ratings` | Default rating labels: 5 (Excellent) → 1 (Poor), and 0 (No comments) |
+
+**To add a language** (e.g. Malayalam):
+
+1. Copy `en.json` to `ml.json` and translate the values; set `language`
+   (`"name": "Malayalam", "toggle": "മലയാളം", "font": "Noto Sans Malayalam",
+   "tall_script": true`). Anything left out shows in English.
+2. Add `"ml"` to the `LANGUAGES` setting and restart.
+3. Translate the forms in the admin: Malayalam boxes appear for titles and
+   descriptions; in the questions JSON add `"ml"` next to `"en"`.
+
+The file can go in the plugin's `locale/` folder (shipped to everyone) or in a
+folder listed in `LOCALE_DIRS` (one deployment only, no plugin change). A
+`LOCALE_DIRS` file for a built-in language corrects just the strings it
+contains. `manage.py check` reports unreadable files, untranslated strings,
+placeholders that differ from English (those strings show in English rather
+than break the page), and unknown keys.
+
+**Needs a native speaker's check:** all of `kn.json`, and the Kannada in
+[`seed.py`](src/public_feedback/seed.py) marked `# review` (most of the
+inpatient form, the waiting-time labels and the form titles). The OPD
+questions use the Kannada from the original design.
 
 ## Development
 
@@ -361,7 +393,8 @@ src/public_feedback/
 ├── services.py       # UHID format, collecting answers, saving submissions
 ├── steps.py          # the steps on the server (without JavaScript); mirrors kiosk.js
 ├── seed.py           # default OPD / inpatient forms (NQAS format), as questions JSON
-├── i18n.py           # UI strings and the languages they exist in
+├── i18n.py           # loads the locale files; translate(), languages
+├── locale/           # screen text, one JSON file per language (en.json, kn.json)
 ├── checks.py         # `manage.py check` warnings for the language settings
 ├── models.py, admin.py, settings.py
 ├── templates/public_feedback/   # form.html + steps/, choose, done, empty

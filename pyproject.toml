@@ -27,7 +27,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-public_feedback = ["templates/**/*", "static/**/*"]
+public_feedback = ["templates/**/*", "static/**/*", "locale/*.json"]
 
 [tool.ruff]
 line-length = 120

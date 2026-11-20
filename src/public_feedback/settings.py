@@ -86,9 +86,13 @@ class PluginSettings:  # pragma: no cover
 REQUIRED_SETTINGS = set()
 
 DEFAULTS = {
-    # Languages offered in the header toggle, in order. Each needs its screen
-    # text in i18n.py (built in: "en", "kn"); one language hides the toggle.
+    # Languages offered in the header toggle, in order. Each needs a locale
+    # file, <code>.json (built in: "en", "kn"); one language hides the toggle.
     "LANGUAGES": ["en", "kn"],
+    # Extra folders of locale files (<code>.json, see i18n.py), read after the
+    # plugin's own: add a language, or correct strings of a built-in one,
+    # without changing the plugin. Restart after editing the files.
+    "LOCALE_DIRS": [],
     # Language a new patient starts in; one of LANGUAGES (else the first).
     # A screen can start in another one with ?lang=kn in its URL.
     "DEFAULT_LANGUAGE": "en",

@@ -1,172 +1,130 @@
 """
-Screen text for the feedback pages, keyed by language code.
+Screen text for the feedback pages: one JSON file per language.
+
+The plugin's languages are in ``locale/<code>.json`` (``en.json``,
+``kn.json``). A deployment can add a language, or correct one, with its own
+files in the folders listed in the ``LOCALE_DIRS`` setting; their strings are
+merged over the plugin's. A file looks like::
+
+    {
+      "language": {"name": "Kannada", "toggle": "ಕನ್ನಡ",
+                   "font": "Noto Sans Kannada", "tall_script": true},
+      "strings": {"back": "ಹಿಂದೆ", "next": "ಮುಂದೆ", …},
+      "ratings": {"5": "ಅತ್ಯುತ್ತಮ", "4": "…", "3": "…", "2": "…", "1": "…", "0": "ಪ್ರತಿಕ್ರಿಯೆ ಇಲ್ಲ"}
+    }
+
+``language``: ``name`` for screen readers and the admin; ``toggle`` the header
+button; ``font`` a Google Fonts family for the script (null: Figtree covers
+it); ``tall_script`` for scripts with tall letters and no capitals (Kannada,
+Malayalam, …): small labels aren't uppercased and headings get more line
+height. ``strings``: the screen text by key, as in ``en.json``; placeholders
+such as ``{n}`` must be kept. ``ratings``: the default rating labels, 5 → 1
+and 0 ("No comments"). Missing text falls back to English.
 
 Every page carries its text in all offered languages, so switching language
-in the browser is instant. Which languages are offered, and in what order, is
-the LANGUAGES setting; it can use any language listed in ``KNOWN_LANGUAGES``.
-To add one, add it there and give its strings below (missing strings fall
-back to English), then translate the questions in the admin.
-
-Strings marked ``# review`` were added for the kiosk build (they are not in
-the original design file) and need a native-speaker check.
+is instant. Which languages are offered, and in what order, is the LANGUAGES
+setting. ``manage.py check`` reports problems in the files (checks.py).
 """
 
+import json
+import string
 from functools import lru_cache
+from pathlib import Path
 
 # Questions and screen text must exist in English; other languages fall back to it.
 BASE_LANGUAGE = "en"
+LOCALE_DIR = Path(__file__).resolve().parent / "locale"
+RATING_VALUES = (5, 4, 3, 2, 1, 0)
 
-# toggle: the header button; name: for screen readers and the admin;
-# font: Google Fonts family loaded for the script (None: Figtree covers it).
-KNOWN_LANGUAGES = {
-    "en": {"toggle": "EN", "name": "English", "font": None},
-    "kn": {"toggle": "ಕನ್ನಡ", "name": "Kannada", "font": "Noto Sans Kannada"},
-}
+
+# ── Loading the files ─────────────────────────────────────────────────
+def locale_dirs() -> tuple[Path, ...]:
+    """The plugin's locale folder, then the LOCALE_DIRS setting's, in order."""
+    from public_feedback.settings import plugin_settings
+
+    return _dirs(tuple(plugin_settings.LOCALE_DIRS or ()))
+
+
+@lru_cache(maxsize=8)
+def _dirs(configured: tuple) -> tuple[Path, ...]:
+    return (LOCALE_DIR, *(Path(folder) for folder in configured))
+
+
+@lru_cache(maxsize=8)
+def _load(dirs: tuple[Path, ...]) -> tuple[dict, tuple[str, ...]]:
+    """
+    ``(catalog, problems)``. The catalog maps a language code to its merged
+    ``language``, ``strings``, ``ratings`` and the ``files`` read;
+    problems are files that couldn't be read. Cached: restart after editing.
+    """
+    catalog, problems = {}, []
+    for folder in dirs:
+        if not folder.is_dir():
+            problems.append(f"{folder}: not a folder")
+            continue
+        for path in sorted(folder.glob("*.json")):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(data, dict):
+                    raise ValueError("not a JSON object")
+            except (OSError, ValueError) as error:
+                problems.append(f"{path}: {error}")
+                continue
+            entry = catalog.setdefault(path.stem, {"language": {}, "strings": {}, "ratings": {}, "files": []})
+            for part in ("language", "strings", "ratings"):
+                if isinstance(data.get(part), dict):
+                    entry[part].update(data[part])
+            entry["files"].append(str(path))
+    return catalog, tuple(problems)
+
+
+def catalog() -> dict:
+    """Every language with a locale file: ``{code: {"language", "strings", "ratings", …}}``."""
+    return _load(locale_dirs())[0]
+
+
+def load_problems() -> tuple[str, ...]:
+    return _load(locale_dirs())[1]
+
+
+# ── Languages ─────────────────────────────────────────────────────────
+def known_languages() -> dict:
+    """``{code: {"name", "toggle", "font", "tall_script"}}`` for every language with a file."""
+    return _known(locale_dirs())
+
+
+@lru_cache(maxsize=8)
+def _known(dirs: tuple[Path, ...]) -> dict:
+    known = {}
+    for code, entry in _load(dirs)[0].items():
+        meta = entry["language"]
+        known[code] = {
+            "name": meta.get("name") or code,
+            "toggle": meta.get("toggle") or code.upper(),
+            "font": meta.get("font") or None,
+            "tall_script": bool(meta.get("tall_script")),
+        }
+    return known
 
 
 def languages() -> dict:
     """The offered languages (the LANGUAGES setting), in order; English if none is usable."""
     from public_feedback.settings import plugin_settings
 
-    return _offered(tuple(plugin_settings.LANGUAGES or ()))
+    return _offered(tuple(plugin_settings.LANGUAGES or ()), locale_dirs())
 
 
-@lru_cache(maxsize=8)
-def _offered(configured: tuple) -> dict:
-    # Called for every string on a page, so built once per LANGUAGES value. Don't mutate the result.
-    codes = [code for code in configured if code in KNOWN_LANGUAGES]
-    return {code: KNOWN_LANGUAGES[code] for code in dict.fromkeys(codes or [BASE_LANGUAGE])}
+@lru_cache(maxsize=16)
+def _offered(configured: tuple, dirs: tuple[Path, ...]) -> dict:
+    # Called for every string on a page, so built once per setting. Don't mutate the result.
+    known = _known(dirs)
+    codes = [code for code in configured if code in known]
+    return {code: known[code] for code in dict.fromkeys(codes or [BASE_LANGUAGE])}
 
 
 def admin_languages() -> dict:
     """Languages with a text box in the admin: English (required) and the offered ones."""
-    return {BASE_LANGUAGE: KNOWN_LANGUAGES[BASE_LANGUAGE], **languages()}
-
-
-STRINGS = {
-    # ── Chrome ──────────────────────────────────────────────────────
-    "kicker": {"en": "Patient feedback", "kn": "ರೋಗಿಯ ಅಭಿಪ್ರಾಯ"},  # review
-    "nav_home": {"en": "Home", "kn": "ಮುಖಪುಟ"},
-    "nav_reset": {"en": "Reset", "kn": "ಮರುಹೊಂದಿಸಿ"},
-    "change": {"en": "Change", "kn": "ಬದಲಿಸಿ"},
-    "back": {"en": "Back", "kn": "ಹಿಂದೆ"},
-    "next": {"en": "Next", "kn": "ಮುಂದೆ"},
-    "footer_note": {
-        "en": "Confidential · Used only to improve services",
-        "kn": "ಗೌಪ್ಯ · ಸೇವೆ ಸುಧಾರಿಸಲು ಮಾತ್ರ ಬಳಕೆ",
-    },
-    # ── Identify ────────────────────────────────────────────────────
-    "hero_title": {"en": "Tell us about your visit today.", "kn": "ಇಂದಿನ ನಿಮ್ಮ ಭೇಟಿಯ ಬಗ್ಗೆ ತಿಳಿಸಿ."},
-    "hero_lead": {  # review (kn, with numbers)
-        "en": "{n} short questions, about {m} minutes. Your answers stay confidential "
-        "and are used only to improve our services.",
-        "kn": "{n} ಸಣ್ಣ ಪ್ರಶ್ನೆಗಳು, ಸುಮಾರು {m} ನಿಮಿಷ. ನಿಮ್ಮ ಉತ್ತರಗಳು ಗೌಪ್ಯವಾಗಿರುತ್ತವೆ ಮತ್ತು ಸೇವೆ ಸುಧಾರಿಸಲು ಮಾತ್ರ ಬಳಸಲಾಗುತ್ತದೆ.",
-    },
-    "privacy_lead": {
-        "en": "Your answers stay confidential and are used only to improve our services.",
-        "kn": "ನಿಮ್ಮ ಉತ್ತರಗಳು ಗೌಪ್ಯವಾಗಿರುತ್ತವೆ ಮತ್ತು ಸೇವೆ ಸುಧಾರಿಸಲು ಮಾತ್ರ ಬಳಸಲಾಗುತ್ತದೆ.",
-    },
-    "step_choose": {  # review
-        "en": "Step 1 — What is your feedback about?",
-        "kn": "ಹಂತ 1 — ನಿಮ್ಮ ಅಭಿಪ್ರಾಯ ಯಾವುದರ ಬಗ್ಗೆ?",
-    },
-    "step_identify": {"en": "Step {n} — Identify yourself", "kn": "ಹಂತ {n} — ನಿಮ್ಮನ್ನು ಗುರುತಿಸಿ"},
-    "opt_scan_title": {"en": "Scan the QR on your OP slip", "kn": "ನಿಮ್ಮ ಒಪಿ ಚೀಟಿಯ QR ಸ್ಕ್ಯಾನ್ ಮಾಡಿ"},
-    "opt_scan_sub": {"en": "Fastest — nothing to type", "kn": "ಅತಿ ವೇಗ — ಟೈಪ್ ಮಾಡಬೇಕಿಲ್ಲ"},
-    "opt_manual_title": {"en": "Enter UHID manually", "kn": "UHID ಕೈಯಿಂದ ನಮೂದಿಸಿ"},
-    "opt_manual_sub": {"en": "Printed at the top of your slip", "kn": "ಚೀಟಿಯ ಮೇಲ್ಭಾಗದಲ್ಲಿ ಮುದ್ರಿತವಾಗಿದೆ"},
-    "or": {"en": "or", "kn": "ಅಥವಾ"},
-    "opt_guest_title": {"en": "Continue as guest", "kn": "ಅತಿಥಿಯಾಗಿ ಮುಂದುವರಿಯಿರಿ"},
-    "opt_guest_sub": {"en": "No UHID needed. Stays anonymous.", "kn": "UHID ಬೇಕಿಲ್ಲ. ಅನಾಮಧೇಯವಾಗಿರುತ್ತದೆ."},
-    # ── Scan ────────────────────────────────────────────────────────
-    "scan_heading": {"en": "Point at the QR code", "kn": "QR ಕೋಡ್‌ನ ಕಡೆಗೆ ಹಿಡಿಯಿರಿ"},
-    "scanner_heading": {  # review
-        "en": "Hold your QR code under the scanner",
-        "kn": "QR ಕೋಡ್ ಅನ್ನು ಸ್ಕ್ಯಾನರ್ ಕೆಳಗೆ ಹಿಡಿಯಿರಿ",
-    },
-    "scanner_lead": {  # review
-        "en": "Hold the QR code on your OP slip under the scanner light. It reads automatically.",
-        "kn": "ನಿಮ್ಮ ಒಪಿ ಚೀಟಿಯ QR ಕೋಡ್ ಅನ್ನು ಸ್ಕ್ಯಾನರ್ ಬೆಳಕಿನ ಕೆಳಗೆ ಹಿಡಿಯಿರಿ. ಅದು ತಾನಾಗಿಯೇ ಓದುತ್ತದೆ.",
-    },
-    "scan_unreadable": {  # review
-        "en": "We couldn't read a UHID from that code. Try again or enter it manually.",
-        "kn": "ಆ ಕೋಡ್‌ನಿಂದ UHID ಓದಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ ಅಥವಾ ಕೈಯಿಂದ ನಮೂದಿಸಿ.",
-    },
-    "scan_to_manual": {"en": "Enter UHID instead", "kn": "ಬದಲಿಗೆ UHID ನಮೂದಿಸಿ"},
-    # ── Manual UHID ─────────────────────────────────────────────────
-    "uhid_heading": {"en": "Your UHID", "kn": "ನಿಮ್ಮ UHID"},
-    "uhid_lead": {
-        "en": "The {n}-digit number printed on your OP slip or hospital card.",
-        "kn": "ನಿಮ್ಮ ಒಪಿ ಚೀಟಿ ಅಥವಾ ಆಸ್ಪತ್ರೆ ಕಾರ್ಡ್‌ನಲ್ಲಿ ಮುದ್ರಿತವಾದ {n} ಅಂಕಿಗಳ ಸಂಖ್ಯೆ.",
-    },
-    "uhid_label": {"en": "UHID, {n} digits", "kn": "UHID, {n} ಅಂಕಿಗಳು"},
-    "uhid_error_length": {
-        "en": "Enter all {n} digits of your UHID.",
-        "kn": "ನಿಮ್ಮ UHID ನ ಎಲ್ಲಾ {n} ಅಂಕಿಗಳನ್ನು ನಮೂದಿಸಿ.",
-    },
-    "continue": {"en": "Continue", "kn": "ಮುಂದುವರಿಯಿರಿ"},
-    "no_uhid": {
-        "en": "I don't have a UHID — continue as guest",
-        "kn": "ನನಗೆ UHID ಇಲ್ಲ — ಅತಿಥಿಯಾಗಿ ಮುಂದುವರಿಯಿರಿ",
-    },
-    "keypad_clear": {"en": "Clear", "kn": "ತೆರವುಗೊಳಿಸಿ"},  # review
-    "keypad_delete": {"en": "Delete last digit", "kn": "ಕೊನೆಯ ಅಂಕಿ ಅಳಿಸಿ"},  # review
-    # ── Details ─────────────────────────────────────────────────────
-    "details_heading": {"en": "A few quick details", "kn": "ಕೆಲವು ಸಣ್ಣ ವಿವರಗಳು"},  # review
-    "details_lead_guest": {
-        "en": "No name, no number. This only helps us group feedback by department.",
-        "kn": "ಹೆಸರು ಇಲ್ಲ, ಸಂಖ್ಯೆ ಇಲ್ಲ. ವಿಭಾಗವಾರು ಪ್ರತಿಕ್ರಿಯೆ ವರ್ಗೀಕರಿಸಲು ಮಾತ್ರ ಇದು ಸಹಾಯ ಮಾಡುತ್ತದೆ.",
-    },
-    "details_lead": {
-        "en": "This only helps us group feedback by department.",
-        "kn": "ವಿಭಾಗವಾರು ಪ್ರತಿಕ್ರಿಯೆ ವರ್ಗೀಕರಿಸಲು ಮಾತ್ರ ಇದು ಸಹಾಯ ಮಾಡುತ್ತದೆ.",
-    },
-    "start_questions": {"en": "Start the questions", "kn": "ಪ್ರಶ್ನೆಗಳನ್ನು ಪ್ರಾರಂಭಿಸಿ"},
-    "required_error": {"en": "This question needs an answer.", "kn": "ಈ ಪ್ರಶ್ನೆಗೆ ಉತ್ತರ ಅಗತ್ಯವಿದೆ."},  # review
-    "date_error": {"en": "Choose today or an earlier date.", "kn": "ಇಂದಿನ ಅಥವಾ ಹಿಂದಿನ ದಿನಾಂಕವನ್ನು ಆಯ್ಕೆಮಾಡಿ."},  # review
-    "error_summary": {  # review
-        "en": "Please answer the questions marked below.",
-        "kn": "ಕೆಳಗೆ ಗುರುತಿಸಿದ ಪ್ರಶ್ನೆಗಳಿಗೆ ಉತ್ತರಿಸಿ.",
-    },
-    "too_many": {  # review
-        "en": "Too many responses from this screen just now. Please wait a minute and try again.",
-        "kn": "ಈ ಪರದೆಯಿಂದ ಇದೀಗ ಹೆಚ್ಚು ಪ್ರತಿಕ್ರಿಯೆಗಳು ಬಂದಿವೆ. ಒಂದು ನಿಮಿಷ ಕಾದು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    },
-    "optional": {"en": "optional", "kn": "ಐಚ್ಛಿಕ"},
-    # ── Rating ──────────────────────────────────────────────────────
-    "question_counter": {"en": "Question {n} of {total}", "kn": "ಪ್ರಶ್ನೆ {n} / {total}"},
-    # ── Open-ended ──────────────────────────────────────────────────
-    "open_kicker": {"en": "In your own words", "kn": "ನಿಮ್ಮ ಮಾತಿನಲ್ಲಿ"},
-    "open_heading": {"en": "Last {n} — all optional.", "kn": "ಕೊನೆಯ {n} — ಎಲ್ಲವೂ ಐಚ್ಛಿಕ."},  # review (kn, number)
-    "open_heading_required": {"en": "Last {n} questions.", "kn": "ಕೊನೆಯ {n} ಪ್ರಶ್ನೆಗಳು."},  # review
-    "open_why": {"en": "Why? (optional)", "kn": "ಏಕೆ? (ಐಚ್ಛಿಕ)"},
-    "review_answers": {"en": "Review answers", "kn": "ಉತ್ತರ ಪರಿಶೀಲಿಸಿ"},
-    # ── Review ──────────────────────────────────────────────────────
-    "review_heading": {"en": "Before you send", "kn": "ಕಳುಹಿಸುವ ಮೊದಲು"},
-    "review_lead": {"en": "Tap any line to change it.", "kn": "ಬದಲಾಯಿಸಲು ಯಾವುದೇ ಸಾಲನ್ನು ಒತ್ತಿ."},
-    "not_answered": {"en": "Not answered", "kn": "ಉತ್ತರಿಸಿಲ್ಲ"},
-    "review_note": {
-        "en": "Your feedback is stored without your name attached to the ratings. "
-        "It is reviewed monthly by the hospital's quality team.",
-        "kn": "ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಹೆಸರಿಲ್ಲದೆ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ. ಆಸ್ಪತ್ರೆಯ ಗುಣಮಟ್ಟ ತಂಡ ಪ್ರತಿ ತಿಂಗಳು ಇದನ್ನು ಪರಿಶೀಲಿಸುತ್ತದೆ.",
-    },
-    "submit": {"en": "Submit feedback", "kn": "ಪ್ರತಿಕ್ರಿಯೆ ಸಲ್ಲಿಸಿ"},
-    # ── Done ────────────────────────────────────────────────────────
-    "done_title": {"en": "Thank you.", "kn": "ಧನ್ಯವಾದಗಳು."},
-    "done_lead": {
-        "en": "Your feedback has been recorded. Keep this reference number if you need "
-        "to follow up at the May I Help You desk.",
-        "kn": "ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ದಾಖಲಾಗಿದೆ. ಮುಂದೆ ವಿಚಾರಿಸಬೇಕಾದರೆ ಈ ಉಲ್ಲೇಖ ಸಂಖ್ಯೆಯನ್ನು ಇಟ್ಟುಕೊಳ್ಳಿ.",
-    },
-    "reference_number": {"en": "Reference number", "kn": "ಉಲ್ಲೇಖ ಸಂಖ್ಯೆ"},
-    "restart": {"en": "Submit another response", "kn": "ಇನ್ನೊಂದು ಪ್ರತಿಕ್ರಿಯೆ ಸಲ್ಲಿಸಿ"},
-    # ── Idle warning ────────────────────────────────────────────────
-    "idle_title": {"en": "Are you still there?", "kn": "ನೀವು ಇನ್ನೂ ಇದ್ದೀರಾ?"},  # review
-    "idle_body": {  # review
-        "en": "Tap anywhere to continue. Starting over in {n} seconds.",
-        "kn": "ಮುಂದುವರಿಯಲು ಎಲ್ಲಿಯಾದರೂ ಒತ್ತಿ. {n} ಸೆಕೆಂಡುಗಳಲ್ಲಿ ಮತ್ತೆ ಪ್ರಾರಂಭವಾಗುತ್ತದೆ.",
-    },
-}
+    return {BASE_LANGUAGE: known_languages()[BASE_LANGUAGE], **languages()}
 
 
 def normalize_language(code: str | None, default: str | None = None) -> str:
@@ -178,6 +136,7 @@ def normalize_language(code: str | None, default: str | None = None) -> str:
     return next(iter(offered))
 
 
+# ── Text ──────────────────────────────────────────────────────────────
 def localize(value, lang: str) -> str:
     """Pick ``lang`` from a ``{"en": ..., "kn": ...}`` mapping, falling back to English."""
     if isinstance(value, dict):
@@ -186,5 +145,44 @@ def localize(value, lang: str) -> str:
 
 
 def translate(key: str, lang: str, **params) -> str:
-    text = localize(STRINGS.get(key, {"en": key}), lang)
-    return text.format(**params) if params else text
+    """
+    The screen string ``key`` in ``lang``, with ``params`` filled in. Falls back
+    to English when the language lacks it, or when its placeholders don't
+    match (a translation typo must not break the page).
+    """
+    entries = catalog()
+    for code in dict.fromkeys((lang, BASE_LANGUAGE)):
+        text = entries.get(code, {}).get("strings", {}).get(key)
+        if not isinstance(text, str) or not text:
+            continue
+        if not params:
+            return text
+        try:
+            return text.format(**params)
+        except (KeyError, IndexError, ValueError):
+            continue
+    return key
+
+
+def placeholders(text: str) -> set[str]:
+    """The ``{name}`` placeholders in a string (empty if it can't be parsed)."""
+    try:
+        return {name for _, name, _, _ in string.Formatter().parse(text) if name is not None}
+    except ValueError:
+        return {"(unbalanced braces)"}
+
+
+def default_rating_labels() -> dict:
+    """``{value: {code: label}}`` for ratings 5 → 1 and 0 ("No comments"), from the locale files."""
+    return _rating_labels(locale_dirs())
+
+
+@lru_cache(maxsize=8)
+def _rating_labels(dirs: tuple[Path, ...]) -> dict:
+    entries = _load(dirs)[0]
+    return {
+        value: {
+            code: entry["ratings"][str(value)] for code, entry in entries.items() if entry["ratings"].get(str(value))
+        }
+        for value in RATING_VALUES
+    }
