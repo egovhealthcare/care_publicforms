@@ -390,3 +390,61 @@ def create_default_forms(form_model) -> list[str]:
         )
         created.append(definition["code"])
     return created
+
+
+# ── Adding a language to the forms ────────────────────────────────────
+# A language's questionnaire migration sets LANGUAGE (its code) and
+# TRANSLATIONS (English → text) and calls add_language_to_forms(); see
+# "Adding a language" in the README.
+def add_language(value, code: str, translations: dict) -> bool:
+    """
+    Add ``code`` text to every per-language object in ``value`` (a form's
+    title, description or questions) whose English is in ``translations``
+    (English → text) and that has no ``code`` text yet; existing text is never
+    changed. Returns whether anything was added.
+    """
+    added = False
+    if isinstance(value, dict):
+        english = value.get("en")
+        if isinstance(english, str) and not value.get(code) and english in translations:
+            value[code] = translations[english]
+            added = True
+        for item in value.values():
+            added = add_language(item, code, translations) or added
+    elif isinstance(value, list):
+        for item in value:
+            added = add_language(item, code, translations) or added
+    return added
+
+
+def add_language_to_forms(form_model, code: str, translations: dict) -> None:
+    """
+    Add a language to every form, for text that is still the English in
+    ``translations``. Text reworded in the admin, or already in that
+    language, is left as it is, so the migration is safe on any database.
+    """
+    for form in form_model.objects.all():
+        changed = [
+            field
+            for field in ("title", "description", "questions")
+            if add_language(getattr(form, field), code, translations)
+        ]
+        if changed:
+            form.save(update_fields=changed)
+
+
+def language_migrations() -> list[tuple[str, dict]]:
+    """``(code, translations)`` from every language's questionnaire migration, in migration order."""
+    import importlib
+    import pkgutil
+
+    from public_feedback import migrations
+
+    found = []
+    for module in sorted(info.name for info in pkgutil.iter_modules(migrations.__path__)):
+        migration = importlib.import_module(f"{migrations.__name__}.{module}")
+        if isinstance(getattr(migration, "LANGUAGE", None), str) and isinstance(
+            getattr(migration, "TRANSLATIONS", None), dict
+        ):
+            found.append((migration.LANGUAGE, migration.TRANSLATIONS))
+    return found

@@ -1,5 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
-import { activeCard, activeStep, expectStep, formUrl, needsFacility, pickDetail, reviewRow, shown } from "./helpers";
+import {
+  activeCard,
+  activeStep,
+  expectStep,
+  formUrl,
+  needsFacility,
+  otherLanguage,
+  pickDetail,
+  reviewRow,
+  shown,
+} from "./helpers";
 
 test.beforeEach(needsFacility);
 
@@ -90,12 +100,11 @@ test("without JavaScript a guest answers the guest details, and Back works", asy
 
 test("without JavaScript switching language keeps the answers", async ({ page }) => {
   await page.goto(formUrl("opd"));
-  const kannada = page.locator('[data-set-lang="kn"]');
-  test.skip((await kannada.count()) === 0, "Kannada is not in the backend's LANGUAGES");
+  const language = await otherLanguage(page);
   await page.getByRole("button", { name: /Continue as guest/ }).click();
   await pickDetail(page, "clinic", "ENT");
-  await kannada.click();
-  await expect(page.locator("html")).toHaveAttribute("data-lang", "kn");
+  await language.button.click();
+  await expect(page.locator("html")).toHaveAttribute("data-lang", language.code);
   await expectStep(page, "details");
   await expect(page.locator('input[name="clinic"][value="ent"]')).toBeChecked();
 });

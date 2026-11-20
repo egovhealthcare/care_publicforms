@@ -14,12 +14,12 @@ from public_feedback.checks import check_languages
 from public_feedback.models import Audience, FeedbackForm, FeedbackSubmission, QuestionType
 from public_feedback.questionnaire import FormSpec, applies
 from public_feedback.questions import question_errors
-from public_feedback.tests import PLAIN_STATIC_STORAGES, PLUGIN_DEFAULTS
+from public_feedback.tests import PLAIN_STATIC_STORAGES, TEST_LANGUAGE, TEST_PLUGIN_CONFIGS, plugin_configs
 
 UHID = "12345678901"
 
 
-@override_settings(STORAGES=PLAIN_STATIC_STORAGES, PLUGIN_CONFIGS=PLUGIN_DEFAULTS)
+@override_settings(STORAGES=PLAIN_STATIC_STORAGES, PLUGIN_CONFIGS=TEST_PLUGIN_CONFIGS)
 class PageTestBase(CareAPITestBase):
     def setUp(self):
         super().setUp()
@@ -106,7 +106,7 @@ class PublicPageTests(PageTestBase):
         for step in ("identify", "scan", "uhid", "details", "questions", "comments", "review"):
             self.assertContains(response, f'data-step="{step}"')
         self.assertContains(response, "data-card", count=len(FormSpec(self.opd).ratings))
-        self.assertContains(response, 'class="l10n l10n--kn"')
+        self.assertContains(response, f'class="l10n l10n--{TEST_LANGUAGE}"')
         self.assertContains(response, 'name="information_signage"')
         self.assertContains(response, 'data-audience="guest"')
         self.assertContains(response, f'data-home-url="{self.url("form", "opd")}"')
@@ -126,9 +126,9 @@ class PublicPageTests(PageTestBase):
         self.assertContains(pinned, f'class="navbtn navbtn--home" href="{self.url("form", "opd")}"')
 
     def test_screen_options_in_the_url(self):
-        response = self.client.get(self.url(lang="kn", scan="off", keypad="0"))
-        self.assertContains(response, 'data-lang="kn"')
-        link = self.url("form", "opd", lang="kn", scan="off", keypad="0", **{"from": "start"})
+        response = self.client.get(self.url(lang=TEST_LANGUAGE, scan="off", keypad="0"))
+        self.assertContains(response, f'data-lang="{TEST_LANGUAGE}"')
+        link = self.url("form", "opd", lang=TEST_LANGUAGE, scan="off", keypad="0", **{"from": "start"})
         self.assertContains(response, escape(link))
         page = self.client.get(self.url("form", "opd", scan="off", keypad="0"))
         self.assertNotContains(page, 'data-step="scan"')
@@ -146,7 +146,7 @@ class SubmitTests(PageTestBase):
     def test_identified_submission_keeps_only_what_is_needed(self):
         response = self.submit(
             uhid="123-4567-8901",
-            language="kn",
+            language=TEST_LANGUAGE,
             clinic="ent",
             age_group="18_30",  # guests only: ignored once a UHID is given
             would_return="yes",
@@ -157,13 +157,13 @@ class SubmitTests(PageTestBase):
         submission = FeedbackSubmission.objects.get()
         self.assertRedirects(
             response,
-            self.url("done", "opd", ref=submission.reference_number, language="kn"),
+            self.url("done", "opd", ref=submission.reference_number, language=TEST_LANGUAGE),
             fetch_redirect_response=False,
         )
         self.assertEqual(submission.uhid, UHID)
         self.assertEqual(
             (submission.facility_external_id, submission.form, submission.language),
-            (self.facility.external_id, self.opd, "kn"),
+            (self.facility.external_id, self.opd, TEST_LANGUAGE),
         )
         self.assertEqual(
             self.values(submission.answers),
@@ -280,7 +280,7 @@ class SubmitTests(PageTestBase):
         reference = FeedbackSubmission.objects.get().reference_number
         self.assertRegex(reference, rf"^OPD-{timezone.localdate():%Y%m%d}-\d{{4}}$")
 
-    @override_settings(PLUGIN_CONFIGS={"public_feedback": {"REFERENCE_PREFIX": "PF"}})
+    @override_settings(PLUGIN_CONFIGS=plugin_configs(REFERENCE_PREFIX="PF"))
     def test_reference_prefix_setting(self):
         self.submit("ipd", **self.answers(self.ipd, identified=False))
         self.assertTrue(FeedbackSubmission.objects.get().reference_number.startswith("PF-"))
@@ -316,7 +316,7 @@ class SubmitTests(PageTestBase):
         self.assertEqual(response.context["current_step"], "review")
         self.assertFalse(FeedbackSubmission.objects.exists())
 
-    @override_settings(DISABLE_RATELIMIT=False, PLUGIN_CONFIGS={"public_feedback": {"SUBMIT_RATE_LIMIT": ""}})
+    @override_settings(DISABLE_RATELIMIT=False, PLUGIN_CONFIGS=plugin_configs(SUBMIT_RATE_LIMIT=""))
     def test_empty_rate_limit_turns_it_off(self):
         with mock.patch("public_feedback.views.is_ratelimited", return_value=True):
             self.assertEqual(self.submit(uhid=UHID, **self.answers(self.opd)).status_code, 302)
@@ -325,7 +325,7 @@ class SubmitTests(PageTestBase):
         armed, unarmed = 'data-idle-armed="1"', 'data-idle-armed="0"'
         self.assertContains(self.client.get(self.url("form", "opd")), unarmed)  # fresh screen
         self.assertContains(self.client.get(self.url()), unarmed)
-        self.assertContains(self.client.get(self.url(language="kn")), armed)  # their language
+        self.assertContains(self.client.get(self.url(language=TEST_LANGUAGE)), armed)  # their language
         self.assertContains(self.client.get(self.url("form", "opd", **{"from": "start"})), armed)  # their form
         self.assertContains(self.submit(uhid=UHID), armed)  # their answers, after a failed submit
 
@@ -418,16 +418,18 @@ class LanguageTests(PageTestBase):
     def test_patient_language_lasts_until_the_thank_you_page(self):
         start = {"from": "start"}
         # Chosen on the chooser: its form links carry it.
-        chooser = self.client.get(self.url(language="kn"))
-        self.assertContains(chooser, 'data-lang="kn"')
-        self.assertContains(chooser, escape(self.url("form", "opd", **start, language="kn")))
+        chooser = self.client.get(self.url(language=TEST_LANGUAGE))
+        self.assertContains(chooser, f'data-lang="{TEST_LANGUAGE}"')
+        self.assertContains(chooser, escape(self.url("form", "opd", **start, language=TEST_LANGUAGE)))
         self.assertContains(chooser, f'data-home-url="{self.url()}"')
         # The form opens in it, and Back / Home / Reset keep it.
-        page = self.client.get(self.url("form", "opd", **start, language="kn"))
-        self.assertContains(page, 'data-lang="kn"')
-        self.assertContains(page, 'name="language" value="kn"')
-        self.assertContains(page, f'href="{self.url(language="kn")}" data-carry-lang', count=2)  # Back, Home
-        self.assertContains(page, escape(self.url("form", "opd", **start, language="kn")) + '" data-action="reset"')
+        page = self.client.get(self.url("form", "opd", **start, language=TEST_LANGUAGE))
+        self.assertContains(page, f'data-lang="{TEST_LANGUAGE}"')
+        self.assertContains(page, f'name="language" value="{TEST_LANGUAGE}"')
+        self.assertContains(page, f'href="{self.url(language=TEST_LANGUAGE)}" data-carry-lang', count=2)  # Back, Home
+        self.assertContains(
+            page, escape(self.url("form", "opd", **start, language=TEST_LANGUAGE)) + '" data-action="reset"'
+        )
         # Without JavaScript the toggle posts the form, so the answers stay; on the chooser it is a link.
         self.assertContains(page, 'form="feedback" name="nav" value="lang:en"')
         self.assertContains(chooser, 'href="?language=en"')
@@ -436,44 +438,49 @@ class LanguageTests(PageTestBase):
         # Submitted in it, the thank-you page stays in it; its return does not.
         response = self.client.post(
             page.request["PATH_INFO"] + "?" + page.request["QUERY_STRING"],
-            {"uhid": UHID, "language": "kn", **start, **self.answers(self.opd)},
+            {"uhid": UHID, "language": TEST_LANGUAGE, **start, **self.answers(self.opd)},
         )
-        self.assertEqual(FeedbackSubmission.objects.get().language, "kn")
+        self.assertEqual(FeedbackSubmission.objects.get().language, TEST_LANGUAGE)
         done = self.client.get(response["Location"])
-        self.assertContains(done, 'data-lang="kn"')
+        self.assertContains(done, f'data-lang="{TEST_LANGUAGE}"')
         self.assertContains(done, f'content="20;url={self.url()}"')
 
     def test_patient_language_and_screen_language(self):
-        # A Kannada screen (?lang=kn) where the patient switched to English.
-        chooser = self.client.get(self.url(lang="kn", language="en"))
+        # A screen in the test language where the patient switched to English.
+        chooser = self.client.get(self.url(lang=TEST_LANGUAGE, language="en"))
         self.assertContains(chooser, 'data-lang="en"')
-        self.assertContains(chooser, escape(self.url("form", "opd", lang="kn", **{"from": "start"}, language="en")))
-        self.assertContains(chooser, f'data-home-url="{self.url(lang="kn")}"')
+        self.assertContains(
+            chooser, escape(self.url("form", "opd", lang=TEST_LANGUAGE, **{"from": "start"}, language="en"))
+        )
+        self.assertContains(chooser, f'data-home-url="{self.url(lang=TEST_LANGUAGE)}"')
 
-    @override_settings(PLUGIN_CONFIGS={"public_feedback": {"LANGUAGES": ["en"]}})
+    @override_settings(PLUGIN_CONFIGS=plugin_configs(LANGUAGES=["en"]))
     def test_one_language_hides_the_toggle(self):
         page = self.client.get(self.url("form", "opd"))
         self.assertNotContains(page, 'class="langtog"')
-        self.assertNotContains(page, "l10n--kn")
+        self.assertNotContains(page, f"l10n--{TEST_LANGUAGE}")
         self.assertNotContains(page, "Noto")
         self.assertContains(page, 'class="l10n l10n--en"')
-        self.assertContains(self.client.get(self.url("form", "opd", lang="kn")), 'data-lang="en"')
+        self.assertContains(self.client.get(self.url("form", "opd", lang=TEST_LANGUAGE)), 'data-lang="en"')
 
-    @override_settings(PLUGIN_CONFIGS={"public_feedback": {"LANGUAGES": ["kn", "en", "xx"], "DEFAULT_LANGUAGE": "kn"}})
+    @override_settings(
+        PLUGIN_CONFIGS=plugin_configs(LANGUAGES=[TEST_LANGUAGE, "en", "zz"], DEFAULT_LANGUAGE=TEST_LANGUAGE)
+    )
     def test_order_default_and_unknown_codes(self):
         page = self.client.get(self.url("form", "opd"))
         content = page.content.decode()
-        self.assertContains(page, 'data-lang="kn"')
-        self.assertLess(content.index('data-set-lang="kn"'), content.index('data-set-lang="en"'))
-        self.assertNotContains(page, "xx")
+        self.assertContains(page, f'data-lang="{TEST_LANGUAGE}"')
+        self.assertLess(content.index(f'data-set-lang="{TEST_LANGUAGE}"'), content.index('data-set-lang="en"'))
+        self.assertNotContains(page, 'data-set-lang="zz"')  # no locale file: not offered
+        self.assertNotContains(page, "l10n--zz")
         self.assertEqual([w.id for w in check_languages(None)], ["public_feedback.W001"])
 
-    @override_settings(PLUGIN_CONFIGS={"public_feedback": {"LANGUAGES": ["en"], "DEFAULT_LANGUAGE": "kn"}})
+    @override_settings(PLUGIN_CONFIGS=plugin_configs(LANGUAGES=["en"], DEFAULT_LANGUAGE=TEST_LANGUAGE))
     def test_default_language_must_be_offered(self):
         self.assertContains(self.client.get(self.url("form", "opd")), 'data-lang="en"')
         self.assertEqual([w.id for w in check_languages(None)], ["public_feedback.W002"])
 
-    def test_defaults_raise_no_warnings(self):
+    def test_complete_languages_raise_no_warnings(self):
         self.assertEqual(check_languages(None), [])
 
 
@@ -567,10 +574,10 @@ class StepByStepWithoutJavaScriptTests(PageTestBase):
         self.assertEqual(self.place(review), ("review", 0))
 
     def test_switching_language_keeps_the_step_and_answers(self):
-        page = self.press("lang:kn", step="details", uhid=UHID, clinic="ent", language="en")
+        page = self.press(f"lang:{TEST_LANGUAGE}", step="details", uhid=UHID, clinic="ent", language="en")
         self.assertEqual(self.place(page), ("details", 0))
-        self.assertContains(page, 'data-lang="kn"')
-        self.assertContains(page, 'name="language" value="kn"')
+        self.assertContains(page, f'data-lang="{TEST_LANGUAGE}"')
+        self.assertContains(page, f'name="language" value="{TEST_LANGUAGE}"')
         self.assertContains(page, 'value="ent" checked')
 
     def test_moving_between_steps_is_not_rate_limited(self):
@@ -594,7 +601,7 @@ class QuestionsJsonTests(PageTestBase):
                 {"key": "clinic", "type": "text", "text": {"en": "Again"}},
                 {"key": "Bad Key", "type": "text", "text": {"en": "Q"}},
                 {"key": "wait", "type": "rating", "text": {"en": "Wait"}, "options": [{"en": "a"}]},
-                {"key": "visit", "type": "date", "text": {"kn": "ದಿನಾಂಕ"}, "requried": True},
+                {"key": "visit", "type": "date", "text": {TEST_LANGUAGE: "Date"}, "requried": True},
                 {"key": "mood", "type": "smiley", "text": {"en": "Mood"}},
                 {
                     "key": "why",

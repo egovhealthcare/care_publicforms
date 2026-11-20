@@ -8,11 +8,17 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
 
-from public_feedback.admin import FeedbackFormForm, localized_form
+from public_feedback.admin import feedback_form_form, localized_form
 from public_feedback.models import FeedbackForm, FeedbackSubmission
 from public_feedback.questions import parse_questions
 from public_feedback.services import stored_answer
-from public_feedback.tests import PLAIN_STATIC_STORAGES, PLUGIN_DEFAULTS
+from public_feedback.tests import (
+    PLAIN_STATIC_STORAGES,
+    TEST_LANGUAGE,
+    TEST_LANGUAGE_NAME,
+    TEST_PLUGIN_CONFIGS,
+    plugin_configs,
+)
 
 
 def make_submission(facility, reference, form_code, values, uhid="", **extra):
@@ -37,7 +43,7 @@ def make_submission(facility, reference, form_code, values, uhid="", **extra):
     return submission
 
 
-@override_settings(PLUGIN_CONFIGS=PLUGIN_DEFAULTS)
+@override_settings(PLUGIN_CONFIGS=TEST_PLUGIN_CONFIGS)
 class FeedbackApiTests(CareAPITestBase):
     def setUp(self):
         super().setUp()
@@ -143,7 +149,7 @@ class FeedbackApiTests(CareAPITestBase):
         self.assertEqual(self.client.get(reverse("public_feedback_api:health")).status_code, 200)
 
 
-@override_settings(STORAGES=PLAIN_STATIC_STORAGES, PLUGIN_CONFIGS=PLUGIN_DEFAULTS)
+@override_settings(STORAGES=PLAIN_STATIC_STORAGES, PLUGIN_CONFIGS=TEST_PLUGIN_CONFIGS)
 class AdminTests(CareAPITestBase):
     def setUp(self):
         super().setUp()
@@ -153,19 +159,27 @@ class AdminTests(CareAPITestBase):
         self.client.force_login(self.superuser)
 
     def test_form_page_shows_a_box_per_language_and_the_page_link(self):
-        response = self.client.get(reverse("admin:public_feedback_feedbackform_change", args=[self.opd.pk]))
+        self.opd.title = {**self.opd.title, TEST_LANGUAGE: "Test title"}
+        self.opd.save()
+        url = reverse("admin:public_feedback_feedbackform_change", args=[self.opd.pk])
+        response = self.client.get(url)
         self.assertContains(response, "Title (English)")
-        self.assertContains(response, "Title (Kannada)")
-        self.assertContains(response, "ಒಪಿಡಿ ಅಭಿಪ್ರಾಯ")
+        self.assertContains(response, f"Title ({TEST_LANGUAGE_NAME})")
+        self.assertContains(response, "Test title")
+        # The boxes follow the LANGUAGES setting.
+        with self.settings(PLUGIN_CONFIGS=plugin_configs(LANGUAGES=["en"])):
+            english_only = self.client.get(url)
+        self.assertContains(english_only, "Title (English)")
+        self.assertNotContains(english_only, f"Title ({TEST_LANGUAGE_NAME})")
         self.assertContains(response, 'name="questions"')
         self.assertContains(response, "&quot;key&quot;: &quot;registration_wait&quot;")  # indented JSON
         self.assertContains(response, escape("/facility/<facility-id>/type/opd/public_feedback/"))
 
     def test_facility_is_checked_and_shown_by_id(self):
         base = {"code": "opd", "patient_type": "op", "title__en": "Ours", "order": 0}
-        unknown = FeedbackFormForm(data={**base, "facility_external_id": "00000000-0000-0000-0000-000000000000"})
+        unknown = feedback_form_form()(data={**base, "facility_external_id": "00000000-0000-0000-0000-000000000000"})
         self.assertIn("facility_external_id", unknown.errors)  # no such facility
-        known = FeedbackFormForm(data={**base, "facility_external_id": str(self.facility.external_id)})
+        known = feedback_form_form()(data={**base, "facility_external_id": str(self.facility.external_id)})
         self.assertTrue(known.is_valid(), known.errors)  # its own "opd", next to the shared one
         own = known.save()
         changelist = self.client.get(reverse("admin:public_feedback_feedbackform_changelist"))
@@ -192,12 +206,12 @@ class AdminTests(CareAPITestBase):
                 "options": [{"value": "inside", "en": "Inside the campus"}],
             }
         ]
-        form = FeedbackFormForm(
+        form = feedback_form_form()(
             data={
                 "code": "parking",
                 "patient_type": "op",
                 "title__en": "Parking",
-                "title__kn": "",
+                f"title__{TEST_LANGUAGE}": "",
                 "order": 3,
                 "is_active": True,
                 "questions": json.dumps(questions),
@@ -208,28 +222,29 @@ class AdminTests(CareAPITestBase):
         self.assertEqual((saved.title, saved.questions), ({"en": "Parking"}, questions))
 
     def test_text_in_languages_not_offered_is_kept(self):
-        with self.settings(PLUGIN_CONFIGS={"public_feedback": {"LANGUAGES": ["en"]}}):
+        self.opd.title = {"en": "OPD feedback", TEST_LANGUAGE: "Test title"}
+        self.opd.save()
+        with self.settings(PLUGIN_CONFIGS=plugin_configs(LANGUAGES=["en"])):
             form_class = localized_form(FeedbackForm, {"title": ("Title", 1), "description": ("Description", 1)})
-        kannada = self.opd.title["kn"]
-        self.assertNotIn("title__kn", form_class().fields)
+        self.assertNotIn(f"title__{TEST_LANGUAGE}", form_class().fields)
         form = form_class(data={**model_to_dict(self.opd), "title__en": "OPD"}, instance=self.opd)
         self.assertTrue(form.is_valid(), form.errors)
         form.save()
         self.opd.refresh_from_db()
-        self.assertEqual(self.opd.title, {"en": "OPD", "kn": kannada})
+        self.assertEqual(self.opd.title, {"en": "OPD", TEST_LANGUAGE: "Test title"})
 
     def test_questions_json_problems_show_on_the_form(self):
         base = {"patient_type": "op", "title__en": "X", "order": 0}
-        bad = FeedbackFormForm(
+        bad = feedback_form_form()(
             data={**base, "code": "x", "questions": json.dumps([{"key": "a", "type": "choice", "text": {"en": "A"}}])}
         )
         self.assertFalse(bad.is_valid())
         self.assertTrue(any(e.startswith("“a”: a choice needs options") for e in bad.errors["questions"]))
-        broken = FeedbackFormForm(data={**base, "code": "y", "questions": "[{"})
+        broken = feedback_form_form()(data={**base, "code": "y", "questions": "[{"})
         self.assertIn("questions", broken.errors)  # not JSON
-        no_english = FeedbackFormForm(data={**base, "code": "z", "title__en": ""})
+        no_english = feedback_form_form()(data={**base, "code": "z", "title__en": ""})
         self.assertIn("title__en", no_english.errors)
-        taken = FeedbackFormForm(data={**base, "code": "opd"})
+        taken = feedback_form_form()(data={**base, "code": "opd"})
         self.assertIn("code", taken.errors)
 
     def test_submission_page_shows_answers_with_the_form_wording(self):

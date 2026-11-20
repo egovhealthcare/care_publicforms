@@ -23,6 +23,7 @@
 {% for language in languages %}{% if language.font %}html[lang="{{ language.code }}"] body,[lang="{{ language.code }}"]{font-family:'{{ language.font }}','Figtree',ui-sans-serif,system-ui,Arial,sans-serif}
 {% endif %}{% if language.tall_script %}html[lang="{{ language.code }}"] .kicker,html[lang="{{ language.code }}"] .idstrip-kicker{letter-spacing:normal;text-transform:none}
 html[lang="{{ language.code }}"] .h2,html[lang="{{ language.code }}"] .hero-title,html[lang="{{ language.code }}"] .qtitle,html[lang="{{ language.code }}"] .done-title{line-height:1.45;letter-spacing:normal}
+html[lang="{{ language.code }}"] .hero-title{font-size:clamp(1.625rem,7.2vw,2.125rem)}
 {% endif %}{% endfor %}</style>
 <script>document.documentElement.className = 'js';</script>
 </head>

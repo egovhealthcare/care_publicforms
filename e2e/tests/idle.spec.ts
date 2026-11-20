@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { chooserUrl, enterUhid, expectStep, formUrl, needsFacility } from "./helpers";
+import { chooserUrl, enterUhid, expectStep, formUrl, needsFacility, otherLanguage } from "./helpers";
 
 test.beforeEach(needsFacility);
 
@@ -46,10 +46,9 @@ test("an untouched screen never reloads", async ({ page }) => {
 test("a language switched on the chooser is undone for the next patient", async ({ page }) => {
   await page.clock.install();
   await page.goto(chooserUrl());
-  const kannada = page.locator('[data-set-lang="kn"]');
-  test.skip((await kannada.count()) === 0, "Kannada is not in the backend's LANGUAGES");
-  await kannada.click();
-  await expect(page.locator("html")).toHaveAttribute("data-lang", "kn");
+  const language = await otherLanguage(page);
+  await language.button.click();
+  await expect(page.locator("html")).toHaveAttribute("data-lang", language.code);
   await page.clock.fastForward(92_000);
   await expect(page.locator("html")).toHaveAttribute("data-lang", "en");
 });

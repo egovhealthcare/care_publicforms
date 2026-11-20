@@ -1,6 +1,7 @@
 import csv
 import json
 from contextvars import ContextVar
+from functools import lru_cache
 
 from care.facility.models import Facility
 from django import forms
@@ -25,8 +26,8 @@ _current_request: ContextVar = ContextVar("public_feedback_admin_request", defau
 # ── Per-language text fields ──────────────────────────────────────────
 def localized_form(model, localized: dict, required: tuple = ()):
     """
-    A ModelForm that edits JSON text fields ({"en": ..., "kn": ...}) as one
-    box per configured language, e.g. ``text__en`` and ``text__kn``.
+    A ModelForm that edits JSON text fields ({"en": ..., "<code>": ...}) as
+    one box per configured language: ``text__en``, ``text__<code>``.
 
     ``localized`` maps field name → (label, rows). Fields in ``required``
     need their English text. There is a box for English and each offered
@@ -111,39 +112,55 @@ QUESTIONS_HELP = format_html(
 )
 
 
-class FeedbackFormForm(
-    localized_form(FeedbackForm, {"title": (_("Title"), 1), "description": (_("Description"), 1)}, required=("title",))
-):
-    questions = QuestionsJSONField(
-        required=False,
-        help_text=QUESTIONS_HELP,
-        widget=forms.Textarea(
-            attrs={
-                "rows": 32,
-                "cols": 110,
-                "spellcheck": "false",
-                "style": "font-family:ui-monospace,Menlo,monospace;font-size:12px",
-            }
-        ),
-    )
+TEXT_FIELDS = {"title": (_("Title"), 1), "description": (_("Description"), 1)}
 
-    def clean_questions(self):
-        return self.cleaned_data.get("questions") or []
+
+def feedback_form_form() -> type:
+    """The form admin's form: a box per admin language for the title and description, and the questions JSON."""
+    return _feedback_form_form(tuple(admin_languages()))
+
+
+@lru_cache(maxsize=8)
+def _feedback_form_form(codes: tuple) -> type:
+    # Built per set of languages, so the boxes follow the LANGUAGES setting.
+    return type(
+        "FeedbackFormForm",
+        (localized_form(FeedbackForm, TEXT_FIELDS, required=("title",)),),
+        {
+            "questions": QuestionsJSONField(
+                required=False,
+                help_text=QUESTIONS_HELP,
+                widget=forms.Textarea(
+                    attrs={
+                        "rows": 32,
+                        "cols": 110,
+                        "spellcheck": "false",
+                        "style": "font-family:ui-monospace,Menlo,monospace;font-size:12px",
+                    }
+                ),
+            ),
+            "clean_questions": lambda self: self.cleaned_data.get("questions") or [],
+        },
+    )
 
 
 # ── Forms ─────────────────────────────────────────────────────────────
 @admin.register(FeedbackForm)
 class FeedbackFormAdmin(admin.ModelAdmin):
-    form = FeedbackFormForm
     list_display = ("form_title", "code", "patient_type", "facility", "is_active", "question_count", "order")
     list_filter = ("patient_type", "is_active")
     search_fields = ("code", "title", "facility_external_id")
     readonly_fields = ("facility", "page_link")
-    fieldsets = (
-        (None, {"fields": ("code", "patient_type", *language_fields("title", "description"))}),
-        (_("Questions"), {"fields": ("questions",)}),
-        (_("Where"), {"fields": ("facility_external_id", "facility", "is_active", "order", "page_link")}),
-    )
+
+    def get_fieldsets(self, request, obj=None):
+        return (
+            (None, {"fields": ("code", "patient_type", *language_fields(*TEXT_FIELDS))}),
+            (_("Questions"), {"fields": ("questions",)}),
+            (_("Where"), {"fields": ("facility_external_id", "facility", "is_active", "order", "page_link")}),
+        )
+
+    def get_form(self, request, obj=None, **kwargs):
+        return super().get_form(request, obj, **{"form": feedback_form_form(), **kwargs})
 
     def get_queryset(self, request):
         # No foreign key: the facility's name is looked up by its id.

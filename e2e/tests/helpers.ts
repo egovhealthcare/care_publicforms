@@ -112,3 +112,20 @@ export function isoDate(days: number): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
+
+/**
+ * The first language the screen offers besides English, whichever the
+ * backend's LANGUAGES has, with its header button and `text(selector)`: that
+ * element's text in the language (every page carries each language's text).
+ * Skips the test when only English is offered.
+ */
+export async function otherLanguage(
+  page: Page,
+): Promise<{ code: string; button: Locator; text: (selector: string) => Promise<string> }> {
+  const button = page.locator('[data-set-lang]:not([data-set-lang="en"])').first();
+  test.skip((await button.count()) === 0, "The backend's LANGUAGES has only English");
+  const code = (await button.getAttribute("data-set-lang")) ?? "";
+  const text = async (selector: string) =>
+    ((await page.locator(`${selector} .l10n--${code}`).first().textContent()) ?? "").trim();
+  return { code, button, text };
+}

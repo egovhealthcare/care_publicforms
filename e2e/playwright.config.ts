@@ -9,7 +9,8 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * The tests submit feedback, so point them at a development database.
  * They open every page with ?lang=en, so they pass whatever LANGUAGES and
- * DEFAULT_LANGUAGE the backend uses; the language tests need Kannada offered.
+ * DEFAULT_LANGUAGE the backend uses. The language tests use the first
+ * language offered after English, and skip themselves if there is none.
  */
 const desktop = devices["Desktop Chrome"];
 

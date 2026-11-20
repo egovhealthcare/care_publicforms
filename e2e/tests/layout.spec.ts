@@ -1,5 +1,5 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
-import { activeStep, chooserUrl, expectStep, needsFacility, pickDetail, rate } from "./helpers";
+import { activeStep, chooserUrl, expectStep, needsFacility, otherLanguage, pickValue, rate } from "./helpers";
 
 test.beforeEach(needsFacility);
 
@@ -75,41 +75,54 @@ async function checkLayout(page: Page, testInfo: TestInfo, name: string, { fits 
   }
 }
 
-test("every screen fits", async ({ page }, testInfo) => {
-  await page.goto(chooserUrl());
-  await checkLayout(page, testInfo, "01-chooser", { fits: true });
+/** Walks every screen of an OPD guest, checking each, in the screen language `lang`. */
+async function walkScreens(page: Page, testInfo: TestInfo, lang: string) {
+  const check = (name: string, options?: { fits?: boolean }) =>
+    checkLayout(page, testInfo, lang === "en" ? name : `${lang}/${name}`, options);
+  await page.goto(chooserUrl(`lang=${lang}`));
+  await check("01-chooser", { fits: true });
 
-  await page.getByRole("link", { name: /OPD feedback/ }).click();
+  await page.locator('a.opt--form[href*="/type/opd/"]').click();
   await expectStep(page, "identify");
-  await checkLayout(page, testInfo, "02-identify", { fits: true });
+  await check("02-identify", { fits: true });
 
-  await page.getByRole("button", { name: /Enter UHID manually/ }).click();
+  await page.locator('[data-step="identify"] [data-go="uhid"]').click();
   for (const digit of "1234567") await page.locator(`#keypad [data-key="${digit}"]`).click();
-  await checkLayout(page, testInfo, "03-uhid", { fits: true });
+  await check("03-uhid", { fits: true });
 
   await page.locator('[data-step="uhid"] [data-action="guest"]').click();
   await expectStep(page, "details");
   await page.locator('[data-action="details-next"]').click(); // show the errors
-  await checkLayout(page, testInfo, "04-details-errors");
-  await pickDetail(page, "clinic", "Obstetrics & Gynaecology");
-  await pickDetail(page, "age_group", "Over 60");
-  await pickDetail(page, "sex", "Female");
+  await check("04-details-errors");
+  await pickValue(page, "clinic", "obstetrics_gynaecology");
+  await pickValue(page, "age_group", "over_60");
+  await pickValue(page, "sex", "female");
   await page.locator('[data-action="details-next"]').click();
 
   await expectStep(page, "questions");
-  await checkLayout(page, testInfo, "05-question", { fits: true });
+  await check("05-question", { fits: true });
   for (let i = 0; i < 10; i++) await rate(page, [5, 4, 3, 2, 1, 0][i % 6]);
 
   await expectStep(page, "comments");
-  await activeStep(page).locator("label.yn", { hasText: "No" }).click();
-  await activeStep(page).getByPlaceholder("Why? (optional)").fill("The queue at the pharmacy was very long today");
-  await checkLayout(page, testInfo, "06-comments");
+  await activeStep(page).locator('label.yn:has(input[value="no"])').click();
+  await activeStep(page).locator("textarea[data-comment]").fill("The queue at the pharmacy was very long today");
+  await check("06-comments");
   await page.locator('[data-action="comments-next"]').click();
 
   await expectStep(page, "review");
-  await checkLayout(page, testInfo, "07-review");
-  await page.getByRole("button", { name: "Submit feedback" }).click();
+  await check("07-review");
+  await page.locator('[data-step="review"] button[value="submit"]').click();
 
   await expect(page.locator(".token")).toBeVisible();
-  await checkLayout(page, testInfo, "08-done", { fits: true });
+  await check("08-done", { fits: true });
+}
+
+test("every screen fits", async ({ page }, testInfo) => {
+  await walkScreens(page, testInfo, "en");
+});
+
+test("every screen fits in the other language", async ({ page }, testInfo) => {
+  await page.goto(chooserUrl());
+  const language = await otherLanguage(page); // its words may be longer, its letters taller
+  await walkScreens(page, testInfo, language.code);
 });
