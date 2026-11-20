@@ -1,6 +1,6 @@
 # care_publicforms
 
-**Public feedback** is a [Care](https://github.com/ohcnetwork/care) plugin
+**Public forms** is a [Care](https://github.com/ohcnetwork/care) plugin
 that runs **patient satisfaction surveys (OPD and inpatient) on touch-screen
 TV kiosks**. The
 pages are rendered on the server (Django templates), so it needs no frontend
@@ -88,22 +88,22 @@ validation) and the database tables, see
 
 ## Installation
 
-The repository and Python package are `care_publicforms`. The Django app
-inside is `public_feedback`, so that is the plug's `name`, and it also names
-the URLs, the tables and the `configs` key.
+The repository, the Python package and the Django app are all
+`care_publicforms`: it is the plug's `name`, and it also names the URLs,
+the tables and the `configs` key.
 
 ### Production
 
 Add the plug to [`plug_config.py`](https://github.com/ohcnetwork/care/blob/develop/plug_config.py) in Care:
 
 ```python
-public_feedback_plug = Plug(
-    name="public_feedback",
+care_publicforms_plug = Plug(
+    name="care_publicforms",
     package_name="git+https://github.com/egovhealthcare/care_publicforms.git",
     version="@main",
     configs={},  # see Settings below
 )
-plugs = [public_feedback_plug]
+plugs = [care_publicforms_plug]
 ```
 
 Then rebuild the image and run migrations. Care's start scripts run
@@ -122,13 +122,13 @@ Then rebuild the image and run migrations. Care's start scripts run
 2. Register it in `plug_config.py`:
 
    ```python
-   public_feedback_plug = Plug(
-       name="public_feedback",
+   care_publicforms_plug = Plug(
+       name="care_publicforms",
        package_name="/app/care_publicforms",
        version="",  # empty for a local path
        configs={},
    )
-   plugs = [public_feedback_plug]
+   plugs = [care_publicforms_plug]
    ```
 
 3. Install in editable mode by adding `-e` in `plugs/manager.py`
@@ -143,13 +143,13 @@ Then rebuild the image and run migrations. Care's start scripts run
 There is nothing to register: open the page for the facility on the TV and
 set it as the browser's start page.
 
-- `…/facility/<facility_id>/public_feedback/`: patients choose OPD or
+- `…/facility/<facility_id>/care_publicforms/`: patients choose OPD or
   inpatient feedback (opens the form directly if only one is active);
-- `…/facility/<facility_id>/type/<form code>/public_feedback/`, e.g.
-  `…/type/ipd/public_feedback/`: the screen is **pinned to that form**,
+- `…/facility/<facility_id>/type/<form code>/care_publicforms/`, e.g.
+  `…/type/ipd/care_publicforms/`: the screen is **pinned to that form**,
   with no chooser. Idle reset and the thank-you page return to that form.
 
-The Django admin shows each form's link (**Public Feedback → Feedback
+The Django admin shows each form's link (**Public Forms → Feedback
 forms**, open a form). A screen can set its own options in the URL:
 
 | Parameter | What it does |
@@ -160,7 +160,7 @@ forms**, open a form). A screen can set its own options in the URL:
 | `scan=off` | Hides the scan option. |
 | `keypad=0` / `keypad=1` | On-screen number pad for the UHID. Keep it on for TVs without a system keyboard. |
 
-For example `…/type/ipd/public_feedback/?lang=en&scan=scanner` pins a
+For example `…/type/ipd/care_publicforms/?lang=en&scan=scanner` pins a
 ward screen to the inpatient form, in English, with a USB scanner.
 
 A language the patient picks with the toggle stays with them for their whole
@@ -171,14 +171,14 @@ starting language for the next patient.
 > [!NOTE]
 > The pages are served by the Care **backend**. If your deployment serves
 > care_fe and the backend from the same domain, route both
-> `/facility/<id>/public_feedback/…` and `/facility/<id>/type/<form>/public_feedback/…`
+> `/facility/<id>/care_publicforms/…` and `/facility/<id>/type/<form>/care_publicforms/…`
 > to the backend (for example the regex
-> `^/facility/[^/]+/(type/[^/]+/)?public_feedback/`), since care_fe also
+> `^/facility/[^/]+/(type/[^/]+/)?care_publicforms/`), since care_fe also
 > uses `/facility/...` paths.
 
 ### Kiosk browser tips
 
-- Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/type/opd/public_feedback/"`.
+- Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/type/opd/care_publicforms/"`.
 - The camera only works over HTTPS. Allow camera access for the site once;
   if it is denied, the scan option disappears until access is allowed again.
 - Following the NQAS guidance, take exit feedback: put the OPD kiosk near
@@ -192,7 +192,7 @@ starting language for the next patient.
 
 ## Forms and questions
 
-In the Django admin under **Public Feedback → Feedback forms**:
+In the Django admin under **Public Forms → Feedback forms**:
 
 - **Form**: a code stored with every response and used in the URL (`opd`,
   `ipd`), the patient type (**OP** or **IP**), a title and description per
@@ -266,7 +266,7 @@ was deleted.
 
 ## Viewing feedback
 
-Responses go to the `public_feedback_submission` table, with only these
+Responses go to the `care_publicforms_submission` table, with only these
 columns: `external_id`, `reference_number`, `facility_external_id` (not
 linked to Care), `form` (the form answered; its code and OP/IP type come from
 there), `language`, `uhid` (empty for guests), `answers` and `submitted_at`.
@@ -302,16 +302,16 @@ as it was asked**:
   `<key>__comment`). Submissions are read-only there.
 - **API** (Care auth; needs permission to view questionnaire responses for
   the facility):
-  - `GET /api/public_feedback/facility/<facility_id>/responses/`: paginated
+  - `GET /api/care_publicforms/facility/<facility_id>/responses/`: paginated
     submissions, with the fields above
-  - `GET /api/public_feedback/facility/<facility_id>/summary/`: one block
+  - `GET /api/care_publicforms/facility/<facility_id>/summary/`: one block
     per form with the overall score, attribute-wise averages and
     distributions, the **two lowest-scoring attributes** (the NQAS "Check"
     step) and counts for yes/no and choice questions
 
   Both accept `patient_type` (`op` | `ip`), `form` (code) and
   `submitted_after` / `submitted_before` (YYYY-MM-DD).
-  `GET /api/public_feedback/health` returns `OK`.
+  `GET /api/care_publicforms/health` returns `OK`.
 
 ## Settings
 
@@ -354,7 +354,7 @@ language shows in English.
 
 ### Locale files
 
-One per language in [`src/public_feedback/locale/`](src/public_feedback/locale):
+One per language in [`src/care_publicforms/locale/`](src/care_publicforms/locale):
 
 ```json
 {
@@ -398,7 +398,7 @@ Three steps, in this order; `<code>` is the language's code (e.g. `hi`).
    ```
 
    A data migration does this for the default forms. In
-   [`migrations/`](src/public_feedback/migrations), copy the latest
+   [`migrations/`](src/care_publicforms/migrations), copy the latest
    language migration (the newest file with `LANGUAGE` and `TRANSLATIONS`)
    to the next number, e.g. `0004_<language>_default_forms.py`, then:
 
@@ -449,10 +449,10 @@ table and JSON column, the API responses, and how to add a language or a
 question type.
 
 ```
-src/public_feedback/
+src/care_publicforms/
 ├── views.py          # the public pages: chooser, questionnaire (GET + one POST), thank you
-├── pages.py          # page URLs under /facility/<id>/ (public_feedback/, type/<form>/public_feedback/)
-├── urls.py, api.py   # staff API, mounted by Care at /api/public_feedback/
+├── pages.py          # page URLs under /facility/<id>/ (care_publicforms/, type/<form>/care_publicforms/)
+├── urls.py, api.py   # staff API, mounted by Care at /api/care_publicforms/
 ├── questions.py      # the questions JSON: fields, defaults, validation
 ├── questionnaire.py  # a configured form → steps; answer parsing and labels
 ├── services.py       # UHID format, collecting answers, saving submissions
@@ -463,8 +463,8 @@ src/public_feedback/
 ├── locale/           # screen text, one JSON file per language (<code>.json)
 ├── checks.py         # `manage.py check` warnings for the language settings
 ├── models.py, admin.py, settings.py
-├── templates/public_feedback/   # form.html + steps/, choose, done, empty
-├── static/public_feedback/      # kiosk.css, kiosk.js
+├── templates/care_publicforms/   # form.html + steps/, choose, done, empty
+├── static/care_publicforms/      # kiosk.css, kiosk.js
 └── tests/            # Django tests (pages, API, admin)
 e2e/                  # Playwright tests in a real browser
 ```
@@ -474,8 +474,11 @@ e2e/                  # Playwright tests in a real browser
 Run them from the Care checkout with the plugin installed:
 
 ```bash
-python manage.py test public_feedback --keepdb
+python manage.py test care_publicforms.tests --keepdb
 ```
+
+Use the dotted `care_publicforms.tests`: in the Care checkout, a bare
+`care_publicforms` names the plugin's folder, where Django finds no tests.
 
 They run with English and a test language generated from `en.json`, whatever
 `plug_config.py` sets, so adding or removing a language doesn't affect them.

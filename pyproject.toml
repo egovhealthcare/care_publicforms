@@ -1,7 +1,7 @@
 [project]
 name = "care_publicforms"
 version = "0.1.0"
-description = "Public feedback: a Care plugin that serves server-rendered patient satisfaction surveys (OPD and inpatient) on touch-screen TV kiosks"
+description = "Public forms: a Care plugin that serves server-rendered patient satisfaction surveys (OPD and inpatient) on touch-screen TV kiosks"
 readme = "README.md"
 authors = [{ name = "Open Healthcare Network", email = "support@ohc.network" }]
 maintainers = [
@@ -27,11 +27,11 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-public_feedback = ["templates/**/*", "static/**/*", "locale/*.json"]
+care_publicforms = ["templates/**/*", "static/**/*", "locale/*.json"]
 
 [tool.ruff]
 line-length = 120
-extend-exclude = ["src/public_feedback/migrations"]
+extend-exclude = ["src/care_publicforms/migrations"]
 
 [tool.ruff.lint]
 select = [
@@ -44,7 +44,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["public_feedback"]
+known-first-party = ["care_publicforms"]
 known-third-party = ["care"]
 
 [tool.uv]
