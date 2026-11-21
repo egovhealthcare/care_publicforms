@@ -3,6 +3,6 @@ include README.md
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
 
-recursive-include src/care_publicforms/templates *
-recursive-include src/care_publicforms/static *
-recursive-include src/care_publicforms/locale *.json
+recursive-include src/public_forms/templates *
+recursive-include src/public_forms/static *
+recursive-include src/public_forms/locale *.json

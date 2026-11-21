@@ -10,12 +10,12 @@ export function needsFacility(): void {
 
 /** The form chooser, by default as an English screen. */
 export function chooserUrl(query = "lang=en"): string {
-  return `/facility/${facilityId}/care_publicforms/${query ? `?${query}` : ""}`;
+  return `/facility/${facilityId}/public_forms/${query ? `?${query}` : ""}`;
 }
 
 /** A screen pinned to one form, by default as an English screen. */
 export function formUrl(code: string, query = "lang=en"): string {
-  return `/facility/${facilityId}/type/${code}/care_publicforms/${query ? `?${query}` : ""}`;
+  return `/facility/${facilityId}/public_forms/type/${code}/form/${query ? `?${query}` : ""}`;
 }
 
 export function activeStep(page: Page): Locator {

@@ -1,0 +1,24 @@
+{% extends "public_forms/base.html" %}
+{% load public_forms_tags %}
+
+{% block head_extra %}
+{# Back to the start for the next patient; works without JavaScript. #}
+<meta http-equiv="refresh" content="{{ done_timeout }};url={{ home_url }}">
+{% endblock %}
+
+{% block screen %}
+<section class="screen screen--done">
+  <div class="done-check">
+    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+  </div>
+  <div class="stack stack--10">
+    <h2 class="done-title">{% t "done_title" %}</h2>
+    <p class="done-lead">{% t "done_lead" %}</p>
+  </div>
+  <div class="token-card">
+    <span class="kicker">{% t "reference_number" %}</span>
+    <span class="token">{{ reference }}</span>
+  </div>
+  <a class="btn btn--outline btn--lg btn-wide" href="{{ home_url }}">{% t "restart" %}</a>
+</section>
+{% endblock %}

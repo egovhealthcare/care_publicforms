@@ -88,22 +88,23 @@ validation) and the database tables, see
 
 ## Installation
 
-The repository, the Python package and the Django app are all
-`care_publicforms`: it is the plug's `name`, and it also names the URLs,
-the tables and the `configs` key.
+The repository and Python package are `care_publicforms`. The Django app
+inside is `public_forms`: the plug's `name`, the start of its URLs and its
+`configs` key. The tables keep the repository's name:
+`care_publicforms_form` and `care_publicforms_submission`.
 
 ### Production
 
 Add the plug to [`plug_config.py`](https://github.com/ohcnetwork/care/blob/develop/plug_config.py) in Care:
 
 ```python
-care_publicforms_plug = Plug(
-    name="care_publicforms",
+public_forms_plug = Plug(
+    name="public_forms",
     package_name="git+https://github.com/egovhealthcare/care_publicforms.git",
     version="@main",
     configs={},  # see Settings below
 )
-plugs = [care_publicforms_plug]
+plugs = [public_forms_plug]
 ```
 
 Then rebuild the image and run migrations. Care's start scripts run
@@ -122,13 +123,13 @@ Then rebuild the image and run migrations. Care's start scripts run
 2. Register it in `plug_config.py`:
 
    ```python
-   care_publicforms_plug = Plug(
-       name="care_publicforms",
+   public_forms_plug = Plug(
+       name="public_forms",
        package_name="/app/care_publicforms",
        version="",  # empty for a local path
        configs={},
    )
-   plugs = [care_publicforms_plug]
+   plugs = [public_forms_plug]
    ```
 
 3. Install in editable mode by adding `-e` in `plugs/manager.py`
@@ -143,10 +144,10 @@ Then rebuild the image and run migrations. Care's start scripts run
 There is nothing to register: open the page for the facility on the TV and
 set it as the browser's start page.
 
-- `…/facility/<facility_id>/care_publicforms/`: patients choose OPD or
+- `…/facility/<facility_id>/public_forms/`: patients choose OPD or
   inpatient feedback (opens the form directly if only one is active);
-- `…/facility/<facility_id>/type/<form code>/care_publicforms/`, e.g.
-  `…/type/ipd/care_publicforms/`: the screen is **pinned to that form**,
+- `…/facility/<facility_id>/public_forms/type/<form code>/form/`, e.g.
+  `…/public_forms/type/ipd/form/`: the screen is **pinned to that form**,
   with no chooser. Idle reset and the thank-you page return to that form.
 
 The Django admin shows each form's link (**Public Forms → Feedback
@@ -160,7 +161,7 @@ forms**, open a form). A screen can set its own options in the URL:
 | `scan=off` | Hides the scan option. |
 | `keypad=0` / `keypad=1` | On-screen number pad for the UHID. Keep it on for TVs without a system keyboard. |
 
-For example `…/type/ipd/care_publicforms/?lang=en&scan=scanner` pins a
+For example `…/public_forms/type/ipd/form/?lang=en&scan=scanner` pins a
 ward screen to the inpatient form, in English, with a USB scanner.
 
 A language the patient picks with the toggle stays with them for their whole
@@ -170,15 +171,14 @@ starting language for the next patient.
 
 > [!NOTE]
 > The pages are served by the Care **backend**. If your deployment serves
-> care_fe and the backend from the same domain, route both
-> `/facility/<id>/care_publicforms/…` and `/facility/<id>/type/<form>/care_publicforms/…`
-> to the backend (for example the regex
-> `^/facility/[^/]+/(type/[^/]+/)?care_publicforms/`), since care_fe also
+> care_fe and the backend from the same domain, route
+> `/facility/<id>/public_forms/…` to the backend (for example the regex
+> `^/facility/[^/]+/public_forms/`), since care_fe also
 > uses `/facility/...` paths.
 
 ### Kiosk browser tips
 
-- Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/type/opd/care_publicforms/"`.
+- Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/public_forms/type/opd/form/"`.
 - The camera only works over HTTPS. Allow camera access for the site once;
   if it is denied, the scan option disappears until access is allowed again.
 - Following the NQAS guidance, take exit feedback: put the OPD kiosk near
@@ -302,16 +302,16 @@ as it was asked**:
   `<key>__comment`). Submissions are read-only there.
 - **API** (Care auth; needs permission to view questionnaire responses for
   the facility):
-  - `GET /api/care_publicforms/facility/<facility_id>/responses/`: paginated
+  - `GET /api/public_forms/facility/<facility_id>/responses/`: paginated
     submissions, with the fields above
-  - `GET /api/care_publicforms/facility/<facility_id>/summary/`: one block
+  - `GET /api/public_forms/facility/<facility_id>/summary/`: one block
     per form with the overall score, attribute-wise averages and
     distributions, the **two lowest-scoring attributes** (the NQAS "Check"
     step) and counts for yes/no and choice questions
 
   Both accept `patient_type` (`op` | `ip`), `form` (code) and
   `submitted_after` / `submitted_before` (YYYY-MM-DD).
-  `GET /api/care_publicforms/health` returns `OK`.
+  `GET /api/public_forms/health` returns `OK`.
 
 ## Settings
 
@@ -354,7 +354,7 @@ language shows in English.
 
 ### Locale files
 
-One per language in [`src/care_publicforms/locale/`](src/care_publicforms/locale):
+One per language in [`src/public_forms/locale/`](src/public_forms/locale):
 
 ```json
 {
@@ -398,7 +398,7 @@ Three steps, in this order; `<code>` is the language's code (e.g. `hi`).
    ```
 
    A data migration does this for the default forms. In
-   [`migrations/`](src/care_publicforms/migrations), copy the latest
+   [`migrations/`](src/public_forms/migrations), copy the latest
    language migration (the newest file with `LANGUAGE` and `TRANSLATIONS`)
    to the next number, e.g. `0004_<language>_default_forms.py`, then:
 
@@ -449,10 +449,10 @@ table and JSON column, the API responses, and how to add a language or a
 question type.
 
 ```
-src/care_publicforms/
+src/public_forms/
 ├── views.py          # the public pages: chooser, questionnaire (GET + one POST), thank you
-├── pages.py          # page URLs under /facility/<id>/ (care_publicforms/, type/<form>/care_publicforms/)
-├── urls.py, api.py   # staff API, mounted by Care at /api/care_publicforms/
+├── pages.py          # page URLs under /facility/<id>/public_forms/ (chooser, type/<form>/form/, type/<form>/done/)
+├── urls.py, api.py   # staff API, mounted by Care at /api/public_forms/
 ├── questions.py      # the questions JSON: fields, defaults, validation
 ├── questionnaire.py  # a configured form → steps; answer parsing and labels
 ├── services.py       # UHID format, collecting answers, saving submissions
@@ -463,8 +463,8 @@ src/care_publicforms/
 ├── locale/           # screen text, one JSON file per language (<code>.json)
 ├── checks.py         # `manage.py check` warnings for the language settings
 ├── models.py, admin.py, settings.py
-├── templates/care_publicforms/   # form.html + steps/, choose, done, empty
-├── static/care_publicforms/      # kiosk.css, kiosk.js
+├── templates/public_forms/   # form.html + steps/, choose, done, empty
+├── static/public_forms/      # kiosk.css, kiosk.js
 └── tests/            # Django tests (pages, API, admin)
 e2e/                  # Playwright tests in a real browser
 ```
@@ -474,11 +474,8 @@ e2e/                  # Playwright tests in a real browser
 Run them from the Care checkout with the plugin installed:
 
 ```bash
-python manage.py test care_publicforms.tests --keepdb
+python manage.py test public_forms --keepdb
 ```
-
-Use the dotted `care_publicforms.tests`: in the Care checkout, a bare
-`care_publicforms` names the plugin's folder, where Django finds no tests.
 
 They run with English and a test language generated from `en.json`, whatever
 `plug_config.py` sets, so adding or removing a language doesn't affect them.

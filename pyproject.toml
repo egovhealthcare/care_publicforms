@@ -27,11 +27,11 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-care_publicforms = ["templates/**/*", "static/**/*", "locale/*.json"]
+public_forms = ["templates/**/*", "static/**/*", "locale/*.json"]
 
 [tool.ruff]
 line-length = 120
-extend-exclude = ["src/care_publicforms/migrations"]
+extend-exclude = ["src/public_forms/migrations"]
 
 [tool.ruff.lint]
 select = [
@@ -44,7 +44,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["care_publicforms"]
+known-first-party = ["public_forms"]
 known-third-party = ["care"]
 
 [tool.uv]

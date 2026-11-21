@@ -1,0 +1,90 @@
+{% load static public_forms_tags %}<!DOCTYPE html>
+<html lang="{{ lang }}" data-lang="{{ lang }}" class="no-js">
+<head>
+<meta charset="utf-8">
+<title>{% if title_text %}{{ title_text }}{% else %}{% t_text "kicker" %}{% endif %} — {{ facility_name }}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="same-origin">
+{% block head_extra %}{% endblock %}
+{% if idle_timeout and idle_armed %}
+{# Without JavaScript: start over for the next patient if this step is left alone. #}
+<noscript><meta http-equiv="refresh" content="{{ idle_timeout }};url={{ home_url }}"></noscript>
+{% endif %}
+{% if load_web_fonts %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700{% for family in web_fonts %}&amp;family={{ family|urlencode }}:wght@400;500;600;700{% endfor %}&amp;display=swap">
+{% endif %}
+<link rel="stylesheet" href="{% static 'public_forms/kiosk.css' %}">
+{# Every string is in the page in each language; show the current one. Fonts and script rules come from each language's locale file. #}
+<style>.l10n{display:none}{% for language in languages %}html[data-lang="{{ language.code }}"] .l10n--{{ language.code }}{% if not forloop.last %},{% endif %}{% endfor %}{display:inline}
+{% for language in languages %}{% if language.font %}html[lang="{{ language.code }}"] body,[lang="{{ language.code }}"]{font-family:'{{ language.font }}','Figtree',ui-sans-serif,system-ui,Arial,sans-serif}
+{% endif %}{% if language.tall_script %}html[lang="{{ language.code }}"] .kicker,html[lang="{{ language.code }}"] .idstrip-kicker{letter-spacing:normal;text-transform:none}
+html[lang="{{ language.code }}"] .h2,html[lang="{{ language.code }}"] .hero-title,html[lang="{{ language.code }}"] .qtitle,html[lang="{{ language.code }}"] .done-title{line-height:1.45;letter-spacing:normal}
+html[lang="{{ language.code }}"] .hero-title{font-size:clamp(1.625rem,7.2vw,2.125rem)}
+{% endif %}{% endfor %}</style>
+<script>document.documentElement.className = 'js';</script>
+</head>
+<body data-idle-timeout="{{ idle_timeout }}" data-idle-armed="{{ idle_armed|yesno:'1,0' }}" data-home-url="{{ home_url }}">
+{% if language_form %}
+{# Enter (a keyboard, a USB scanner) presses the form's first submit button. This is #}
+{# it ("go on from here"), placed before the header's language buttons, which also  #}
+{# belong to the form.                                                                #}
+<button type="submit" form="{{ language_form }}" name="nav" value="default" class="sr-only" tabindex="-1" aria-hidden="true"></button>
+{% endif %}
+
+<div class="page">
+<div class="shell">
+
+  <header class="hdr">
+    <div class="hdr-row">
+      <div class="hdr-id">
+        <span class="hdr-kicker">{% if title %}{% tr title %}{% else %}{% t "kicker" %}{% endif %}</span>
+        <span class="hdr-place">{{ facility_name }}</span>
+      </div>
+
+      {% block header_nav %}{% endblock %}
+
+      {% if languages|length > 1 %}
+      <div class="langtog" role="group" aria-label="Language">
+        {% for language in languages %}
+        {% if language_form %}
+        {# Posts the questionnaire (without JavaScript), so switching keeps the answers. #}
+        <button type="submit" form="{{ language_form }}" name="nav" value="lang:{{ language.code }}" class="langbtn langbtn--{{ language.code }}{% if language.code == lang %} is-on{% endif %}" lang="{{ language.code }}" data-set-lang="{{ language.code }}" aria-label="{{ language.name }}"{% if language.code == lang %} aria-current="true"{% endif %}>{{ language.label }}</button>
+        {% else %}
+        <a href="{{ language.url }}" class="langbtn langbtn--{{ language.code }}{% if language.code == lang %} is-on{% endif %}" lang="{{ language.code }}" data-set-lang="{{ language.code }}" aria-label="{{ language.name }}"{% if language.code == lang %} aria-current="true"{% endif %}>{{ language.label }}</a>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="progress"><div class="progress-fill" id="progressFill" style="width:{{ progress|default:0 }}%"></div></div>
+  </header>
+
+  <main class="main">
+    {% block screen %}{% endblock %}
+  </main>
+
+  <footer class="ftr">
+    <span class="ftr-note">{% t "footer_note" %}</span>
+    <span class="ftr-date">{{ today|date:"d M Y" }}</span>
+  </footer>
+
+</div>
+</div>
+
+{% if idle_timeout %}
+<div class="idle" id="idleOverlay" hidden>
+  <div class="idle-card" role="alertdialog" aria-live="assertive" aria-labelledby="idleTitle" aria-describedby="idleBody">
+    <p class="idle-title" id="idleTitle">{% t "idle_title" %}</p>
+    <p class="idle-body" id="idleBody" {% l10n_attr "data-template" "idle_body" %}></p>
+  </div>
+</div>
+{% endif %}
+
+<script src="{% static 'public_forms/kiosk.js' %}" defer></script>
+</body>
+</html>

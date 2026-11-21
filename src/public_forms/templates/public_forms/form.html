@@ -1,0 +1,56 @@
+{% extends "public_forms/base.html" %}
+{% load public_forms_tags %}
+
+{% block header_nav %}
+{# Shown from the first rating question on (ratings, open questions, review), as in the #}
+{# original design. Home drops everything entered. Reset clears the ratings and open    #}
+{# answers and goes back to the first question (kiosk.js); without JavaScript both are  #}
+{# plain links that start the form again.                                               #}
+<nav class="hdr-nav" id="hdrNav"{% if not nav_shown %} hidden{% endif %}>
+  <a class="navbtn navbtn--home" href="{{ nav_home_url }}" data-carry-lang>
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4v-5.5H9V20H5a1 1 0 0 1-1-1z"/></svg>
+    <span>{% t "nav_home" %}</span>
+  </a>
+  <a class="navbtn navbtn--reset" href="{{ reset_url }}" data-action="reset" data-carry-lang>
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M19.8 4.2v4h-4"/></svg>
+    <span>{% t "nav_reset" %}</span>
+  </a>
+</nav>
+{% endblock %}
+
+{% block screen %}
+{# The whole questionnaire, one step shown at a time. With JavaScript, kiosk.js     #}
+{# switches steps in the page and the form is posted once, from the review. Without #}
+{# it, every step button posts the form (all answers so far are in it, in the       #}
+{# hidden steps) with name="nav", and the server shows the next step (steps.py).     #}
+<form id="feedback" method="post" novalidate autocomplete="off"
+      data-start-step="{{ current_step }}" data-start-card="{{ current_card }}"
+      data-uhid-length="{{ uhid_length }}" data-scan-mode="{{ scan_mode }}">
+  <input type="hidden" name="language" value="{{ lang }}" id="fLang">
+  {% if came_from_chooser %}<input type="hidden" name="from" value="start">{% endif %}
+  <input type="hidden" name="step" value="{{ current_step }}" id="fStep">
+  <input type="hidden" name="card" value="{{ current_card }}" id="fCard">
+  <input type="hidden" name="return" value="{% if returning %}review{% endif %}" id="fReturn">
+
+  {% if banner %}<div class="callout callout--error banner" role="alert">{% t banner %}</div>{% endif %}
+
+  <button type="submit" name="nav" value="go:uhid" class="idstrip" id="idStrip" data-go="uhid"{% if not id_strip_shown %} hidden{% endif %}>
+    <span class="idstrip-icon">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+    </span>
+    <span class="idstrip-body">
+      <span class="idstrip-kicker">UHID</span>
+      <span class="idstrip-value" id="idStripValue">{{ uhid_display }}</span>
+    </span>
+    <span class="idstrip-action">{% t "change" %}</span>
+  </button>
+
+  {% include "public_forms/steps/identify.html" %}
+  {% if scan_mode != "off" %}{% include "public_forms/steps/scan.html" %}{% endif %}
+  {% include "public_forms/steps/uhid.html" %}
+  {% if details %}{% include "public_forms/steps/details.html" %}{% endif %}
+  {% include "public_forms/steps/ratings.html" %}
+  {% if open_questions %}{% include "public_forms/steps/comments.html" %}{% endif %}
+  {% include "public_forms/steps/review.html" %}
+</form>
+{% endblock %}
