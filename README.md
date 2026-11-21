@@ -464,7 +464,7 @@ src/public_forms/
 ├── checks.py         # `manage.py check` warnings for the language settings
 ├── models.py, admin.py, settings.py
 ├── templates/public_forms/   # form.html + steps/, choose, done, empty
-├── static/public_forms/      # kiosk.css, kiosk.js
+├── static/public_forms/      # kiosk.css, kiosk.js, favicon.ico (Care's icon)
 └── tests/            # Django tests (pages, API, admin)
 e2e/                  # Playwright tests in a real browser
 ```

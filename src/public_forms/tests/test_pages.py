@@ -4,6 +4,7 @@ from unittest import mock
 
 from care.utils.tests.base import CareAPITestBase
 from django.db.models import ProtectedError
+from django.templatetags.static import static
 from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -95,6 +96,13 @@ class PublicPageTests(PageTestBase):
         self.assertContains(response, "This facility wasn't found.", status_code=404)
         FeedbackForm.objects.update(is_active=False)
         self.assertContains(self.client.get(self.url()), "No feedback forms are set up", status_code=404)
+
+    def test_pages_carry_cares_favicon(self):
+        icon = f'<link rel="icon" href="{static("public_forms/favicon.ico")}">'
+        self.assertContains(self.client.get(self.url()), icon, html=True)
+        self.assertContains(self.client.get(self.url("form", "opd")), icon, html=True)
+        not_found = self.client.get(self.url(facility=mock.Mock(external_id=uuid.uuid4())))
+        self.assertContains(not_found, icon, status_code=404, html=True)
 
     def test_unknown_form_goes_to_the_chooser(self):
         self.assertRedirects(self.client.get(self.url("form", "nope")), self.url(), fetch_redirect_response=False)
