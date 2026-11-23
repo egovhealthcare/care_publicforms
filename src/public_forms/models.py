@@ -118,11 +118,11 @@ class FeedbackSubmission(models.Model):
     after the form is edited::
 
         {"registration_wait": {"question": "Waiting time at the registration counter",
-                               "type": "rating", "value": 2, "answer": "10–30 mins"},
+                               "type": "rating", "value": 2, "answer": "10-30 mins"},
          "would_return": {"question": "Would you come back…?", "type": "choice",
                           "value": "yes", "answer": "Yes", "comment": "Friendly staff"}}
 
-    ``value``: rating 0–5 (0 = "No comments"), choice code, ``YYYY-MM-DD``,
+    ``value``: rating 0 to 5 (0 = "No comments"), choice code, ``YYYY-MM-DD``,
     or text as typed. ``answer`` (ratings and choices): the label picked.
     ``comment`` (choices that ask "Why?"): the reason given. Question and labels are in
     English; the patient's language is ``language``. Questions not answered

@@ -1,3 +1,4 @@
+import importlib
 import io
 import json
 import tempfile
@@ -171,6 +172,33 @@ class FormLanguageTests(PageTestBase):
         question = form.questions[0]
         self.assertEqual(question["text"], {"en": "Clinic visited", TEST_LANGUAGE: "Already translated"})  # kept
         self.assertEqual([option.get(TEST_LANGUAGE) for option in question["options"]], ["T ent", None])
+
+    def test_old_range_labels_get_hyphens(self):
+        # Forms created before 0003 wrote ranges with an en dash. 0003 changes
+        # the default labels to a hyphen and leaves reworded ones alone.
+        migration = importlib.import_module("public_forms.migrations.0003_hyphens_in_range_labels")
+        dash = "\u2013"
+        form = FeedbackForm.objects.create(
+            code="old",
+            patient_type="op",
+            title={"en": "Old form"},
+            questions=[
+                {
+                    "key": "wait",
+                    "type": "choice",
+                    "text": {"en": "Wait"},
+                    "options": [
+                        {"value": "a", "en": f"10{dash}30 mins", "kn": f"10{dash}30 ನಿಮಿಷ"},
+                        {"value": "b", "en": f"5{dash}10 days"},  # reworded in the admin
+                    ],
+                }
+            ],
+        )
+        migration.use_hyphens(FeedbackForm)
+        form.refresh_from_db()
+        default, reworded = form.questions[0]["options"]
+        self.assertEqual(default, {"value": "a", "en": "10-30 mins", "kn": "10-30 ನಿಮಿಷ"})
+        self.assertEqual(reworded, {"value": "b", "en": f"5{dash}10 days"})
 
     def test_seeding_again_adds_every_language(self):
         # A default form deleted and re-created by the command gets the

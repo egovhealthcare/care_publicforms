@@ -1,5 +1,5 @@
 /* ──────────────────────────────────────────────────────────────────
-   Patient feedback kiosk — the original single-column kiosk design,
+   Patient feedback kiosk. It keeps the original single-column design,
    styled with care_fe's CareUI theme (Figtree, emerald primary, neutral
    greys, 0.625rem radius).
 
@@ -377,7 +377,7 @@ button.langbtn{border:0;font-family:inherit;line-height:inherit;cursor:pointer;-
 .key--fn{font-size:.9375rem;font-weight:600;color:var(--soft-foreground);background:var(--muted-background)}
 .key svg{width:1.625rem;height:1.625rem}
 
-/* ── Choices (guest details, yes/no) — radio inputs, no JS needed ── */
+/* ── Choices (guest details, yes/no): radio inputs, no JS needed ── */
 .chips{display:flex;flex-wrap:wrap;margin-bottom:-.5rem} /* cancels the last row's chip margin */
 .chip{position:relative;display:inline-block;margin:0 .5rem .5rem 0}
 .chip input,

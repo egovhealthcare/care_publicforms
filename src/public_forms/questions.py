@@ -49,7 +49,7 @@ FIELDS = {
     "step": (
         "details",
         "choice: details (“A few details”, after identification) or open (“In your own words”, before the "
-        "review, as large buttons when it has 2–3 options). A yes/no question is an open choice.",
+        "review, as large buttons when it has 2 or 3 options). A yes/no question is an open choice.",
     ),
     "allow_comment": (False, "choice: also ask “Why?” under the answer."),
     "active": (True, "false: not asked, but kept in the form."),

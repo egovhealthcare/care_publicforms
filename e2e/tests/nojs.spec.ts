@@ -71,7 +71,7 @@ test("without JavaScript the kiosk still goes step by step", async ({ page }) =>
   await expect(activeCard(page)).toHaveAttribute("data-question-key", "registration_wait");
   await answerCard(page, 2);
   await expectStep(page, "review");
-  await expect(reviewRow(page, "Registration wait")).toContainText("10–30 mins");
+  await expect(reviewRow(page, "Registration wait")).toContainText("10-30 mins");
 
   await page.getByRole("button", { name: "Submit feedback" }).click();
   await expect(page).toHaveURL(/\/done\/\?.*ref=OPD-\d{8}-\d{4}/);
@@ -86,7 +86,7 @@ test("without JavaScript a guest answers the guest details, and Back works", asy
     await expect(page.locator(`[data-question-key="${key}"]`)).toBeVisible();
   }
   await pickDetail(page, "clinic", "Dental");
-  await pickDetail(page, "age_group", "31–45");
+  await pickDetail(page, "age_group", "31-45");
   await pickDetail(page, "sex", "Female");
   await page.getByRole("button", { name: "Start the questions" }).click();
   await answerCard(page, 5);

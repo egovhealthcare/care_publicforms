@@ -1,5 +1,5 @@
 /* ──────────────────────────────────────────────────────────────────
-   Patient feedback kiosk — progressive enhancement only.
+   Patient feedback kiosk script. The pages work without it; it only makes them smoother.
 
    The questionnaire is one server-rendered form holding every step and
    every language, with the current step marked by the server. Without

@@ -309,7 +309,7 @@ class FeedbackSubmissionAdmin(admin.ModelAdmin):
             elif isinstance(shown, bool):
                 shown = _("Yes") if shown else _("No")
             if entry.get("comment"):
-                shown = f"{shown} — {entry['comment']}"
+                shown = f"{shown} ({entry['comment']})"
             rows.append((entry.get("question") or key, shown))
         return format_html(
             "<table>{}</table>", format_html_join("", "<tr><td>{}</td><td><strong>{}</strong></td></tr>", rows)
@@ -320,7 +320,7 @@ class FeedbackSubmissionAdmin(admin.ModelAdmin):
         # One column per answer key; OP and IP forms ask different questions,
         # so the columns are the union over the selection, in the forms'
         # question order (keys no longer on a form go last).
-        # Each cell is the stored value (ratings 0–5, choice codes, yes/no); a
+        # Each cell is the stored value (ratings 0 to 5, choice codes, yes/no); a
         # "Why?" gets its own <key>__comment column.
         queryset = with_facility_name(queryset.order_by("submitted_at")).select_related("form")
         found = set()

@@ -281,7 +281,7 @@ class FormView(FeedbackPage):
                 item.update(
                     options=[{"value": code, "label": labels} for code, labels in options.items()],
                     compact=all(len(localize(labels, BASE_LANGUAGE)) <= 12 for labels in options.values()),
-                    # On the "in your own words" step, 2–3 options are large buttons (e.g. Yes / No).
+                    # On the "in your own words" step, 2 or 3 options are large buttons (e.g. Yes / No).
                     buttons=question.step == "open" and 2 <= len(options) <= 3,
                     allow_comment=question.allow_comment,
                     comment_key=comment_key(question),

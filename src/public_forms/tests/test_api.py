@@ -265,7 +265,7 @@ class AdminTests(CareAPITestBase):
         self.assertContains(response, "District Hospital, Mysuru")
         self.assertContains(response, "<strong>ENT</strong>", html=True)
         self.assertContains(response, "4 · Very good")
-        self.assertContains(response, "Yes — Kind staff")
+        self.assertContains(response, "Yes (Kind staff)")
 
     def test_submissions_are_read_only(self):
         changelist = reverse("admin:public_forms_feedbacksubmission_changelist")

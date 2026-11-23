@@ -67,7 +67,7 @@ test("an identified patient answers everything and gets a reference", async ({ p
   await expect(activeCard(page)).toHaveAttribute("data-question-key", "registration_wait");
   await rate(page, 2);
   await expectStep(page, "review");
-  await expect(reviewRow(page, "Registration wait")).toContainText("10–30 mins");
+  await expect(reviewRow(page, "Registration wait")).toContainText("10-30 mins");
 
   await page.getByRole("button", { name: "Submit feedback" }).click();
   await expect(page).toHaveURL(/\/public_forms\/type\/opd\/done\/\?.*ref=OPD-\d{8}-\d{4}/);
@@ -91,7 +91,7 @@ test("a guest must answer the details", async ({ page }) => {
   await page.locator('[data-action="details-next"]').click();
   for (const key of ["clinic", "age_group", "sex"]) await expect(requiredError(page, key)).toBeVisible();
   await pickDetail(page, "clinic", "Dental");
-  await pickDetail(page, "age_group", "31–45");
+  await pickDetail(page, "age_group", "31-45");
   await pickDetail(page, "sex", "Female");
   await page.locator('[data-action="details-next"]').click();
   await expectStep(page, "questions");
@@ -191,7 +191,7 @@ test("Home from a question goes back to the chooser", async ({ page }) => {
   await continueAsGuest(page);
   await pickDetail(page, "ward", "ICU / HDU");
   await activeStep(page).locator('input[type="date"]').fill(isoDate(-1));
-  await pickDetail(page, "age_group", "46–60");
+  await pickDetail(page, "age_group", "46-60");
   await pickDetail(page, "sex", "Other");
   await page.locator('[data-action="details-next"]').click();
   await headerNav(page).getByRole("link", { name: "Home" }).click();

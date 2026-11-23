@@ -13,8 +13,8 @@ import copy
 
 WAIT_LABELS = [  # Poor → Excellent, as in the NQAS format  # review (kn)
     {"en": "More than 30 mins", "kn": "30 ನಿಮಿಷಕ್ಕಿಂತ ಹೆಚ್ಚು"},
-    {"en": "10–30 mins", "kn": "10–30 ನಿಮಿಷ"},
-    {"en": "5–10 mins", "kn": "5–10 ನಿಮಿಷ"},
+    {"en": "10-30 mins", "kn": "10-30 ನಿಮಿಷ"},
+    {"en": "5-10 mins", "kn": "5-10 ನಿಮಿಷ"},
     {"en": "Within 5 mins", "kn": "5 ನಿಮಿಷದೊಳಗೆ"},
     {"en": "Immediate", "kn": "ತಕ್ಷಣ"},
 ]
@@ -27,9 +27,9 @@ AGE_GROUP = {
     "text": {"en": "Age group", "kn": "ವಯೋಮಾನ"},
     "options": [
         {"value": "under_18", "en": "Under 18", "kn": "18ಕ್ಕಿಂತ ಕಡಿಮೆ"},
-        {"value": "18_30", "en": "18–30", "kn": "18–30"},
-        {"value": "31_45", "en": "31–45", "kn": "31–45"},
-        {"value": "46_60", "en": "46–60", "kn": "46–60"},
+        {"value": "18_30", "en": "18-30", "kn": "18-30"},
+        {"value": "31_45", "en": "31-45", "kn": "31-45"},
+        {"value": "46_60", "en": "46-60", "kn": "46-60"},
         {"value": "over_60", "en": "Over 60", "kn": "60ಕ್ಕಿಂತ ಹೆಚ್ಚು"},
     ],
 }

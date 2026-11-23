@@ -216,7 +216,7 @@ In the Django admin under **Public Forms → Feedback forms**:
     {"key": "registration_wait", "type": "rating",
      "text": {"en": "Waiting time at the registration counter"},
      "short_text": {"en": "Registration wait"},
-     "options": [{"en": "More than 30 mins"}, {"en": "10–30 mins"}, {"en": "5–10 mins"},
+     "options": [{"en": "More than 30 mins"}, {"en": "10-30 mins"}, {"en": "5-10 mins"},
                  {"en": "Within 5 mins"}, {"en": "Immediate"}]},
     {"key": "would_return", "type": "choice", "step": "open", "allow_comment": true,
      "text": {"en": "Would you come back to this hospital for treatment?"},
@@ -247,7 +247,7 @@ In the Django admin under **Public Forms → Feedback forms**:
 
   | Type | Step | Notes |
   | --- | --- | --- |
-  | `choice` | A few details, or In your own words with `"step": "open"` | `options`: `[{"value": "ent", "en": "ENT", "<code>": "…"}]`. On the open step, 2–3 options show as large buttons. A **yes/no** question is a choice with the options `yes` and `no` (see `would_return` above) |
+  | `choice` | A few details, or In your own words with `"step": "open"` | `options`: `[{"value": "ent", "en": "ENT", "<code>": "…"}]`. On the open step, a question with 2 or 3 options shows them as large buttons. A **yes/no** question is a choice with the options `yes` and `no` (see `would_return` above) |
   | `date` | A few details | e.g. date of admission; future dates are refused |
   | `rating` | One card at a time | Poor → Excellent plus "No comments" (can be turned off). `options` can relabel the five steps, e.g. waiting time "More than 30 mins" … "Immediate". Ratings always need an answer. |
   | `text` | In your own words | free text |
@@ -279,7 +279,7 @@ as it was asked**:
 {
   "clinic": {"question": "Clinic visited", "type": "choice", "value": "ent", "answer": "ENT"},
   "registration_wait": {"question": "Waiting time at the registration counter",
-                        "type": "rating", "value": 2, "answer": "10–30 mins"},
+                        "type": "rating", "value": 2, "answer": "10-30 mins"},
   "would_return": {"question": "Would you come back to this hospital for treatment?",
                    "type": "choice", "value": "yes", "answer": "Yes", "comment": "Friendly staff"},
   "improvement": {"question": "What would you most like to see improved?",
@@ -287,7 +287,7 @@ as it was asked**:
 }
 ```
 
-- `value`: ratings `0`–`5` (`0` = *No comments*, left out of averages),
+- `value`: ratings `0` to `5` (`0` = *No comments*, left out of averages),
   the choice's code (`"yes"` / `"no"` for a yes/no question), `YYYY-MM-DD`,
   or text as typed.
 - `answer` (ratings and choices only): the label the patient picked.
