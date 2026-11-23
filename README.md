@@ -77,7 +77,9 @@ validation) and the database tables, see
   the screen (the smaller of height/60 and width/32). A question fits
   without scrolling on 1920×1080, 960×540 TV browsers, 1080×1920 portrait
   and tablets. The longer comments and review steps scroll, with their main
-  button pinned at the bottom.
+  button pinned at the bottom. On short screens (or with the on-screen
+  keyboard open), a field the browser scrolls to stops clear of the header
+  and that button instead of beneath them.
 - **Home and Reset.** From the first rating question on (ratings, open
   questions, review), the header shows *Home*, which drops everything and
   goes back to the chooser (or the start of a pinned form), and *Reset*,
@@ -89,6 +91,12 @@ validation) and the database tables, see
   the moment a page holds a patient's choices (their form, their language,
   or their answers sent back after a failed submit), so nothing is left on
   screen for the next patient; an untouched screen never reloads.
+- **Answers aren't lost by accident.** Once anything is entered, reloading
+  or closing the page first asks with the browser's own "Leave site?" /
+  "Reload site?" question (browsers word it themselves; iPhone and iPad
+  browsers don't show it). Submitting, *Home* and the idle reset don't ask.
+  In Chrome and other Chromium browsers, pulling down at the top of the page
+  no longer reloads it.
 - **Back doesn't bring anything back.** The pages are never cached, the
   thank-you page shows only just after its submission, and its *Start new*
   and timed return replace it in the browser's history. A page that the

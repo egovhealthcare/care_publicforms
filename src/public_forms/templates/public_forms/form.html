@@ -23,7 +23,8 @@
 {# switches steps in the page and the form is posted once, from the review. Without #}
 {# it, every step button posts the form (all answers so far are in it, in the       #}
 {# hidden steps) with name="nav", and the server shows the next step (steps.py).     #}
-<form id="feedback" method="post" novalidate autocomplete="off"
+{# is-editing: an answer opened from the review; its step shows no Back (see kiosk.css). #}
+<form id="feedback" method="post" novalidate autocomplete="off"{% if returning %} class="is-editing"{% endif %}
       data-start-step="{{ current_step }}" data-start-card="{{ current_card }}"
       data-uhid-length="{{ uhid_length }}" data-scan-mode="{{ scan_mode }}"
       data-blocked-characters="{{ blocked_characters }}">

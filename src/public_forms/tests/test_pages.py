@@ -566,6 +566,10 @@ class StepByStepWithoutJavaScriptTests(PageTestBase):
         card = keys.index("registration_wait")
         edit = self.press("edit:registration_wait", step="review", **answers)
         self.assertEqual((self.place(edit), edit.context["returning"]), (("questions", card), True))
+        # Its step offers only the way back to the review: no "Back" to the previous question.
+        self.assertContains(edit, 'autocomplete="off" class="is-editing"')
+        self.assertContains(edit, 'data-nav="back" data-edit-hidden')
+        self.assertNotContains(review, 'class="is-editing"')
         back = self.press(
             "next", step="questions", card=card, **{**answers, "registration_wait": "2", "return": "review"}
         )

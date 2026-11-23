@@ -14,6 +14,7 @@
      · questions shown only to guests or only to identified patients
      · instant language switching
      · an idle timer that starts over for the next patient
+     · the browser's "Leave site?" question before a reload drops the answers
      · a Back button that never brings back a previous patient's page
      · typed text without the characters text_rules.py blocks (< > …)
    Plain ES5 so it runs on older TV browsers.
@@ -90,13 +91,28 @@
     });
   });
 
+  /* ── Leaving the page ────────────────────────────────────────── */
+  // The kiosk's own ways out (submitting, Home and the other links, the
+  // idle reset) leave without the browser's "Leave site?" question; see
+  // "Leaving with answers" below.
+  var leavingOnPurpose = false;
+  function leaveTo(url) {
+    leavingOnPurpose = true;
+    window.location.replace(url);
+  }
+  // A click on a link that the page doesn't handle itself (the language
+  // toggle and Reset do) navigates: Home, Back to the chooser, Start new.
+  document.addEventListener('click', function (event) {
+    if (!event.defaultPrevented && closest(event.target, 'a[href]')) leavingOnPurpose = true;
+  });
+
   /* ── Back button ─────────────────────────────────────────────── */
   // The screen is shared, so the browser's history must not bring back a
   // previous patient's page. A page restored by Back (from the browser's
   // back/forward cache) starts over for the next patient.
   window.addEventListener('pageshow', function (event) {
     var start = body.getAttribute('data-home-url');
-    if (event.persisted && start) window.location.replace(start);
+    if (event.persisted && start) leaveTo(start);
   });
   // Links marked data-replace (the thank-you page's "Start new") replace
   // the page in the history, so Back can't return to it. Its timed return
@@ -104,7 +120,7 @@
   each(document.querySelectorAll('a[data-replace]'), function (link) {
     link.addEventListener('click', function (event) {
       event.preventDefault();
-      window.location.replace(link.href);
+      leaveTo(link.href);
     });
   });
 
@@ -135,7 +151,7 @@
       var left = Math.ceil(idleSeconds - (Date.now() - lastActivity) / 1000);
       if (left <= 0) {
         leaving = true;
-        window.location.replace(homeUrl);
+        leaveTo(homeUrl);
       } else if (left <= warnSeconds && overlay) {
         overlayText.textContent = (overlayText.getAttribute('data-template') || '').replace('{n}', left);
         overlay.hidden = false;
@@ -368,6 +384,8 @@
       var units = flow();
       progressFill.style.width = inFlow ? Math.round((position() + 1) / (units.length + 1) * 100) + '%' : '0%';
     }
+    // An answer opened from the review returns to it: its step shows no Back (kiosk.css).
+    form.classList.toggle('is-editing', returnToReview);
     window.scrollTo(0, 0);
     // Keep TV-remote focus inside the visible step.
     if (document.activeElement && document.activeElement !== body && (name !== 'questions' || cards[currentCard])) {
@@ -860,6 +878,30 @@
     if (!identified) uhidInput.value = '';
     if (returnField) returnField.value = '';
     submitting = true;
+    leavingOnPurpose = true;
+  });
+
+  /* ── Leaving with answers ────────────────────────────────────── */
+  // Reloading or closing the page drops what was entered (a pull-down while
+  // scrolling on a tablet reloads it too). Once anything is entered, the
+  // browser asks first with its own "Leave site?" / "Reload site?" question;
+  // browsers word it themselves and don't show page text. The kiosk's own
+  // ways out don't ask (see "Leaving the page"), so the idle reset is never
+  // held up by the question.
+  function anythingEntered() {
+    if (form.querySelector('input[type=radio]:checked')) return true;
+    var fields = form.querySelectorAll('textarea, input[type=date], #uhidInput');
+    for (var i = 0; i < fields.length; i++) {
+      if (String(fields[i].value).replace(/\s+/g, '') !== '') return true;
+    }
+    return false;
+  }
+
+  window.addEventListener('beforeunload', function (event) {
+    if (leavingOnPurpose || !anythingEntered()) return undefined;
+    event.preventDefault();
+    event.returnValue = ''; // older browsers ask only when this is set
+    return '';
   });
 
   /* ── Start ───────────────────────────────────────────────────── */

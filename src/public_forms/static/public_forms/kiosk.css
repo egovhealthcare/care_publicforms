@@ -83,6 +83,13 @@ html{font-size:16px}
 /* ── Base ───────────────────────────────────────────────────────── */
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
+/* A pull-down at the top of the page doesn't reload it (pull-to-refresh), which would drop the answers. */
+html,body{overscroll-behavior-y:none}
+/* The header stays at the top (7.25rem with Home and Reset) and, on the
+   longer steps, the main button at the bottom (5.5rem). A field the browser
+   scrolls to, on a tap or when the keyboard opens, stops clear of both
+   instead of beneath them on short screens. */
+html{scroll-padding-top:7.5rem;scroll-padding-bottom:6rem}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{
   background:var(--muted-background);
@@ -625,5 +632,8 @@ button.row::after{
 #feedback{flex:1 0 auto;display:flex;flex-direction:column}
 .banner{margin-bottom:1.125rem}
 .step:not(.is-active){display:none !important}
+/* Changing an answer from the review: the step offers only the way back to the
+   review, not "Back" to the previous question, which would be confusing. */
+.is-editing [data-edit-hidden]{display:none !important}
 .js .no-js-only{display:none !important}
 .no-js .js-only{display:none !important}
