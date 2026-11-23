@@ -35,6 +35,42 @@ export function activeCard(page: Page): Locator {
   return page.locator("[data-card].is-active");
 }
 
+/** The counter on the rating card on screen; check it with counterText. */
+export function counter(page: Page): Locator {
+  return activeCard(page).locator("[data-counter]");
+}
+
+/** "Question n of total", in any letter case: the CSS shows it in capitals. */
+export function counterText(n: number, total: number): RegExp {
+  return new RegExp(`^Question ${n} of ${total}$`, "i");
+}
+
+/** The card that asks before Home or Reset clears what the patient entered. */
+export function confirmCard(page: Page, which: "home" | "reset"): Locator {
+  return page.locator(which === "home" ? "#confirmHome" : "#confirmReset");
+}
+
+/** The types of browser dialogs ("beforeunload", "alert", …) the page opens from now on; each is accepted. */
+export function trackDialogs(page: Page): string[] {
+  const seen: string[] = [];
+  page.on("dialog", (dialog) => {
+    seen.push(dialog.type());
+    void dialog.accept();
+  });
+  return seen;
+}
+
+/** Identified OPD patient up to "In your own words": UHID, ENT clinic, every rating 4. */
+export async function opdToOpenQuestions(page: Page, query = "lang=en"): Promise<void> {
+  await page.goto(formUrl("opd", query));
+  await enterUhid(page);
+  await expectStep(page, "screen-1");
+  await pickDetail(page, "clinic", "ENT");
+  await page.locator('[data-step="screen-1"] [data-action="screen-next"]').click();
+  await rateAll(page);
+  await expectStep(page, "screen-3");
+}
+
 /** Identify with a UHID typed on the on-screen keypad. */
 export async function enterUhid(page: Page, uhid = UHID): Promise<void> {
   await page.getByRole("button", { name: /Enter UHID manually/ }).click();
@@ -90,13 +126,7 @@ export async function rateAll(page: Page, value = 4): Promise<number> {
 
 /** Identified OPD patient up to the review: UHID, ENT clinic, every rating 4, no open answers. */
 export async function opdToReview(page: Page, query = "lang=en"): Promise<void> {
-  await page.goto(formUrl("opd", query));
-  await enterUhid(page);
-  await expectStep(page, "screen-1");
-  await pickDetail(page, "clinic", "ENT");
-  await page.locator('[data-step="screen-1"] [data-action="screen-next"]').click();
-  await rateAll(page);
-  await expectStep(page, "screen-3");
+  await opdToOpenQuestions(page, query);
   await page.locator('[data-step="screen-3"] [data-action="screen-next"]').click();
   await expectStep(page, "review");
 }

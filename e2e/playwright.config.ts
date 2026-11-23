@@ -31,7 +31,7 @@ export default defineConfig({
     // Behaviour, on a 1080p kiosk TV
     {
       name: "kiosk",
-      testMatch: /(flows|language|idle|camera)\.spec\.ts/,
+      testMatch: /(flows|language|idle|camera|guards)\.spec\.ts/,
       use: { ...desktop, viewport: { width: 1920, height: 1080 } },
     },
     // The same page without JavaScript: one long form

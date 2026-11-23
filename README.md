@@ -610,10 +610,14 @@ Lint with `ruff check src && ruff format src`.
 
 [`e2e/`](e2e) drives the pages in Chromium against a running Care backend
 with the plugin installed: the patient flows (UHID by keypad and by a
-keyboard QR scanner, guest details, editing from the review, Reset, Home,
-future dates), the scan option hiding when the camera can't be used, the
-language carried to the thank-you page, the idle reset
-(with a mocked clock), the step-by-step flow without JavaScript, and the layout on five
+keyboard QR scanner, guest details, editing from the review, Reset and Home
+with their confirmation, future dates), the safeguards for a shared screen
+(Back after the thank-you page, the "Leave site?" warning, blocked
+characters, keeping the place after a UHID change, boxes clear of the
+pinned buttons on short screens), the scan option hiding when the camera
+can't be used, the language carried to the thank-you page, the idle reset
+(with a mocked clock), the step-by-step flow and its 3-minute countdown
+without JavaScript, and the layout on five
 screen shapes (1080p and 960×540 TVs, a portrait screen, a tablet, a phone:
 no sideways scrolling, nothing clipped, main buttons on screen, unique ids,
 named controls), in English and in the second offered language.

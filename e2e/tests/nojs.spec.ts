@@ -2,6 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   activeCard,
   activeStep,
+  counter,
+  counterText,
   expectStep,
   formUrl,
   needsFacility,
@@ -27,6 +29,7 @@ async function answerCard(page: Page, value: number) {
 test("without JavaScript the kiosk still goes step by step", async ({ page }) => {
   await page.goto(formUrl("opd"));
   await expectStep(page, "identify");
+  await expect(page.locator(".tick-timer")).toHaveCount(0); // an untouched screen never starts over
   await expect(page.getByRole("button", { name: /Continue as guest/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Scan the QR/ })).toBeHidden(); // needs JavaScript
 
@@ -37,6 +40,10 @@ test("without JavaScript the kiosk still goes step by step", async ({ page }) =>
   await page.locator("#uhidInput").press("Enter"); // Enter continues, like the button
   await expectStep(page, "uhid");
   await expect(page.locator("#uhidErr")).toBeVisible();
+  // The page now holds an answer: it starts over 3 minutes after it loaded,
+  // counting down in the header (it can't see touches without JavaScript).
+  await expect(page.locator(".tick-timer")).toBeVisible();
+  await expect(page.locator('meta[http-equiv="refresh"]')).toHaveAttribute("content", /^180;url=/);
   await page.locator("#uhidInput").fill("12345678901");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
 
@@ -49,7 +56,7 @@ test("without JavaScript the kiosk still goes step by step", async ({ page }) =>
   await page.getByRole("button", { name: "Start the questions" }).click();
 
   await expectStep(page, "questions");
-  await expect(activeCard(page).locator("[data-counter]")).toHaveText("Question 1 of 10", shown);
+  await expect(counter(page)).toHaveText(counterText(1, 10), shown);
   await expect(page.locator("#hdrNav")).toBeVisible();
   // Next needs an answer.
   await activeCard(page).getByRole("button", { name: "Next" }).click();

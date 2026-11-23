@@ -3,7 +3,10 @@ import {
   activeCard,
   activeStep,
   chooserUrl,
+  confirmCard,
   continueAsGuest,
+  counter,
+  counterText,
   enterUhid,
   expectStep,
   formUrl,
@@ -17,6 +20,7 @@ import {
   requiredError,
   reviewRow,
   shown,
+  trackDialogs,
 } from "./helpers";
 
 test.beforeEach(needsFacility);
@@ -45,7 +49,7 @@ test("an identified patient answers everything and gets a reference", async ({ p
   await page.locator('[data-step="screen-1"] [data-action="screen-next"]').click();
 
   // Home and Reset from the first question on.
-  await expect(activeCard(page).locator("[data-counter]")).toHaveText("Question 1 of 10", shown);
+  await expect(counter(page)).toHaveText(counterText(1, 10), shown);
   await expect(headerNav(page)).toBeVisible();
   expect(await rateAll(page, 4)).toBe(10);
 
@@ -62,15 +66,19 @@ test("an identified patient answers everything and gets a reference", async ({ p
   await expect(reviewRow(page, "Would return to this hospital")).toContainText("Friendly staff");
   await expect(reviewRow(page, "Any other suggestions?")).toContainText("Not answered");
 
-  // Editing an answer from the review comes straight back to it.
+  // Editing an answer from the review comes straight back to it, with no
+  // Back (to the previous question) on the way.
   await reviewRow(page, "Registration wait").click();
   await expect(activeCard(page)).toHaveAttribute("data-question-key", "registration_wait");
+  await expect(activeCard(page).getByRole("button", { name: "Back" })).toBeHidden();
   await rate(page, 2);
   await expectStep(page, "review");
   await expect(reviewRow(page, "Registration wait")).toContainText("10-30 mins");
 
+  const dialogs = trackDialogs(page);
   await page.getByRole("button", { name: "Submit feedback" }).click();
   await expect(page).toHaveURL(/\/public_forms\/type\/opd\/done\/\?.*ref=OPD-\d{8}-\d{4}/);
+  expect(dialogs).toEqual([]); // submitting doesn't ask "Leave site?"
   await expect(page.locator(".token")).toHaveText(/^OPD-\d{8}-\d{4}$/);
   await expect(page.locator("h2.done-title")).toHaveText("Thank you.", shown);
   // The next patient starts at the chooser.
@@ -122,9 +130,21 @@ test("Reset clears the answers and returns to question 1, keeping the UHID and d
   await rate(page, 5);
   await rate(page, 4);
   await rate(page, 3);
-  await headerNav(page).getByRole("link", { name: "Reset" }).click();
 
-  await expect(activeCard(page).locator("[data-counter]")).toHaveText("Question 1 of 10", shown);
+  // Reset asks first; "No, keep my answers" keeps them and stays on the question.
+  const ask = confirmCard(page, "reset");
+  await headerNav(page).getByRole("link", { name: "Reset" }).click();
+  await expect(ask).toBeVisible();
+  await expect(ask).toContainText("Clear your answers?");
+  await expect(ask.getByRole("button", { name: "No, keep my answers" })).toBeFocused();
+  await ask.getByRole("button", { name: "No, keep my answers" }).click();
+  await expect(ask).toBeHidden();
+  await expect(page.locator("[data-step=questions] input:checked")).toHaveCount(3);
+  await expect(counter(page)).toHaveText(counterText(4, 10), shown);
+
+  await headerNav(page).getByRole("link", { name: "Reset" }).click();
+  await ask.getByRole("button", { name: "Yes, clear them" }).click();
+  await expect(counter(page)).toHaveText(counterText(1, 10), shown);
   await expect(page.locator("[data-step=questions] input:checked")).toHaveCount(0);
   await expect(page.locator("#idStripValue")).toHaveText("123 4567 8901");
   await expect(page.locator('input[name="clinic"][value="ent"]')).toBeChecked();
@@ -194,6 +214,19 @@ test("Home from a question goes back to the chooser", async ({ page }) => {
   await pickDetail(page, "age_group", "46-60");
   await pickDetail(page, "sex", "Other");
   await page.locator('[data-step="screen-1"] [data-action="screen-next"]').click();
+  const dialogs = trackDialogs(page);
+
+  // Home asks first, since answers would be lost; Escape keeps them.
+  const ask = confirmCard(page, "home");
   await headerNav(page).getByRole("link", { name: "Home" }).click();
+  await expect(ask).toBeVisible();
+  await expect(ask).toContainText("Leave this feedback?");
+  await page.keyboard.press("Escape");
+  await expect(ask).toBeHidden();
+  await expectStep(page, "questions");
+
+  await headerNav(page).getByRole("link", { name: "Home" }).click();
+  await ask.getByRole("button", { name: "Yes, go to home" }).click();
   await expect(page).toHaveURL(chooserUrl());
+  expect(dialogs).toEqual([]); // no browser "Leave site?" on top
 });
