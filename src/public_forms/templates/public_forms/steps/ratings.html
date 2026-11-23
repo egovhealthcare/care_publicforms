@@ -5,7 +5,7 @@
   {% for question in ratings %}
   <div class="qcard{% if question.error %} has-error{% endif %}{% if question.index == current_card %} is-active{% endif %}" data-card data-question-key="{{ question.key }}" data-audience="{{ question.audience }}" data-required="1"{% if not question.shown %} hidden{% endif %}>
     <div class="qhead">
-      <span class="badge" data-counter>{% t "question_counter" n=question.number total=rating_total %}</span>
+      <span class="kicker kicker--tnum" data-counter>{% t "question_counter" n=question.number total=rating_total %}</span>
       <h2 class="qtitle" id="qt-{{ question.key }}">{% tr question.text %}</h2>
       {% if question.hint %}<p class="qhint">{% tr question.hint %}</p>{% endif %}
       <span class="q-label" hidden>{% tr question.label %}</span>

@@ -14,7 +14,7 @@ merged over the plugin's. A file looks like::
     }
 
 ``language``: ``name`` for screen readers and the admin; ``toggle`` the header
-button; ``font`` a Google Fonts family for the script (null: Figtree covers
+button; ``font`` a Google Fonts family for the script (null: DM Sans covers
 it); ``tall_script`` for scripts with tall letters and no capitals (Kannada,
 Malayalam, …): small labels aren't uppercased and headings get more line
 height. ``strings``: the screen text by key, as in ``en.json``; placeholders

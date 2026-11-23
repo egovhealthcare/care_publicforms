@@ -49,7 +49,7 @@ test("without JavaScript the kiosk still goes step by step", async ({ page }) =>
   await page.getByRole("button", { name: "Start the questions" }).click();
 
   await expectStep(page, "questions");
-  await expect(activeCard(page).locator(".badge")).toHaveText("Question 1 of 10", shown);
+  await expect(activeCard(page).locator("[data-counter]")).toHaveText("Question 1 of 10", shown);
   await expect(page.locator("#hdrNav")).toBeVisible();
   // Next needs an answer.
   await activeCard(page).getByRole("button", { name: "Next" }).click();

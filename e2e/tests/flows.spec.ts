@@ -45,7 +45,7 @@ test("an identified patient answers everything and gets a reference", async ({ p
   await page.locator('[data-action="details-next"]').click();
 
   // Home and Reset from the first question on.
-  await expect(activeCard(page).locator(".badge")).toHaveText("Question 1 of 10", shown);
+  await expect(activeCard(page).locator("[data-counter]")).toHaveText("Question 1 of 10", shown);
   await expect(headerNav(page)).toBeVisible();
   expect(await rateAll(page, 4)).toBe(10);
 
@@ -124,7 +124,7 @@ test("Reset clears the answers and returns to question 1, keeping the UHID and d
   await rate(page, 3);
   await headerNav(page).getByRole("link", { name: "Reset" }).click();
 
-  await expect(activeCard(page).locator(".badge")).toHaveText("Question 1 of 10", shown);
+  await expect(activeCard(page).locator("[data-counter]")).toHaveText("Question 1 of 10", shown);
   await expect(page.locator("[data-step=questions] input:checked")).toHaveCount(0);
   await expect(page.locator("#idStripValue")).toHaveText("123 4567 8901");
   await expect(page.locator('input[name="clinic"][value="ent"]')).toBeChecked();

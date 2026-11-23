@@ -69,9 +69,11 @@ validation) and the database tables, see
 - **Configurable forms.** Forms and questions live in the database and are
   edited in the plugin's own admin, with a text box per language. See
   [Forms and questions](#forms-and-questions) and [The admin](#the-admin).
-- **care_fe look.** Styled with care_fe's CareUI theme (Figtree, emerald
-  primary, neutral greys, care_fe buttons/cards), using hex colours so older
-  TV browsers render it.
+- **The OPD feedback design in Care's colours.** DM Sans with light
+  headings, pill buttons, tinted cards and soft shadows, coloured with
+  care_fe's palette: emerald primary, emerald-50 surfaces, Care's link blue
+  for the guest option and red for Reset. Rating faces run from red (poor)
+  to emerald (excellent). Hex colours, so older TV browsers render it.
 - **One layout on every screen.** The original single-column kiosk design
   is used everywhere. Sizes are in `rem`, so on TVs the column scales up to
   the screen (the smaller of height/60 and width/32). A question fits
@@ -209,7 +211,7 @@ starting language for the next patient.
 - QR payloads count as a UHID when they contain exactly 11 digits once other
   characters are removed (`UHID:123-4567-8901` works).
 - Without internet access to Google Fonts, set `LOAD_WEB_FONTS=False` and
-  install *Figtree* and each language's `font` (from its locale file) on the
+  install *DM Sans* and each language's `font` (from its locale file) on the
   device (or ship the fonts yourself); otherwise system fonts are used and
   some scripts may not render.
 
@@ -388,7 +390,7 @@ Set in the plug's `configs={}` or as environment variables:
 | `SUBMIT_RATE_LIMIT` | `"60/m"` | Submissions allowed per IP (django-ratelimit rate). A kiosk is one IP, so keep it well above a busy hour. |
 | `ADMIN_URL` | `"public_forms/admin"` | Path of [the admin](#the-admin) on the API host. Read when Care starts. |
 | `ADMIN_LOGIN_RATE_LIMIT` | `"5/m"` | Sign-in attempts allowed on the admin per IP address, and per username (django-ratelimit rate). `""` turns it off. |
-| `LOAD_WEB_FONTS` | `True` | Load Figtree (care_fe's font) and each offered language's `font` from Google Fonts. |
+| `LOAD_WEB_FONTS` | `True` | Load DM Sans and each offered language's `font` from Google Fonts. |
 
 ### Behind a proxy
 
@@ -427,7 +429,7 @@ One per language in [`src/public_forms/locale/`](src/public_forms/locale):
 | --- | --- |
 | `language.name` | For screen readers and the admin's text boxes |
 | `language.toggle` | The header button, in the language itself |
-| `language.font` | A Google Fonts family for the script, loaded and applied automatically (`null`: Figtree covers it) |
+| `language.font` | A Google Fonts family for the script, loaded and applied automatically (`null`: DM Sans covers it) |
 | `language.tall_script` | `true` for scripts with tall letters and no capitals (e.g. most Indian scripts): small labels aren't uppercased, headings get more line height, and the big headline shrinks on narrow screens so long words fit |
 | `strings` | The screen text by key, as in `en.json`. Keep placeholders such as `{n}` exactly |
 | `ratings` | Default rating labels: 5 (Excellent) → 1 (Poor), and 0 (No comments) |

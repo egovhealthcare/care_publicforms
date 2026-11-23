@@ -15,14 +15,14 @@
 {% if load_web_fonts %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700{% for family in web_fonts %}&amp;family={{ family|urlencode }}:wght@400;500;600;700{% endfor %}&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700{% for family in web_fonts %}&amp;family={{ family|urlencode }}:wght@300;400;500;600;700{% endfor %}&amp;display=swap">
 {% endif %}
 {# Care's own favicon (care/static/images/favicons/favicon.ico), bundled so the page never depends on Care's file. #}
 <link rel="icon" href="{% static 'public_forms/favicon.ico' %}">
 <link rel="stylesheet" href="{% static 'public_forms/kiosk.css' %}">
 {# Every string is in the page in each language; show the current one. Fonts and script rules come from each language's locale file. #}
 <style>.l10n{display:none}{% for language in languages %}html[data-lang="{{ language.code }}"] .l10n--{{ language.code }}{% if not forloop.last %},{% endif %}{% endfor %}{display:inline}
-{% for language in languages %}{% if language.font %}html[lang="{{ language.code }}"] body,[lang="{{ language.code }}"]{font-family:'{{ language.font }}','Figtree',ui-sans-serif,system-ui,Arial,sans-serif}
+{% for language in languages %}{% if language.font %}html[lang="{{ language.code }}"] body,[lang="{{ language.code }}"]{font-family:'{{ language.font }}','DM Sans',ui-sans-serif,system-ui,Arial,sans-serif}
 {% endif %}{% if language.tall_script %}html[lang="{{ language.code }}"] .kicker,html[lang="{{ language.code }}"] .idstrip-kicker{letter-spacing:normal;text-transform:none}
 html[lang="{{ language.code }}"] .h2,html[lang="{{ language.code }}"] .hero-title,html[lang="{{ language.code }}"] .qtitle,html[lang="{{ language.code }}"] .done-title{line-height:1.45;letter-spacing:normal}
 html[lang="{{ language.code }}"] .hero-title{font-size:clamp(1.625rem,7.2vw,2.125rem)}
