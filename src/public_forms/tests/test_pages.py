@@ -579,6 +579,30 @@ class StepByStepWithoutJavaScriptTests(PageTestBase):
         self.assertEqual(self.press("submit", **answers).status_code, 302)
         self.assertEqual(FeedbackSubmission.objects.get().answers["clinic"]["value"], "ent")
 
+    def test_changing_the_uhid_mid_way_keeps_the_answers_and_the_place(self):
+        keys = list(self.ratings(self.opd))
+        answers = {"uhid": UHID, "clinic": "ent", **{key: "4" for key in keys[:4]}}
+        # On the fifth rating, the patient taps the UHID strip.
+        uhid_step = self.press("go:uhid", step="questions", card=4, **answers)
+        self.assertEqual(self.place(uhid_step), ("uhid", 0))
+        self.assertContains(uhid_step, 'name="return" value="questions:4"')
+        left_at = {**answers, "return": "questions:4"}
+
+        # Another UHID: straight back to the fifth rating, every answer kept.
+        other = self.press("uhid", step="uhid", **{**left_at, "uhid": "10987654321"})
+        self.assertEqual((self.place(other), other.context["return_to"]), (("questions", 4), ""))
+        self.assertContains(other, f'name="{keys[0]}" value="4" checked')
+        self.assertContains(other, 'name="clinic" value="ent" checked')
+
+        # A guest: first the guest-only details (age and sex), then the fifth rating.
+        guest = self.press("guest", step="uhid", **left_at)
+        self.assertEqual((self.place(guest), guest.context["return_to"]), (("details", 0), "questions:4"))
+        self.assertNotContains(guest, 'class="is-editing"')  # Back still shows here
+        self.assertContains(guest, f'name="{keys[3]}" value="4" checked')
+        details = {**left_at, "uhid": "", "age_group": "31_45", "sex": "female"}
+        onward = self.press("next", step="details", **details)
+        self.assertEqual((self.place(onward), onward.context["return_to"]), (("questions", 4), ""))
+
     def test_back_walks_the_steps_in_reverse(self):
         answers = {"uhid": UHID, "clinic": "ent"}
         self.assertEqual(self.place(self.press("back", step="questions", card=2, **answers)), ("questions", 1))

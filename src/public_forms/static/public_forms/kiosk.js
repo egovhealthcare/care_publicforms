@@ -174,6 +174,7 @@
   var idStrip = $('idStrip');
   // Home / Reset show from the first rating question on, in every flow.
   var NAV_STEPS = ['questions', 'comments', 'review'];
+  var FLOW_STEPS = ['details', 'questions', 'comments', 'review'];  // after identification
 
   // The step buttons are submit buttons for the page without JavaScript;
   // here they move in the page instead (only the final Submit posts).
@@ -185,8 +186,10 @@
   var current = null;       // name of the visible step
   var currentCard = 0;      // index into cards
   var identified = digitsOf(uhidInput.value).length === uhidLength;
-  var returnToReview = false;  // an edit from the review goes back to it
-  var resumeAtReview = false;  // left the review to change the UHID: come back to it
+  // Where Next leads back to: ['review', 0] after an answer opened from the
+  // review, or the place the patient left to change their UHID (steps.py: return_to).
+  var returnTo = null;
+  var resumeAt = null;  // the place the patient left to change their UHID or switch to guest
   var started = false;
   var submitting = false;
   var advanceTimer = null;
@@ -287,10 +290,17 @@
     return true;
   }
 
-  // The first step (or rating card) that still needs an answer, if any.
-  function firstIncomplete() {
+  // A place's position in the whole questionnaire, whoever the patient is.
+  function rank(unit) {
+    var order = { details: 0, questions: 1, comments: 2, review: 3 };
+    return order[unit[0]] * 1000 + (unit[0] === 'questions' ? unit[1] : 0);
+  }
+
+  // The first step (or rating card), before ``before`` if given, that still needs an answer.
+  function firstIncomplete(before) {
     var units = flow();
     for (var i = 0; i < units.length; i++) {
+      if (before && rank(units[i]) >= rank(before)) break;
       var name = units[i][0];
       if (name === 'questions' ? !hasAnswer(cards[units[i][1]]) : name !== 'review' && !stepComplete(steps[name])) {
         return units[i];
@@ -323,9 +333,25 @@
   }
 
   function next() {
-    // Back to the review after an edit, via anything that still needs an answer.
-    if (returnToReview) goTo(firstIncomplete() || ['review', 0]);
+    // Back to the review after an edit (or to where the patient was before
+    // changing their UHID), via anything that still needs an answer.
+    if (returnTo) toward(returnTo);
     else goTo(flow()[position() + 1]);
+  }
+
+  // Goes back to ``target``: first to any place before it that needs an answer
+  // (which then leads on to it), else straight there. A target no longer asked
+  // (a question for identified patients only, after switching to guest) becomes
+  // the place after it. Mirrors steps.toward.
+  function toward(target) {
+    var units = flow();
+    var place = units[units.length - 1];
+    for (var i = 0; i < units.length; i++) {
+      if (rank(units[i]) >= rank(target)) { place = units[i]; break; }
+    }
+    var gap = firstIncomplete(place);
+    returnTo = gap ? place : null;
+    goTo(gap || place);
   }
 
   function back() {
@@ -344,10 +370,11 @@
     if (!steps[name]) return;
     if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer = null; }
     if (current === 'scan' && name !== 'scan') stopCamera();
-    // Leaving the review (or an edit from it) to identify again: come back to it after.
-    if ((name === 'identify' || name === 'uhid' || name === 'scan') && (current === 'review' || returnToReview)) {
-      resumeAtReview = true;
-      returnToReview = false;
+    // Leaving a question or the review to identify again (the UHID strip, or
+    // Back to the first step): come back to that place after, answers kept.
+    if ((name === 'identify' || name === 'uhid' || name === 'scan') && FLOW_STEPS.indexOf(current) > -1) {
+      resumeAt = current === 'review' ? ['review', 0] : returnTo || [current, currentCard];
+      returnTo = null;
     }
     // The server's error / "too many" banner is about the page as it loaded.
     if (started) each(form.querySelectorAll('.banner'), function (banner) { banner.hidden = true; });
@@ -368,7 +395,7 @@
       updateNextButton(cards[currentCard]);
     }
     if (name === 'review') {
-      returnToReview = false;
+      returnTo = null;
       buildReview();
     }
     if (name === 'uhid') paintUhid();
@@ -385,7 +412,7 @@
       progressFill.style.width = inFlow ? Math.round((position() + 1) / (units.length + 1) * 100) + '%' : '0%';
     }
     // An answer opened from the review returns to it: its step shows no Back (kiosk.css).
-    form.classList.toggle('is-editing', returnToReview);
+    form.classList.toggle('is-editing', !!returnTo && returnTo[0] === 'review');
     window.scrollTo(0, 0);
     // Keep TV-remote focus inside the visible step.
     if (document.activeElement && document.activeElement !== body && (name !== 'questions' || cards[currentCard])) {
@@ -399,12 +426,12 @@
   // After the patient identified themselves (or chose not to).
   function startQuestions() {
     applyAudience();
-    if (resumeAtReview) {
-      // Back to the review, via any question that now needs an answer
-      // (e.g. age and sex after switching to guest).
-      resumeAtReview = false;
-      returnToReview = true;
-      goTo(firstIncomplete() || ['review', 0]);
+    if (resumeAt) {
+      // Back to where the patient was, every answer kept, via any question
+      // that now needs an answer (e.g. age and sex after switching to guest).
+      var target = resumeAt;
+      resumeAt = null;
+      toward(target);
     } else {
       goTo(flow()[0]);
     }
@@ -792,7 +819,7 @@
         '<span class="row-value' + (value ? '' : ' is-empty') + '">' + (value || notAnswered) +
         (value && comment ? '<span class="row-note">' + escapeHtml(comment) + '</span>' : '') + '</span>';
       row.addEventListener('click', function () {
-        returnToReview = true;
+        returnTo = ['review', 0];
         var name = step.getAttribute('data-step');
         var index = 0;
         each(cards, function (card, i) { if (card === question) index = i; });
@@ -841,8 +868,8 @@
     });
     each(form.querySelectorAll('.banner'), function (banner) { banner.hidden = true; });
     each(cards, updateNextButton);
-    returnToReview = false;
-    resumeAtReview = false;
+    returnTo = null;
+    resumeAt = null;
     var units = flow();
     for (var i = 0; i < units.length; i++) {
       if (units[i][0] !== 'details') { goTo(units[i]); return; }

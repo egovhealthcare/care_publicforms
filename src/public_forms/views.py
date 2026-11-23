@@ -62,7 +62,7 @@ from public_forms.services import (
     uhid_length,
 )
 from public_forms.settings import plugin_settings
-from public_forms.steps import FLOW_STEPS, NAV_STEPS, Place, flow_units, navigate, review_rows
+from public_forms.steps import FLOW_STEPS, NAV_STEPS, Place, flow_units, navigate, review_rows, unit_value
 from public_forms.text_rules import BLOCKED_CHARACTERS, MAX_ANSWER_LENGTH, spaced
 
 SCAN_MODES = ("camera", "scanner", "off")
@@ -356,6 +356,7 @@ class FormView(FeedbackPage):
             current_step=place.step,
             current_card=place.card,
             returning=place.returning,
+            return_to=unit_value(place.return_to),  # the hidden "return" field
             identified=identified,
             rating_total=len(shown_ratings),
             progress=progress,

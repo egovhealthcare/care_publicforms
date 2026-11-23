@@ -13,8 +13,9 @@ and ``("review", 0)``. The identify, scan and UHID steps come before them.
 
 ``nav`` values (the ``value`` of the button pressed):
 
-  go:identify / go:uhid   to that step (from the review: come back to it after)
-  guest / uhid            continue without / with the UHID entered
+  go:identify / go:uhid   to that step (from a question or the review: come back to it after)
+  guest / uhid            continue without / with the UHID entered; back to where the
+                          patient was, via anything that now needs an answer
   next / back             the next / previous unit; ``next`` checks this one first
   edit:<key>              from the review, to that question, then back to the review
   lang:<code>             same step, in that language
@@ -44,15 +45,50 @@ REVIEW = ("review", 0)
 
 @dataclass
 class Place:
-    """Where the patient is, or is going: a step, a card, and whether to return to the review."""
+    """
+    Where the patient is, or is going: a step and a card. ``return_to`` is
+    where Next leads back to: the review after an answer opened from it, or
+    the place the patient left to change their UHID or switch to guest.
+    """
 
     step: str = "identify"
     card: int = 0
-    returning: bool = False
+    return_to: tuple[str, int] | None = None
 
     @property
     def unit(self) -> tuple[str, int]:
         return (self.step, self.card if self.step == "questions" else 0)
+
+    @property
+    def returning(self) -> bool:
+        """Changing an answer from the review: the step leads back there (and shows no Back)."""
+        return self.return_to == REVIEW
+
+
+def unit_value(unit: tuple[str, int] | None) -> str:
+    """A unit as the hidden ``return`` field holds it: "review", "details", "comments" or "questions:<card>"."""
+    if not unit:
+        return ""
+    return f"questions:{unit[1]}" if unit[0] == "questions" else unit[0]
+
+
+def parse_unit(value, spec: FormSpec) -> tuple[str, int] | None:
+    name, _sep, card = str(value or "").partition(":")
+    if name not in FLOW_STEPS:
+        return None
+    if name != "questions":
+        return (name, 0)
+    try:
+        index = int(card)
+    except ValueError:
+        return None
+    return (name, index) if 0 <= index < len(spec.ratings) else None
+
+
+def _rank(spec: FormSpec, unit: tuple[str, int]) -> int:
+    """A unit's position in the full questionnaire, whoever the patient is."""
+    name, index = unit
+    return {"details": 0, "questions": 1 + index, "comments": 1 + len(spec.ratings)}.get(name, 2 + len(spec.ratings))
 
 
 def flow_units(spec: FormSpec, identified: bool) -> list[tuple[str, int]]:
@@ -84,12 +120,36 @@ def unit_problems(spec: FormSpec, data, identified: bool, unit: tuple[str, int])
     return {key: problem for key, problem in missing.items() if key in keys}
 
 
-def first_incomplete(spec: FormSpec, data, identified: bool) -> tuple[str, int] | None:
+def first_incomplete(spec: FormSpec, data, identified: bool, before=None) -> tuple[str, int] | None:
+    """The first unit (before ``before``, if given) with a question that still needs an answer."""
     _, missing = collect_answers(spec, data, identified)
     for unit in flow_units(spec, identified):
+        if before and _rank(spec, unit) >= _rank(spec, before):
+            break
         if any(q.key in missing for q in unit_questions(spec, unit)):
             return unit
     return None
+
+
+def toward(spec: FormSpec, data, identified: bool, target: tuple[str, int]) -> Place:
+    """
+    The way back to ``target``: the first place before it that needs an answer
+    (e.g. age and sex after switching to guest), which then leads on to it;
+    else ``target`` itself. A target no longer asked becomes the place after it.
+    """
+    units = flow_units(spec, identified)
+    target = next((unit for unit in units if _rank(spec, unit) >= _rank(spec, target)), REVIEW)
+    unit = first_incomplete(spec, data, identified, before=target) or target
+    return Place(unit[0], unit[1], target if unit != target else None)
+
+
+def resume_point(here: Place) -> tuple[str, int] | None:
+    """Where to come back to after changing the UHID or switching to guest from ``here``."""
+    if here.step == "review":
+        return REVIEW
+    if here.return_to:
+        return here.return_to
+    return here.unit if here.step in FLOW_STEPS else None
 
 
 def place_from(data, spec: FormSpec) -> Place:
@@ -100,7 +160,7 @@ def place_from(data, spec: FormSpec) -> Place:
     except ValueError:
         card = 0
     card = min(max(card, 0), max(len(spec.ratings) - 1, 0))
-    return Place(step, card, data.get("return") == "review")
+    return Place(step, card, parse_unit(data.get("return"), spec))
 
 
 def navigate(spec: FormSpec, data, nav: str, identified: bool, uhid_valid: bool) -> tuple[Place, dict, bool]:
@@ -113,22 +173,21 @@ def navigate(spec: FormSpec, data, nav: str, identified: bool, uhid_valid: bool)
         nav = {"uhid": "uhid", "details": "next", "questions": "next", "comments": "next"}.get(here.step, "stay")
 
     if nav in ("go:identify", "go:uhid", "go:scan"):
-        # Leaving the review (or an edit from it) to identify again: come back to it after.
-        resume = here.returning or here.step == "review"
-        return Place("identify" if nav == "go:identify" else "uhid", 0, resume), {}, identified
+        # Leaving a question or the review to identify again: come back to it after.
+        return Place("identify" if nav == "go:identify" else "uhid", 0, resume_point(here)), {}, identified
 
     if nav in ("guest", "uhid"):
         if nav == "guest":
             data["uhid"] = ""
             identified = False
         elif not uhid_valid:
-            return Place("uhid", 0, here.returning), {"uhid": "length"}, identified
+            return Place("uhid", 0, here.return_to), {"uhid": "length"}, identified
         else:
             identified = True
-        if here.returning:
-            # Back to the review, via anything that now needs an answer (e.g. age and sex for a guest).
-            unit = first_incomplete(spec, data, identified) or REVIEW
-            return Place(unit[0], unit[1], unit != REVIEW), {}, identified
+        if here.return_to:
+            # Back to where the patient was, every answer kept, via anything that
+            # now needs an answer (e.g. age and sex for a guest).
+            return toward(spec, data, identified, here.return_to), {}, identified
         unit = flow_units(spec, identified)[0]
         return Place(unit[0], unit[1]), {}, identified
 
@@ -138,23 +197,22 @@ def navigate(spec: FormSpec, data, nav: str, identified: bool, uhid_valid: bool)
     if nav == "next":
         if problems := unit_problems(spec, data, identified, here.unit):
             return here, problems, identified
-        if here.returning:
-            unit = first_incomplete(spec, data, identified) or REVIEW
-        else:
-            unit = units[position + 1] if position + 1 < len(units) else REVIEW
-        return Place(unit[0], unit[1], here.returning and unit != REVIEW), {}, identified
+        if here.return_to:
+            return toward(spec, data, identified, here.return_to), {}, identified
+        unit = units[position + 1] if position + 1 < len(units) else REVIEW
+        return Place(unit[0], unit[1]), {}, identified
 
     if nav == "back":
         if position <= 0:
-            return Place("identify", 0, here.returning), {}, identified
+            return Place("identify", 0, here.return_to), {}, identified
         unit = units[position - 1]
-        return Place(unit[0], unit[1], here.returning), {}, identified
+        return Place(unit[0], unit[1], here.return_to), {}, identified
 
     if nav.startswith("edit:"):
         key = nav[len("edit:") :]
         for unit in units:
             if any(q.key == key for q in unit_questions(spec, unit)):
-                return Place(unit[0], unit[1], True), {}, identified
+                return Place(unit[0], unit[1], REVIEW), {}, identified
 
     return here, {}, identified  # lang:<code>, stay, or anything unknown
 

@@ -32,7 +32,7 @@
   {% if came_from_chooser %}<input type="hidden" name="from" value="start">{% endif %}
   <input type="hidden" name="step" value="{{ current_step }}" id="fStep">
   <input type="hidden" name="card" value="{{ current_card }}" id="fCard">
-  <input type="hidden" name="return" value="{% if returning %}review{% endif %}" id="fReturn">
+  <input type="hidden" name="return" value="{{ return_to }}" id="fReturn">
 
   {% if banner %}<div class="callout callout--error banner" role="alert">{% t banner %}</div>{% endif %}
 

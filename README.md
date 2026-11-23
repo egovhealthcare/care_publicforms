@@ -85,6 +85,10 @@ validation) and the database tables, see
   goes back to the chooser (or the start of a pinned form), and *Reset*,
   which clears the ratings and open answers and goes back to the first
   question, keeping the UHID and details.
+- **Changing the UHID keeps the answers.** Changing the UHID (tap it at the
+  top) or switching to guest keeps every answer and returns to the same
+  question, or to the review, stopping first at any question that now needs
+  an answer (age and sex for a guest).
 - **Unattended use.** Once someone has used the screen, 90 s without a
   touch shows *"Are you still there?"*, then reloads the start page in the
   screen's own language, which drops everything entered. The timer runs from
