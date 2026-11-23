@@ -132,7 +132,8 @@ fieldset.group > legend{display:block;width:100%;padding:0;float:none}
 @keyframes rise{from{opacity:0;transform:translateY(.625rem)}to{opacity:1;transform:none}}
 @keyframes breathe{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:.85;transform:scale(1.06)}}
 @keyframes focusIn{from{opacity:0;transform:translateY(.5rem)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+/* The no-JavaScript countdown (.tick-strip) keeps its timing: it is a clock, not motion. */
+@media (prefers-reduced-motion:reduce){*:not(.tick-strip){animation-duration:.01ms !important;transition-duration:.01ms !important}}
 
 /* Explicit per-size rules: a CSS variable would be overridden by nested stacks.
    Spacing between siblings uses `> :not(:first-child)`, not `> * + *`: it is
@@ -201,6 +202,24 @@ button.langbtn{border:0;font-family:inherit;line-height:inherit;cursor:pointer;-
 .navbtn:active{transform:translateY(1px)}
 .navbtn--reset{background:var(--destructive-soft);color:var(--destructive-text);border-color:var(--destructive-border)}
 .navbtn--reset svg{color:var(--destructive)}
+
+/* Without JavaScript: time left before the page starts over (base.html). m:ss by
+   CSS alone: each digit is a column of digits in a one-line window, moved up one
+   place per step; the last 30 seconds turn red. */
+.tick-timer{
+  display:inline-flex;align-items:center;flex:none;
+  min-height:2.75rem;padding:0 .875rem 0 .75rem;border-radius:var(--radius-pill);
+  border:1px solid var(--border);background:var(--soft-background);color:var(--soft-foreground);
+  font-size:.9375rem;font-weight:600;font-feature-settings:'tnum';white-space:nowrap;
+  animation:tick-urgent 0s linear forwards;  /* starts after its inline delay */
+}
+.tick-timer svg{width:1.125rem;height:1.125rem;margin-right:.375rem;flex:none}
+.tick{display:inline-block;height:1.25em;line-height:1.25em;overflow:hidden}
+.tick-strip,.tick-strip > span{display:block}
+.tick-strip > span{height:1.25em;text-align:center}
+@keyframes tick{from{transform:translateY(0)}to{transform:translateY(-100%)}}
+@keyframes tick-urgent{to{color:var(--destructive-text);border-color:var(--destructive-border);background:var(--destructive-soft)}}
+.no-js .hdr-row > noscript + .langtog{margin-left:.5rem}
 
 /* Progress: a thin emerald gradient */
 .progress{height:.1875rem;background:var(--border)}

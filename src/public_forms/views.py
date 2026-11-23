@@ -66,6 +66,32 @@ from public_forms.steps import FLOW_STEPS, NAV_STEPS, Place, flow_units, navigat
 from public_forms.text_rules import BLOCKED_CHARACTERS, MAX_ANSWER_LENGTH, spaced
 
 SCAN_MODES = ("camera", "scanner", "off")
+
+
+def no_js_countdown(seconds: int) -> dict | None:
+    """
+    Without JavaScript the page starts over ``seconds`` after it loaded (a meta
+    refresh), and the header counts down to it as m:ss, drawn by CSS alone.
+    Each digit is a column of digits in a one-line window, moved up one place
+    per step (kiosk.css, .tick); these are each column's timing, with the delay
+    that lines it up so the countdown reads ``seconds`` at load and 0:00 at the
+    refresh. None when it is turned off (0).
+    """
+    if seconds <= 0:
+        return None
+    minutes, rest = divmod(seconds, 60)
+    return {
+        "seconds": seconds,
+        "minutes": list(range(minutes, -1, -1)),  # one place per minute
+        "minutes_steps": minutes + 1,
+        "minutes_duration": 60 * (minutes + 1),
+        "minutes_delay": 59 - rest,
+        "tens_delay": (59 - seconds) % 60,  # 5 4 3 2 1 0, ten seconds each
+        "units_delay": (9 - seconds) % 10,  # 9 … 0, a second each
+        "urgent_delay": max(seconds - 30, 0),  # red for the last 30 seconds
+    }
+
+
 SECONDS_PER_QUESTION = 12  # for "about N minutes"
 # The thank-you page shows for DONE_TIMEOUT_SECONDS after the submission, plus
 # this margin for a slow screen; later, its link goes back to the start.
@@ -181,6 +207,7 @@ class FeedbackPage(View):
             "web_fonts": [meta["font"] for meta in languages().values() if meta["font"]],
             "today": timezone.localdate(),
             "idle_timeout": int(plugin_settings.IDLE_TIMEOUT_SECONDS),
+            "no_js_idle": no_js_countdown(int(plugin_settings.NO_JS_IDLE_TIMEOUT_SECONDS)),
             "load_web_fonts": bool(plugin_settings.LOAD_WEB_FONTS),
         }
 
@@ -399,6 +426,7 @@ class DoneView(FeedbackPage):
             home_url=home,
             done_timeout=int(plugin_settings.DONE_TIMEOUT_SECONDS),
             idle_timeout=0,
+            no_js_idle=None,  # the page's own return is shorter
             progress=100,
         )
         return render(request, "public_forms/done.html", context)
