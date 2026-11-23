@@ -101,7 +101,11 @@ validation) and the database tables, see
   screen's own language, which drops everything entered. The timer runs from
   the moment a page holds a patient's choices (their form, their language,
   or their answers sent back after a failed submit), so nothing is left on
-  screen for the next patient; an untouched screen never reloads.
+  screen for the next patient; an untouched screen never reloads. Without
+  JavaScript the page can't see touches, so it starts over 3 minutes
+  (`NO_JS_IDLE_TIMEOUT_SECONDS`) after each page loads instead, and the
+  header counts down to it (drawn by CSS alone; red for the last 30
+  seconds). With JavaScript there is no countdown.
 - **Answers aren't lost by accident.** Once anything is entered, reloading
   or closing the page first asks with the browser's own "Leave site?" /
   "Reload site?" question (browsers word it themselves; iPhone and iPad
@@ -264,8 +268,10 @@ In [the admin](#the-admin) under **Feedback forms**:
   doesn't come back. Keep codes short: reference numbers use the first 12
   characters (`OPD-20261118-4821`). Titles hold up to 100 characters per
   language, descriptions up to 300.
-- **Questions**: one JSON list on the form, in the order they are asked
-  (the admin checks it on save and names the question in every error).
+- **Questions**: one JSON list on the form. Each question's `step` says
+  which screen asks it, and within a screen questions keep their order in
+  the list (the admin checks it on save and names the question in every
+  error).
   Per language, a question's `text` and `hint` hold up to 300 characters,
   its `short_text` 60 and each option's label 100; an option's `value` up
   to 64. No text can contain `<` `>` `{` `}` `` ` `` `\`.
@@ -273,17 +279,19 @@ In [the admin](#the-admin) under **Feedback forms**:
 
   ```json
   [
-    {"key": "clinic", "type": "choice", "required": true,
+    {"key": "clinic", "type": "choice", "step": "details", "required": true,
      "text": {"en": "Clinic visited", "<code>": "…"},
      "options": [{"value": "ent", "en": "ENT", "<code>": "…"}]},
-    {"key": "registration_wait", "type": "rating",
+    {"key": "registration_wait", "type": "rating", "step": "ratings",
      "text": {"en": "Waiting time at the registration counter"},
      "short_text": {"en": "Registration wait"},
      "options": [{"en": "More than 30 mins"}, {"en": "10-30 mins"}, {"en": "5-10 mins"},
                  {"en": "Within 5 mins"}, {"en": "Immediate"}]},
     {"key": "would_return", "type": "choice", "step": "open", "allow_comment": true,
      "text": {"en": "Would you come back to this hospital for treatment?"},
-     "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]}
+     "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]},
+    {"key": "suggestions", "type": "text", "step": "open",
+     "text": {"en": "Any other suggestions?"}}
   ]
   ```
 
@@ -295,25 +303,39 @@ In [the admin](#the-admin) under **Feedback forms**:
   | --- | --- | --- |
   | `key` | required | Stable id the answer is stored under: lowercase letters, digits, `_` |
   | `type` | required | `rating`, `choice`, `date` or `text` (see below) |
+  | `step` | by type | The screen that asks it: `details`, `ratings` or `open` (see below). Left out, the type's default; saving in the admin writes it in |
   | `text` | required | The question per language; English required |
   | `short_text` | `{}` | Shorter label for the review step |
   | `hint` | `{}` | Hint under the question |
   | `options` | `[]` | Choices, or five rating labels (see below) |
   | `required` | `false` | Needs an answer (ratings always do) |
   | `audience` | `"all"` | `all`, `guest` (no UHID) or `identified` (gave a UHID) |
-  | `step` | `"details"` | Choices: `details` ("A few details") or `open` ("In your own words", before the review) |
   | `allow_no_comment` | `true` | Ratings: offer "No comments" |
   | `allow_comment` | `false` | Choices: also ask "Why?" under the answer |
   | `active` | `true` | `false` keeps the question in the form without asking it |
 
-  The type decides where a question appears:
+  `step` decides where a question appears. The screens always come in this
+  order, after the patient identifies themselves:
 
-  | Type | Step | Notes |
+  | `step` | Screen | Questions shown |
   | --- | --- | --- |
-  | `choice` | A few details, or In your own words with `"step": "open"` | `options`: `[{"value": "ent", "en": "ENT", "<code>": "…"}]`. On the open step, a question with 2 or 3 options shows them as large buttons. A **yes/no** question is a choice with the options `yes` and `no` (see `would_return` above) |
-  | `date` | A few details | e.g. date of admission; future dates are refused |
-  | `rating` | One card at a time | Poor → Excellent plus "No comments" (can be turned off). `options` can relabel the five steps, e.g. waiting time "More than 30 mins" … "Immediate". Ratings always need an answer. |
-  | `text` | In your own words | free text |
+  | `details` | "A few details" | all together |
+  | `ratings` | one card per question | one at a time |
+  | `open` | "In your own words", before the review | all together |
+
+  Each type can go on these steps (the first is its default):
+
+  | Type | Steps | Notes |
+  | --- | --- | --- |
+  | `choice` | `details`, `open` | `options`: `[{"value": "ent", "en": "ENT", "<code>": "…"}]`. Chips; on `open`, 2 or 3 options show as large buttons. A **yes/no** question is a choice with the options `yes` and `no` (see `would_return` above) |
+  | `date` | `details` | e.g. date of admission; future dates are refused |
+  | `rating` | `ratings` | Poor → Excellent plus "No comments" (can be turned off). `options` can relabel the five faces, e.g. waiting time "More than 30 mins" … "Immediate". Ratings always need an answer. |
+  | `text` | `open`, `details` | Free text: a large box on `open`, a short one on `details` (e.g. a doctor's name) |
+
+  So to add a question, give it a `type` and a `step`, and put it where it
+  should be asked among the questions of that step: more ratings add
+  cards, more text or choice questions add to their screen. A screen with
+  no question for the patient is skipped.
 
   The default forms ask age and sex only of guests, since UHID patients
   already have a record. Their details (clinic or ward, date of admission,
@@ -391,6 +413,7 @@ Set in the plug's `configs={}` or as environment variables:
 | `UHID_GROUPS` | `[3, 4, 4]` | Display grouping (`123 4567 8901`); must add up to `UHID_LENGTH`. |
 | `REFERENCE_PREFIX` | `""` | Reference numbers look like `OPD-20261118-4821` / `IPD-…` (unique per facility). Empty uses the form's code. |
 | `IDLE_TIMEOUT_SECONDS` | `90` | Idle time before the screen warns, then starts over. |
+| `NO_JS_IDLE_TIMEOUT_SECONDS` | `180` | Without JavaScript: seconds after a page loads before it starts over, counted down in the header. `0` turns it off. |
 | `DONE_TIMEOUT_SECONDS` | `20` | How long the thank-you page stays up. |
 | `SUBMIT_RATE_LIMIT` | `"60/m"` | Submissions allowed per IP (django-ratelimit rate). A kiosk is one IP, so keep it well above a busy hour. |
 | `ADMIN_URL` | `"public_forms/admin"` | Path of [the admin](#the-admin) on the API host. Read when Care starts. |

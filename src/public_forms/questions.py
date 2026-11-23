@@ -1,20 +1,24 @@
 """
 A form's questions: the JSON stored in ``FeedbackForm.questions``.
 
-The questionnaire is a list of objects, in the order they are asked; keys
-with their default value can be left out::
+The questionnaire is a list of objects. ``step`` says which screen asks
+each question; the screens always come in the same order (details, then a
+card per rating, then open), and within a screen the questions keep their
+order in the list. Keys with their default value can be left out::
 
     [
-      {"key": "clinic", "type": "choice", "required": true,
+      {"key": "clinic", "type": "choice", "step": "details", "required": true,
        "text": {"en": "Clinic visited", "kn": "…"},
        "options": [{"value": "ent", "en": "ENT", "kn": "…"}]},
-      {"key": "registration_wait", "type": "rating",
+      {"key": "registration_wait", "type": "rating", "step": "ratings",
        "text": {"en": "Waiting time at the registration counter"},
        "short_text": {"en": "Registration wait"},
        "options": [{"en": "More than 30 mins"}, …five labels, Poor → Excellent]},
       {"key": "would_return", "type": "choice", "step": "open", "allow_comment": true,
        "text": {"en": "Would you come back to this hospital for treatment?"},
-       "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]}
+       "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]},
+      {"key": "suggestions", "type": "text", "step": "open",
+       "text": {"en": "Any other suggestions?"}}
     ]
 
 Fields: see ``FIELDS``. Submissions keep their own copy of each question's
@@ -22,6 +26,7 @@ wording, so editing, reordering or removing questions never changes old
 feedback.
 """
 
+import json
 import re
 from dataclasses import dataclass, field
 
@@ -41,12 +46,39 @@ from public_forms.text_rules import (
 TEXT_LIMITS = {"text": MAX_QUESTION_LENGTH, "short_text": MAX_SHORT_TEXT_LENGTH, "hint": MAX_QUESTION_LENGTH}
 
 KEY_PATTERN = re.compile(r"[a-z][a-z0-9_]{0,63}")
-STEPS = ("details", "open")  # where a choice is asked
+
+# The screens a question can be asked on, in the order the patient sees them:
+#   details  "A few details", right after identification
+#   ratings  one card per question
+#   open     "In your own words", just before the review
+STEPS = ("details", "ratings", "open")
+# The steps each type can be asked on; the first is where it goes when the
+# question leaves "step" out (the admin writes it in when the form is saved).
+TYPE_STEPS = {
+    QuestionType.CHOICE: ("details", "open"),
+    QuestionType.DATE: ("details",),
+    QuestionType.RATING: ("ratings",),
+    QuestionType.TEXT: ("open", "details"),
+}
+
+
+def default_step(kind) -> str | None:
+    """Where a question of type ``kind`` is asked when it doesn't say."""
+    steps = TYPE_STEPS.get(kind)
+    return steps[0] if steps else None
+
 
 # field → (default, description); the description is shown in the admin.
 FIELDS = {
     "key": (None, "Stable id the answer is stored under, e.g. 'ward_cleanliness'. Required; don't change it."),
-    "type": (None, "rating, choice, date or text. Required; also decides the step it is asked on."),
+    "type": (None, "rating, choice, date or text. Required."),
+    "step": (
+        None,
+        "The screen that asks it: details (“A few details”, after identification), ratings (one card per "
+        "question) or open (“In your own words”, before the review). rating: ratings. choice: details or open "
+        "(on open, 2 or 3 options show as large buttons, e.g. a yes/no question). text: open or details. "
+        "date: details. Left out, the type's first one; saving writes it in.",
+    ),
     "text": (None, 'The question per language, e.g. {"en": "…", "kn": "…"}. English is required.'),
     "short_text": ({}, "Shorter label for the review step, per language."),
     "hint": ({}, "Hint under the question, per language."),
@@ -58,11 +90,6 @@ FIELDS = {
     "required": (False, "Needs an answer (ratings always do)."),
     "audience": ("all", "all, guest (no UHID) or identified (gave a UHID)."),
     "allow_no_comment": (True, "rating: offer “No comments” (stored as 0)."),
-    "step": (
-        "details",
-        "choice: details (“A few details”, after identification) or open (“In your own words”, before the "
-        "review, as large buttons when it has 2 or 3 options). A yes/no question is an open choice.",
-    ),
     "allow_comment": (False, "choice: also ask “Why?” under the answer."),
     "active": (True, "false: not asked, but kept in the form."),
 }
@@ -79,18 +106,37 @@ class Question:
     required: bool = False
     audience: str = Audience.ALL
     allow_no_comment: bool = True
-    step: str = "details"
+    step: str | None = None  # parse_questions fills in the type's default
     allow_comment: bool = False
     active: bool = True
 
 
 def parse_questions(raw) -> list[Question]:
-    """The questions of a (validated) form, in order. Unknown fields are ignored."""
-    return [
-        Question(**{name: item[name] for name in FIELDS if name in item})
-        for item in raw or []
-        if isinstance(item, dict)
-    ]
+    """The questions of a (validated) form, in order, each with its step. Unknown fields are ignored."""
+    questions = []
+    for item in raw or []:
+        if isinstance(item, dict):
+            values = {name: item[name] for name in FIELDS if name in item}
+            values["step"] = values.get("step") or default_step(values.get("type"))
+            questions.append(Question(**values))
+    return questions
+
+
+def with_steps(raw):
+    """``raw`` with a "step" written into each question that leaves it out, placed after "type"."""
+    if not isinstance(raw, list):
+        return raw
+    out = []
+    for item in raw:
+        if isinstance(item, dict) and "step" not in item and default_step(item.get("type")):
+            ordered = {}
+            for name, value in item.items():
+                ordered[name] = value
+                if name == "type":
+                    ordered["step"] = default_step(value)
+            item = ordered if "step" in ordered else {**item, "step": default_step(item.get("type"))}
+        out.append(item)
+    return out
 
 
 def _is_text(value, required=False) -> bool:
@@ -177,8 +223,10 @@ def question_errors(raw) -> list[str]:
                     errors += _typed_text_errors(name, f"option {number}'s value", text, MAX_OPTION_VALUE_LENGTH)
                 else:
                     errors += _typed_text_errors(name, f"option {number} ({code})", text, MAX_OPTION_LENGTH)
-        if "step" in item and (kind != QuestionType.CHOICE or item["step"] not in STEPS):
-            errors.append(f"{name}: step is for choices only: {' or '.join(STEPS)}.")
+        allowed = TYPE_STEPS.get(kind)
+        if allowed and "step" in item and item["step"] not in allowed:
+            where = " or ".join(allowed)
+            errors.append(f"{name}: a {kind} question is asked on {where}, not {json.dumps(item['step'])}.")
         if item.get("allow_comment") and kind != QuestionType.CHOICE:
             errors.append(f"{name}: allow_comment (“Why?”) is for choices only.")
     return errors

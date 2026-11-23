@@ -1,9 +1,12 @@
 import json
+import re
 from datetime import timedelta
 
 from care.utils.tests.base import CareAPITestBase
 from django.contrib import admin
+from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.forms.models import model_to_dict
 from django.test import override_settings
@@ -222,7 +225,10 @@ class AdminTests(CareAPITestBase):
         )
         self.assertTrue(form.is_valid(), form.errors)
         saved = form.save()
-        self.assertEqual((saved.title, saved.questions), ({"en": "Parking"}, questions))
+        # Saved with the step written in, right after the type: the JSON says where each is asked.
+        self.assertEqual(saved.title, {"en": "Parking"})
+        self.assertEqual(saved.questions, [{"key": "where", "type": "choice", "step": "details", **questions[0]}])
+        self.assertEqual(list(saved.questions[0])[:3], ["key", "type", "step"])
 
     def test_title_and_description_follow_the_text_rules(self):
         base = {"code": "x", "patient_type": "op", "order": 0}
@@ -348,6 +354,25 @@ class AdminSiteTests(CareAPITestBase):
         self.assertEqual(self.client.get(old).status_code, 404)
         forms = self.client.get(reverse("public_forms_admin:public_forms_feedbackform_changelist"))
         self.assertContains(forms, "Public Forms")
+
+    def test_no_links_into_djangos_admin(self):
+        superuser = self.create_super_user(is_staff=True)
+        # An action logged in Django's admin, which "Recent actions" would list and link to.
+        LogEntry.objects.create(
+            user=superuser,
+            content_type=ContentType.objects.get_for_model(superuser),
+            object_id=str(superuser.pk),
+            object_repr="a user",
+            action_flag=CHANGE,
+            change_message="[]",
+        )
+        self.client.force_login(superuser)
+        index = self.client.get(reverse("public_forms_admin:index"))
+        self.assertContains(index, "Feedback submissions")
+        self.assertNotContains(index, "recent-actions-module")
+        hrefs = re.findall(r'href="([^"]*)"', index.content.decode())
+        self.assertTrue(hrefs)
+        self.assertEqual([href for href in hrefs if href.startswith(reverse("admin:index"))], [])
 
     def test_signing_in_is_required(self):
         index = reverse("public_forms_admin:index")

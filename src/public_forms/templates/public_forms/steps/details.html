@@ -21,6 +21,8 @@
         </label>
         {% endfor %}
       </div>
+      {% elif field.type == "text" %}
+      <textarea name="{{ field.key }}" class="ta ta--short" rows="2" maxlength="{{ max_answer_length }}" {% l10n_attr "aria-label" value=field.text %}>{{ field.value }}</textarea>
       {% else %}
       <input type="date" class="ta ta--date" name="{{ field.key }}" value="{{ field.value }}" max="{{ today|date:'Y-m-d' }}" {% l10n_attr "aria-label" value=field.text %}>
       {% endif %}
@@ -29,7 +31,7 @@
       {% endif %}
       {% if field.type == "date" %}<p class="err" data-error-date role="alert"{% if field.error != "invalid" %} hidden{% endif %}>{% t "date_error" %}</p>{% endif %}
       <p class="err" data-error role="alert"{% if field.error != "required" %} hidden{% endif %}>{% t "required_error" %}</p>
-      {% if field.allow_comment %}<p class="err" data-error-characters role="alert"{% if field.error != "characters" %} hidden{% endif %}>{% t "characters_error" chars=blocked_characters_shown %}</p>{% endif %}
+      {% if field.allow_comment or field.type == "text" %}<p class="err" data-error-characters role="alert"{% if field.error != "characters" %} hidden{% endif %}>{% t "characters_error" chars=blocked_characters_shown %}</p>{% endif %}
     </fieldset>
     {% endfor %}
   </div>

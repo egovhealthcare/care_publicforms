@@ -1,3 +1,4 @@
+import importlib
 import uuid
 from datetime import timedelta
 from unittest import mock
@@ -14,8 +15,9 @@ from django.utils.http import urlencode
 from public_forms.checks import check_languages
 from public_forms.models import Audience, FeedbackForm, FeedbackSubmission, QuestionType
 from public_forms.questionnaire import FormSpec, applies
-from public_forms.questions import question_errors
+from public_forms.questions import question_errors, with_steps
 from public_forms.tests import PLAIN_STATIC_STORAGES, TEST_LANGUAGE, TEST_PLUGIN_CONFIGS, plugin_configs
+from public_forms.views import no_js_countdown
 
 UHID = "12345678901"
 
@@ -679,6 +681,42 @@ class QuestionsJsonTests(PageTestBase):
             ],
         )
 
+    def test_every_question_says_its_step(self):
+        # The default forms, and forms saved before steps were written in (0004).
+        for form in (self.opd, self.ipd):
+            self.assertTrue(all("step" in question for question in form.questions), form.code)
+        migration = importlib.import_module("public_forms.migrations.0004_explicit_question_steps")
+        old = [
+            {"key": "a", "type": "choice", "text": {"en": "A"}, "options": [{"value": "x", "en": "X"}]},
+            {"key": "b", "type": "rating", "text": {"en": "B"}},
+            {"key": "c", "type": "text", "text": {"en": "C"}},
+            {"key": "d", "type": "date", "text": {"en": "D"}},
+            {"key": "e", "type": "choice", "step": "open", "text": {"en": "E"}, "options": [{"value": "y", "en": "Y"}]},
+        ]
+        new = migration.with_steps(old)
+        self.assertEqual([q["step"] for q in new], ["details", "ratings", "open", "details", "open"])
+        self.assertEqual(list(new[0])[:3], ["key", "type", "step"])  # written right after the type
+        self.assertEqual(new, with_steps(old))  # the admin writes the same on save
+
+    def test_step_decides_the_screen(self):
+        # A text question can be asked on "A few details" too; its place there follows the list.
+        self.opd.questions = [
+            *self.opd.questions,
+            {"key": "doctor_name", "type": "text", "step": "details", "required": True, "text": {"en": "Doctor"}},
+        ]
+        self.opd.save()
+        spec = FormSpec(self.opd)
+        self.assertEqual(spec.details[-1].key, "doctor_name")
+        self.assertNotIn("doctor_name", [q.key for q in spec.open_questions])
+        page = self.client.get(self.url("form", "opd"))
+        details = page.content.decode().split('data-step="details"')[1].split('data-step="questions"')[0]
+        self.assertIn('<textarea name="doctor_name"', details)
+        # It is required there like any details question (without JavaScript, too).
+        step = self.client.post(
+            self.url("form", "opd"), {"nav": "next", "step": "details", "uhid": UHID, "clinic": "ent"}
+        )
+        self.assertEqual(step.context["errors"], {"doctor_name": "required"})
+
     def test_default_forms_are_valid(self):
         for form in (self.opd, self.ipd):
             self.assertEqual(question_errors(form.questions), [])
@@ -701,6 +739,7 @@ class QuestionsJsonTests(PageTestBase):
                     "options": [{"value": "a", "en": "A"}],
                 },
                 {"key": "stay", "type": "text", "text": {"en": "Stay"}, "step": "details", "allow_comment": True},
+                {"key": "card", "type": "rating", "text": {"en": "Card"}, "step": "open"},
                 {
                     "key": "back",
                     "type": "choice",
@@ -719,9 +758,9 @@ class QuestionsJsonTests(PageTestBase):
             "“visit”: text needs the English question",
             "“mood”: type must be one of",
             "“why”: required must be true or false",
-            "“stay”: step is for choices only",
-            "“stay”: allow_comment (“Why?”) is for choices only",
-            "“back”: step is for choices only: details or open",
+            "“stay”: allow_comment (“Why?”) is for choices only",  # a text question may go on details
+            '“card”: a rating question is asked on ratings, not "open"',
+            '“back”: a choice question is asked on details or open, not "later"',
         ]
         for start in expected:
             self.assertTrue(any(p.startswith(start) for p in problems), (start, problems))
@@ -806,3 +845,43 @@ class TypedTextTests(PageTestBase):
         self.assertEqual(
             (response.context["current_step"], response.context["errors"]), ("comments", {"improvement": "characters"})
         )
+
+
+class NoJavaScriptIdleTests(PageTestBase):
+    """Without JavaScript: start over 3 minutes after the page loaded, counting down in the header."""
+
+    def test_three_minutes_with_a_countdown(self):
+        page = self.client.get(self.url("form", "opd", **{"from": "start"}))  # holds the patient's form choice
+        self.assertContains(page, f'<noscript><meta http-equiv="refresh" content="180;url={self.url()}"></noscript>')
+        self.assertContains(page, 'class="tick-timer" role="timer" style="animation-delay:150s"')
+        self.assertContains(page, "animation:tick 240s steps(4) -59s forwards")  # minutes 3 2 1 0
+        self.assertContains(page, "animation:tick 60s steps(6) -59s infinite")  # tens of seconds
+        self.assertContains(page, "animation:tick 10s steps(10) -9s infinite")  # seconds
+        self.assertContains(page, 'data-idle-timeout="90"')  # with JavaScript: as before
+
+    def test_not_on_an_untouched_screen_or_the_thank_you_page(self):
+        fresh = self.client.get(self.url("form", "opd"))
+        self.assertNotContains(fresh, "tick-timer")
+        self.assertNotContains(fresh, 'http-equiv="refresh"')
+        response = self.submit(uhid=UHID, **self.answers(self.opd))
+        done = self.client.get(response["Location"])
+        self.assertNotContains(done, "tick-timer")
+        self.assertContains(done, 'http-equiv="refresh"', count=1)  # only its own 20-second return
+
+    @override_settings(PLUGIN_CONFIGS=plugin_configs(NO_JS_IDLE_TIMEOUT_SECONDS=0))
+    def test_zero_turns_it_off(self):
+        page = self.client.get(self.url("form", "opd", **{"from": "start"}))
+        self.assertNotContains(page, "tick-timer")
+        self.assertNotContains(page, 'http-equiv="refresh"')
+
+    def test_the_columns_read_the_time_left_every_second(self):
+        # What each digit column shows t seconds after the page loaded, from the
+        # timing base.html gives it (steps of the CSS animation), against m:ss.
+        for seconds in (180, 75, 45, 600, 61):
+            timing = no_js_countdown(seconds)
+            for t in range(seconds + 1):
+                minute = timing["minutes"][(t + timing["minutes_delay"]) // 60]
+                tens = "543210"[((t + timing["tens_delay"]) // 10) % 6]
+                units = "9876543210"[(t + timing["units_delay"]) % 10]
+                left = seconds - t
+                self.assertEqual(f"{minute}:{tens}{units}", f"{left // 60}:{left % 60:02d}", (seconds, t))

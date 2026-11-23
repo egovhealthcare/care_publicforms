@@ -22,6 +22,7 @@ WAIT_LABELS = [  # Poor → Excellent, as in the NQAS format  # review (kn)
 AGE_GROUP = {
     "key": "age_group",
     "type": "choice",
+    "step": "details",
     "required": True,
     "audience": "guest",
     "text": {"en": "Age group", "kn": "ವಯೋಮಾನ"},
@@ -37,6 +38,7 @@ AGE_GROUP = {
 SEX = {
     "key": "sex",
     "type": "choice",
+    "step": "details",
     "required": True,
     "audience": "guest",
     "text": {"en": "Sex", "kn": "ಲಿಂಗ"},
@@ -66,6 +68,7 @@ OPEN_QUESTIONS = [
     {
         "key": "improvement",
         "type": "text",
+        "step": "open",
         "text": {
             "en": "What would you most like to see improved?",
             "kn": "ಯಾವುದನ್ನು ಸುಧಾರಿಸಬೇಕೆಂದು ನೀವು ಬಯಸುತ್ತೀರಿ?",
@@ -74,11 +77,13 @@ OPEN_QUESTIONS = [
     {
         "key": "reason_for_choosing",
         "type": "text",
+        "step": "open",
         "text": {"en": "What made you choose this hospital?", "kn": "ಈ ಆಸ್ಪತ್ರೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಲು ಕಾರಣವೇನು?"},
     },
     {
         "key": "suggestions",
         "type": "text",
+        "step": "open",
         "text": {"en": "Any other suggestions?", "kn": "ಇನ್ನಾವುದೇ ಸಲಹೆಗಳಿವೆಯೇ?"},
     },
 ]
@@ -88,6 +93,7 @@ def _rating(key, en, kn, short_en, short_kn, **extra):
     return {
         "key": key,
         "type": "rating",
+        "step": "ratings",
         "text": {"en": en, "kn": kn},
         "short_text": {"en": short_en, "kn": short_kn},
         **extra,
@@ -104,6 +110,7 @@ OPD_FORM = {
         {
             "key": "clinic",
             "type": "choice",
+            "step": "details",
             "required": True,
             "text": {"en": "Clinic visited", "kn": "ಭೇಟಿ ನೀಡಿದ ಚಿಕಿತ್ಸಾಲಯ"},
             "options": [
@@ -207,6 +214,7 @@ IPD_FORM = {
         {
             "key": "ward",
             "type": "choice",
+            "step": "details",
             "required": True,
             "text": {"en": "Ward", "kn": "ವಾರ್ಡ್"},
             "options": [
@@ -222,6 +230,7 @@ IPD_FORM = {
         {
             "key": "date_of_admission",
             "type": "date",
+            "step": "details",
             "required": True,
             "text": {"en": "Date of admission", "kn": "ದಾಖಲಾದ ದಿನಾಂಕ"},
         },

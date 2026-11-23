@@ -17,7 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from public_forms.admin_site import site
 from public_forms.i18n import BASE_LANGUAGE, admin_languages, localize
 from public_forms.models import FeedbackForm, FeedbackSubmission
-from public_forms.questions import FIELDS, parse_questions
+from public_forms.questions import FIELDS, parse_questions, with_steps
 from public_forms.text_rules import (
     MAX_DESCRIPTION_LENGTH,
     MAX_OPTION_LENGTH,
@@ -171,7 +171,8 @@ def _feedback_form_form(codes: tuple) -> type:
                     }
                 ),
             ),
-            "clean_questions": lambda self: self.cleaned_data.get("questions") or [],
+            # Every question is saved with its "step", so the JSON says where each is asked.
+            "clean_questions": lambda self: with_steps(self.cleaned_data.get("questions") or []),
         },
     )
 

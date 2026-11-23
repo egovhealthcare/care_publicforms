@@ -1,9 +1,10 @@
 """
 Turns a configured FeedbackForm into what the feedback page needs.
 
-Questions are grouped by type: choice/date questions are asked together on a
-"few details" step, each rating gets its own card, and yes/no and free-text
-questions share an "in your own words" step.
+Each question's "step" (questions.py) says where it is asked: "details"
+questions together on the "A few details" screen, "ratings" one card each,
+"open" questions together on "In your own words". Within a screen they keep
+their order in the form.
 """
 
 from datetime import date
@@ -20,8 +21,8 @@ NO_COMMENT = 0  # the "No comments" rating; default rating labels are in the loc
 
 
 def asked_on_open_step(question) -> bool:
-    """Free text, and choices marked "step": "open" (e.g. yes/no), go on the "in your own words" step."""
-    return question.type == QuestionType.TEXT or (question.type == QuestionType.CHOICE and question.step == "open")
+    """On "In your own words": questions with "step": "open" (free text, or a choice such as yes/no)."""
+    return question.step == "open" and question.type != QuestionType.RATING
 
 
 def forms_for_facility(facility) -> list[FeedbackForm]:
@@ -74,11 +75,7 @@ class FormSpec:
 
     @property
     def details(self):
-        return [
-            q
-            for q in self.questions
-            if q.type in (QuestionType.CHOICE, QuestionType.DATE) and not asked_on_open_step(q)
-        ]
+        return [q for q in self.questions if q.step == "details" and q.type != QuestionType.RATING]
 
     @property
     def ratings(self):

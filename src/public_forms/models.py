@@ -14,11 +14,11 @@ class PatientType(models.TextChoices):
 
 
 class QuestionType(models.TextChoices):
-    # Where a question is asked follows from its type:
-    #   choice, date   → "a few details" step, after identification
-    #                    (a choice with "step": "open" → "in your own words")
-    #   rating         → one card at a time
-    #   text           → "in your own words" step, before review
+    # Where a question is asked is its "step" (questions.TYPE_STEPS):
+    #   choice  → details ("A few details") or open ("In your own words")
+    #   date    → details
+    #   rating  → ratings (one card at a time)
+    #   text    → open or details
     # A yes/no question is a choice with the options yes and no.
     RATING = "rating", _("Rating: Poor → Excellent")
     CHOICE = "choice", _("Single choice")

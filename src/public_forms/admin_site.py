@@ -62,6 +62,8 @@ class PublicFormsAdminSite(admin.AdminSite):
     site_title = _("Public Forms")
     index_title = _("Feedback forms and submissions")
     site_url = None  # no "View site" link: the pages belong to each facility
+    # No "Recent actions": its entries link into Django's own /admin/.
+    index_template = "public_forms/admin/index.html"
     login_form = LoginForm
 
     def has_permission(self, request):
