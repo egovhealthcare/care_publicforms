@@ -92,12 +92,12 @@ export async function rateAll(page: Page, value = 4): Promise<number> {
 export async function opdToReview(page: Page, query = "lang=en"): Promise<void> {
   await page.goto(formUrl("opd", query));
   await enterUhid(page);
-  await expectStep(page, "details");
+  await expectStep(page, "screen-1");
   await pickDetail(page, "clinic", "ENT");
-  await page.locator('[data-action="details-next"]').click();
+  await page.locator('[data-step="screen-1"] [data-action="screen-next"]').click();
   await rateAll(page);
-  await expectStep(page, "comments");
-  await page.locator('[data-action="comments-next"]').click();
+  await expectStep(page, "screen-3");
+  await page.locator('[data-step="screen-3"] [data-action="screen-next"]').click();
   await expectStep(page, "review");
 }
 

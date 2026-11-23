@@ -1,42 +1,47 @@
 """
 A form's questions: the JSON stored in ``FeedbackForm.questions``.
 
-The questionnaire is a list of objects. ``step`` says which screen asks
-each question; the screens always come in the same order (details, then a
-card per rating, then open), and within a screen the questions keep their
-order in the list. Keys with their default value can be left out::
+The questionnaire is a list of objects. ``step`` is a number: the screen
+that asks the question. Screens come in the order of their numbers (gaps
+are fine), and within a screen the questions keep their order in the list.
+A step holds either ratings, shown one card each, or other questions
+(choice, date, text), shown together on one screen; not both. Keys with
+their default value can be left out::
 
     [
-      {"key": "clinic", "type": "choice", "step": "details", "required": true,
+      {"key": "clinic", "type": "choice", "step": 1, "required": true,
        "text": {"en": "Clinic visited", "kn": "…"},
        "options": [{"value": "ent", "en": "ENT", "kn": "…"}]},
-      {"key": "registration_wait", "type": "rating", "step": "ratings",
+      {"key": "registration_wait", "type": "rating", "step": 2,
        "text": {"en": "Waiting time at the registration counter"},
        "short_text": {"en": "Registration wait"},
        "options": [{"en": "More than 30 mins"}, …five labels, Poor → Excellent]},
-      {"key": "would_return", "type": "choice", "step": "open", "allow_comment": true,
+      {"key": "would_return", "type": "choice", "step": 3, "allow_comment": true,
        "text": {"en": "Would you come back to this hospital for treatment?"},
        "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]},
-      {"key": "suggestions", "type": "text", "step": "open",
+      {"key": "suggestions", "type": "text", "step": 3,
        "text": {"en": "Any other suggestions?"}}
     ]
+
+A screen can have its own heading in the form's step titles (``steps_errors``).
 
 Fields: see ``FIELDS``. Submissions keep their own copy of each question's
 wording, so editing, reordering or removing questions never changes old
 feedback.
 """
 
-import json
 import re
 from dataclasses import dataclass, field
 
 from public_forms.i18n import BASE_LANGUAGE
 from public_forms.models import Audience, QuestionType
 from public_forms.text_rules import (
+    MAX_DESCRIPTION_LENGTH,
     MAX_OPTION_LENGTH,
     MAX_OPTION_VALUE_LENGTH,
     MAX_QUESTION_LENGTH,
     MAX_SHORT_TEXT_LENGTH,
+    MAX_TITLE_LENGTH,
     blocked_in,
     spaced,
     without_control_characters,
@@ -47,25 +52,28 @@ TEXT_LIMITS = {"text": MAX_QUESTION_LENGTH, "short_text": MAX_SHORT_TEXT_LENGTH,
 
 KEY_PATTERN = re.compile(r"[a-z][a-z0-9_]{0,63}")
 
-# The screens a question can be asked on, in the order the patient sees them:
-#   details  "A few details", right after identification
-#   ratings  one card per question
-#   open     "In your own words", just before the review
-STEPS = ("details", "ratings", "open")
-# The steps each type can be asked on; the first is where it goes when the
-# question leaves "step" out (the admin writes it in when the form is saved).
-TYPE_STEPS = {
-    QuestionType.CHOICE: ("details", "open"),
-    QuestionType.DATE: ("details",),
-    QuestionType.RATING: ("ratings",),
-    QuestionType.TEXT: ("open", "details"),
-}
+# A step is a whole number: the screen that asks the question, in order.
+MAX_STEP = 99
+# The step of a question that doesn't say (the admin writes it in on save):
+# the layout the kiosk has always had, details first, then the ratings,
+# then the open questions.
+DEFAULT_STEPS = {QuestionType.CHOICE: 1, QuestionType.DATE: 1, QuestionType.RATING: 2, QuestionType.TEXT: 3}
+# Names the steps had before they were numbered.
+STEP_NAMES = {"details": 1, "ratings": 2, "open": 3}
 
 
-def default_step(kind) -> str | None:
-    """Where a question of type ``kind`` is asked when it doesn't say."""
-    steps = TYPE_STEPS.get(kind)
-    return steps[0] if steps else None
+def default_step(kind) -> int | None:
+    """The step of a question of type ``kind`` that doesn't say."""
+    return DEFAULT_STEPS.get(kind)
+
+
+def step_number(value) -> int | None:
+    """``value`` as a step number (1 to MAX_STEP), from a number or an old step name; None if neither."""
+    if isinstance(value, str):
+        return STEP_NAMES.get(value)
+    if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= MAX_STEP:
+        return value
+    return None
 
 
 # field → (default, description); the description is shown in the admin.
@@ -74,10 +82,9 @@ FIELDS = {
     "type": (None, "rating, choice, date or text. Required."),
     "step": (
         None,
-        "The screen that asks it: details (“A few details”, after identification), ratings (one card per "
-        "question) or open (“In your own words”, before the review). rating: ratings. choice: details or open "
-        "(on open, 2 or 3 options show as large buttons, e.g. a yes/no question). text: open or details. "
-        "date: details. Left out, the type's first one; saving writes it in.",
+        "The screen that asks it, a number: screens come in number order. A step holds either ratings (a card "
+        "each) or other questions (choice, date, text: together on one screen), not both. Left out: choice and "
+        "date 1, rating 2, text 3; saving writes it in.",
     ),
     "text": (None, 'The question per language, e.g. {"en": "…", "kn": "…"}. English is required.'),
     "short_text": ({}, "Shorter label for the review step, per language."),
@@ -106,7 +113,7 @@ class Question:
     required: bool = False
     audience: str = Audience.ALL
     allow_no_comment: bool = True
-    step: str | None = None  # parse_questions fills in the type's default
+    step: int | None = None  # parse_questions fills in the type's default
     allow_comment: bool = False
     active: bool = True
 
@@ -117,24 +124,31 @@ def parse_questions(raw) -> list[Question]:
     for item in raw or []:
         if isinstance(item, dict):
             values = {name: item[name] for name in FIELDS if name in item}
-            values["step"] = values.get("step") or default_step(values.get("type"))
+            values["step"] = step_number(values.get("step")) or default_step(values.get("type"))
             questions.append(Question(**values))
     return questions
 
 
 def with_steps(raw):
-    """``raw`` with a "step" written into each question that leaves it out, placed after "type"."""
+    """
+    ``raw`` with every question's "step" a number: written in (right after
+    "type") when it's left out, and an old step name ("details", "ratings",
+    "open") turned into its number. Anything else is left for the checks.
+    """
     if not isinstance(raw, list):
         return raw
     out = []
     for item in raw:
-        if isinstance(item, dict) and "step" not in item and default_step(item.get("type")):
-            ordered = {}
-            for name, value in item.items():
-                ordered[name] = value
-                if name == "type":
-                    ordered["step"] = default_step(value)
-            item = ordered if "step" in ordered else {**item, "step": default_step(item.get("type"))}
+        if isinstance(item, dict) and default_step(item.get("type")):
+            if "step" not in item:
+                ordered = {}
+                for name, value in item.items():
+                    ordered[name] = value
+                    if name == "type":
+                        ordered["step"] = default_step(value)
+                item = ordered
+            elif isinstance(item["step"], str) and item["step"] in STEP_NAMES:
+                item = {**item, "step": STEP_NAMES[item["step"]]}
         out.append(item)
     return out
 
@@ -164,6 +178,7 @@ def question_errors(raw) -> list[str]:
     if not isinstance(raw, list):
         return ["The questions must be a list: [ {…}, {…} ]."]
     errors, seen = [], set()
+    placed = []  # (name, type, step) of each question, to check what shares a step
     for position, item in enumerate(raw, start=1):
         if not isinstance(item, dict):
             errors.append(f"Question {position}: must be an object {{…}}.")
@@ -223,10 +238,60 @@ def question_errors(raw) -> list[str]:
                     errors += _typed_text_errors(name, f"option {number}'s value", text, MAX_OPTION_VALUE_LENGTH)
                 else:
                     errors += _typed_text_errors(name, f"option {number} ({code})", text, MAX_OPTION_LENGTH)
-        allowed = TYPE_STEPS.get(kind)
-        if allowed and "step" in item and item["step"] not in allowed:
-            where = " or ".join(allowed)
-            errors.append(f"{name}: a {kind} question is asked on {where}, not {json.dumps(item['step'])}.")
+        step = item.get("step", default_step(kind))
+        if "step" in item and not (isinstance(step, int) and not isinstance(step, bool) and 1 <= step <= MAX_STEP):
+            errors.append(f"{name}: step must be a whole number from 1 to {MAX_STEP}: the screen that asks it.")
+        elif kind in QuestionType.values:
+            placed.append((name, kind, step))
         if item.get("allow_comment") and kind != QuestionType.CHOICE:
             errors.append(f"{name}: allow_comment (“Why?”) is for choices only.")
+    # Ratings are asked one card each, so a step with ratings holds only ratings.
+    rating_steps = {step for _name, kind, step in placed if kind == QuestionType.RATING}
+    for name, kind, step in placed:
+        if kind != QuestionType.RATING and step in rating_steps:
+            errors.append(
+                f"{name}: step {step} has ratings, which get a card each; give this {kind} question its own step."
+            )
+    return errors
+
+
+# A step's heading, per language (FeedbackForm.steps), and its limits.
+STEP_TITLE_FIELDS = {"title": MAX_TITLE_LENGTH, "lead": MAX_DESCRIPTION_LENGTH}
+
+
+def steps_errors(raw, questions) -> list[str]:
+    """
+    Problems in a form's step titles: {"<step>": {"title": {...}, "lead": {...}}},
+    each for a step that has questions other than ratings (a rating card
+    shows its own question). Empty when valid.
+    """
+    if raw in (None, {}):
+        return []
+    if not isinstance(raw, dict):
+        return ['Step titles must be an object, e.g. {"1": {"title": {"en": "About your visit"}}}.']
+    parsed = parse_questions(questions) if isinstance(questions, list) else []
+    used = {question.step for question in parsed}
+    rating_steps = {question.step for question in parsed if question.type == QuestionType.RATING}
+    errors = []
+    for key, value in raw.items():
+        label = f"Step {key}"
+        number = int(key) if isinstance(key, str) and key.isdigit() else None
+        if number is None:
+            errors.append(f'{label}: the key must be a step number, e.g. "1".')
+            continue
+        if number not in used:
+            errors.append(f"{label}: no question has this step.")
+        elif number in rating_steps:
+            errors.append(f"{label}: has ratings, whose cards show each question; it takes no title.")
+        if not isinstance(value, dict) or not value or set(value) - set(STEP_TITLE_FIELDS):
+            errors.append(f'{label}: give a title and/or a lead, e.g. {{"title": {{"en": "…"}}}}.')
+            continue
+        for text_field, max_length in STEP_TITLE_FIELDS.items():
+            if text_field not in value:
+                continue
+            if not _is_text(value[text_field], required=True):
+                errors.append(f'{label}: {text_field} needs English text, e.g. {{"en": "…"}}.')
+                continue
+            for code, text in value[text_field].items():
+                errors += _typed_text_errors(label, f"{text_field} ({code})", text, max_length)
     return errors

@@ -91,23 +91,23 @@ async function walkScreens(page: Page, testInfo: TestInfo, lang: string) {
   await check("03-uhid", { fits: true });
 
   await page.locator('[data-step="uhid"] [data-action="guest"]').click();
-  await expectStep(page, "details");
-  await page.locator('[data-action="details-next"]').click(); // show the errors
+  await expectStep(page, "screen-1");
+  await page.locator('[data-step="screen-1"] [data-action="screen-next"]').click(); // show the errors
   await check("04-details-errors");
   await pickValue(page, "clinic", "obstetrics_gynaecology");
   await pickValue(page, "age_group", "over_60");
   await pickValue(page, "sex", "female");
-  await page.locator('[data-action="details-next"]').click();
+  await page.locator('[data-step="screen-1"] [data-action="screen-next"]').click();
 
   await expectStep(page, "questions");
   await check("05-question", { fits: true });
   for (let i = 0; i < 10; i++) await rate(page, [5, 4, 3, 2, 1, 0][i % 6]);
 
-  await expectStep(page, "comments");
+  await expectStep(page, "screen-3");
   await activeStep(page).locator('label.yn:has(input[value="no"])').click();
   await activeStep(page).locator("textarea[data-comment]").fill("The queue at the pharmacy was very long today");
   await check("06-comments");
-  await page.locator('[data-action="comments-next"]').click();
+  await page.locator('[data-step="screen-3"] [data-action="screen-next"]').click();
 
   await expectStep(page, "review");
   await check("07-review");

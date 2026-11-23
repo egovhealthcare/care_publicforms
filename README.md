@@ -268,79 +268,115 @@ In [the admin](#the-admin) under **Feedback forms**:
   doesn't come back. Keep codes short: reference numbers use the first 12
   characters (`OPD-20261118-4821`). Titles hold up to 100 characters per
   language, descriptions up to 300.
-- **Questions**: one JSON list on the form. Each question's `step` says
-  which screen asks it, and within a screen questions keep their order in
-  the list (the admin checks it on save and names the question in every
-  error).
-  Per language, a question's `text` and `hint` hold up to 300 characters,
-  its `short_text` 60 and each option's label 100; an option's `value` up
-  to 64. No text can contain `<` `>` `{` `}` `` ` `` `\`.
-  Fields left out take their default:
+- **Questions**: one JSON list on the form; each question's `step` number
+  says which screen asks it. See [Writing a questionnaire](#writing-a-questionnaire).
+  The admin checks it on save and names the question in every error.
+- **Step titles** (optional): a heading for a screen, by its step number,
+  e.g. `{"1": {"title": {"en": "About your visit"}, "lead": {"en": "Two quick questions."}}}`.
+  Steps without one get a default heading.
 
-  ```json
-  [
-    {"key": "clinic", "type": "choice", "step": "details", "required": true,
-     "text": {"en": "Clinic visited", "<code>": "…"},
-     "options": [{"value": "ent", "en": "ENT", "<code>": "…"}]},
-    {"key": "registration_wait", "type": "rating", "step": "ratings",
-     "text": {"en": "Waiting time at the registration counter"},
-     "short_text": {"en": "Registration wait"},
-     "options": [{"en": "More than 30 mins"}, {"en": "10-30 mins"}, {"en": "5-10 mins"},
-                 {"en": "Within 5 mins"}, {"en": "Immediate"}]},
-    {"key": "would_return", "type": "choice", "step": "open", "allow_comment": true,
-     "text": {"en": "Would you come back to this hospital for treatment?"},
-     "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]},
-    {"key": "suggestions", "type": "text", "step": "open",
-     "text": {"en": "Any other suggestions?"}}
-  ]
-  ```
+### Writing a questionnaire
 
-  Every text is per language: `"en"` (required) and one entry per other
+A small but complete questionnaire. Paste it into **Questions** and it
+shows as three screens:
+
+```json
+[
+  {"key": "clinic", "type": "choice", "step": 1, "required": true,
+   "text": {"en": "Which clinic did you visit?"},
+   "options": [{"value": "general", "en": "General Medicine"},
+               {"value": "eye", "en": "Eye"}]},
+  {"key": "visit_date", "type": "date", "step": 1,
+   "text": {"en": "Date of your visit"}},
+
+  {"key": "doctor", "type": "rating", "step": 2,
+   "text": {"en": "How well did the doctor explain things?"},
+   "short_text": {"en": "Doctor"}},
+  {"key": "cleanliness", "type": "rating", "step": 2,
+   "text": {"en": "How clean was the hospital?"},
+   "short_text": {"en": "Cleanliness"}},
+
+  {"key": "come_back", "type": "choice", "step": 3, "allow_comment": true,
+   "text": {"en": "Would you come back to this hospital?"},
+   "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]},
+  {"key": "suggestions", "type": "text", "step": 3,
+   "text": {"en": "Any other suggestions?"}}
+]
+```
+
+What the patient goes through:
+
+1. **Identify**: scan the QR, type the UHID or continue as a guest. This
+   always comes first.
+2. **Step 1**: one screen with both questions, the clinic as chips and the
+   date as a date field. Headed "A few quick details", or the step 1 title.
+3. **Step 2**: one card per rating, "Question 1 of 2", then "Question 2
+   of 2". Picking a face moves on by itself.
+4. **Step 3**: one screen headed "In your own words". *Yes* / *No* show as
+   two large buttons with a "Why?" box, then a text box.
+5. **Review**: every answer, in this order. A tap on a row changes it. Then
+   **Submit** and the thank-you page with a reference number.
+
+The rules:
+
+- **`step` is a number, and the numbers set the order of the screens.**
+  Gaps are fine (1, 2, 5); up to 99 screens.
+- **A step holds either ratings or other questions, not both.** Ratings
+  show one card each. Choice, date and text questions in the same step
+  share one screen. More ratings in a step add cards; more questions add
+  to their screen.
+- **Within a step, questions keep their order in the list.** Where a
+  question sits in the list only matters among the questions of its step.
+- **How a screen looks depends on where it is.** Screens before the first
+  ratings are compact ("A few quick details", chips, small labels).
+  Screens after the ratings are larger ("In your own words"; a choice of 2
+  or 3 options shows as large buttons). The last one says "Last N
+  questions", one in the middle "A few more questions". A step title
+  replaces the default heading.
+- **Home and Reset** show from the first rating on. Reset clears the
+  ratings and the screens after them, and keeps the UHID and the screens
+  before them.
+- **A screen with no question for this patient is skipped**, e.g. a step
+  of guest-only questions (`"audience": "guest"`) for a patient who gave a
+  UHID.
+- **Every text is per language**: `"en"` (required) and one entry per other
   language code, e.g. `{"en": "Clinic visited", "<code>": "…"}`. Missing
   languages show the English.
+- **`key` is where the answer is stored.** Keep it once feedback has come
+  in; give a question with a new meaning a new key.
+- **Limits:** per language, a question's `text` and `hint` hold up to 300
+  characters, its `short_text` 60 and each option's label 100; an option's
+  `value` up to 64. No text can contain `<` `>` `{` `}` `` ` `` `\`.
 
-  | Field | Default | Meaning |
-  | --- | --- | --- |
-  | `key` | required | Stable id the answer is stored under: lowercase letters, digits, `_` |
-  | `type` | required | `rating`, `choice`, `date` or `text` (see below) |
-  | `step` | by type | The screen that asks it: `details`, `ratings` or `open` (see below). Left out, the type's default; saving in the admin writes it in |
-  | `text` | required | The question per language; English required |
-  | `short_text` | `{}` | Shorter label for the review step |
-  | `hint` | `{}` | Hint under the question |
-  | `options` | `[]` | Choices, or five rating labels (see below) |
-  | `required` | `false` | Needs an answer (ratings always do) |
-  | `audience` | `"all"` | `all`, `guest` (no UHID) or `identified` (gave a UHID) |
-  | `allow_no_comment` | `true` | Ratings: offer "No comments" |
-  | `allow_comment` | `false` | Choices: also ask "Why?" under the answer |
-  | `active` | `true` | `false` keeps the question in the form without asking it |
+Every field, with its default when left out:
 
-  `step` decides where a question appears. The screens always come in this
-  order, after the patient identifies themselves:
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `key` | required | Stable id the answer is stored under: lowercase letters, digits, `_` |
+| `type` | required | `rating`, `choice`, `date` or `text` (see below) |
+| `step` | by type | The screen that asks it, a number. Left out: `choice` and `date` 1, `rating` 2, `text` 3; saving in the admin writes it in |
+| `text` | required | The question per language; English required |
+| `short_text` | `{}` | Shorter label for the review screen |
+| `hint` | `{}` | Hint under the question |
+| `options` | `[]` | Choices, or five rating labels (see below) |
+| `required` | `false` | Needs an answer (ratings always do) |
+| `audience` | `"all"` | `all`, `guest` (no UHID) or `identified` (gave a UHID) |
+| `allow_no_comment` | `true` | Ratings: offer "No comments" |
+| `allow_comment` | `false` | Choices: also ask "Why?" under the answer |
+| `active` | `true` | `false` keeps the question in the form without asking it |
 
-  | `step` | Screen | Questions shown |
-  | --- | --- | --- |
-  | `details` | "A few details" | all together |
-  | `ratings` | one card per question | one at a time |
-  | `open` | "In your own words", before the review | all together |
+| Type | Shown as | Notes |
+| --- | --- | --- |
+| `choice` | Chips; after the ratings, 2 or 3 options as large buttons | `options`: `[{"value": "ent", "en": "ENT", "<code>": "…"}]`. A **yes/no** question is a choice with the options `yes` and `no` |
+| `date` | A date field | e.g. date of admission; future dates are refused |
+| `rating` | A card with five faces, Excellent → Poor, plus "No comments" (can be turned off) | `options` can relabel the five faces, Poor → Excellent, e.g. waiting time "More than 30 mins" … "Immediate". Ratings always need an answer |
+| `text` | A text box: short before the ratings, large after them | Up to 2000 characters |
 
-  Each type can go on these steps (the first is its default):
-
-  | Type | Steps | Notes |
-  | --- | --- | --- |
-  | `choice` | `details`, `open` | `options`: `[{"value": "ent", "en": "ENT", "<code>": "…"}]`. Chips; on `open`, 2 or 3 options show as large buttons. A **yes/no** question is a choice with the options `yes` and `no` (see `would_return` above) |
-  | `date` | `details` | e.g. date of admission; future dates are refused |
-  | `rating` | `ratings` | Poor → Excellent plus "No comments" (can be turned off). `options` can relabel the five faces, e.g. waiting time "More than 30 mins" … "Immediate". Ratings always need an answer. |
-  | `text` | `open`, `details` | Free text: a large box on `open`, a short one on `details` (e.g. a doctor's name) |
-
-  So to add a question, give it a `type` and a `step`, and put it where it
-  should be asked among the questions of that step: more ratings add
-  cards, more text or choice questions add to their screen. A screen with
-  no question for the patient is skipped.
-
-  The default forms ask age and sex only of guests, since UHID patients
-  already have a record. Their details (clinic or ward, date of admission,
-  age, sex) are required; a details question that isn't is marked
-  *optional* on screen.
+The default forms use step 1 for the details (clinic or ward, date of
+admission, and age and sex for guests only, since UHID patients already
+have a record), step 2 for the ratings and step 3 for the open questions.
+Their details are required; a question on those screens that isn't is
+marked *optional*.
 
 Every submission saves each answer **with its question as asked**, so
 editing, reordering or removing questions never changes feedback already

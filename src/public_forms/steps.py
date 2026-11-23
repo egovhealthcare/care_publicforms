@@ -8,8 +8,10 @@ server shows the step that button leads to. This module is that navigation;
 it follows kiosk.js, so both behave the same.
 
 A *unit* is a place in the questionnaire after identification:
-``("details", 0)``, ``("questions", i)`` for rating card i, ``("comments", 0)``
-and ``("review", 0)``. The identify, scan and UHID steps come before them.
+``("screen-<n>", 0)`` for the screen of step n's questions, ``("questions", i)``
+for rating card i (its place in ``FormSpec.ratings``) and ``("review", 0)``.
+They come in step order (questionnaire.py). The identify, scan and UHID
+steps come before them.
 
 ``nav`` values (the ``value`` of the button pressed):
 
@@ -23,6 +25,7 @@ and ``("review", 0)``. The identify, scan and UHID steps come before them.
   submit                  save (handled by the view)
 """
 
+import re
 from dataclasses import dataclass
 
 from public_forms.models import QuestionType
@@ -37,10 +40,22 @@ from public_forms.questionnaire import (
 )
 from public_forms.services import collect_answers
 
-STEPS = ("identify", "scan", "uhid", "details", "questions", "comments", "review")
-FLOW_STEPS = ("details", "questions", "comments", "review")  # after identification
-NAV_STEPS = ("questions", "comments", "review")  # where Home / Reset show
+STEPS = ("identify", "scan", "uhid", "questions", "review")  # plus "screen-<n>" for each step's screen
+SCREEN_NAME = re.compile(r"screen-([1-9][0-9]?)")
 REVIEW = ("review", 0)
+
+
+def is_flow_step(name) -> bool:
+    """A step after identification: a screen of questions, the rating cards or the review."""
+    return name in ("questions", "review") or bool(SCREEN_NAME.fullmatch(str(name)))
+
+
+def shows_home_reset(spec: FormSpec, name) -> bool:
+    """Home and Reset show from the first rating on: on cards, the review and "open" screens."""
+    if name in ("questions", "review"):
+        return True
+    screen = spec.group(name)
+    return bool(screen and screen.style == "open")
 
 
 @dataclass
@@ -66,7 +81,7 @@ class Place:
 
 
 def unit_value(unit: tuple[str, int] | None) -> str:
-    """A unit as the hidden ``return`` field holds it: "review", "details", "comments" or "questions:<card>"."""
+    """A unit as the hidden ``return`` field holds it: "review", "screen-<n>" or "questions:<card>"."""
     if not unit:
         return ""
     return f"questions:{unit[1]}" if unit[0] == "questions" else unit[0]
@@ -74,10 +89,12 @@ def unit_value(unit: tuple[str, int] | None) -> str:
 
 def parse_unit(value, spec: FormSpec) -> tuple[str, int] | None:
     name, _sep, card = str(value or "").partition(":")
-    if name not in FLOW_STEPS:
-        return None
-    if name != "questions":
+    if name == "review":
+        return REVIEW
+    if spec.group(name):
         return (name, 0)
+    if name != "questions":
+        return None
     try:
         index = int(card)
     except ValueError:
@@ -85,32 +102,37 @@ def parse_unit(value, spec: FormSpec) -> tuple[str, int] | None:
     return (name, index) if 0 <= index < len(spec.ratings) else None
 
 
-def _rank(spec: FormSpec, unit: tuple[str, int]) -> int:
-    """A unit's position in the full questionnaire, whoever the patient is."""
+def _rank(spec: FormSpec, unit: tuple[str, int]) -> tuple[int, int]:
+    """A unit's position in the full questionnaire, whoever the patient is: (step, place in the step)."""
     name, index = unit
-    return {"details": 0, "questions": 1 + index, "comments": 1 + len(spec.ratings)}.get(name, 2 + len(spec.ratings))
+    if name == "questions" and 0 <= index < len(spec.ratings):
+        return (spec.ratings[index].step, 1 + index)
+    if screen := spec.group(name):
+        return (screen.number, 0)
+    return (10**6, 0)  # the review, last
 
 
 def flow_units(spec: FormSpec, identified: bool) -> list[tuple[str, int]]:
-    units = []
-    if any(applies(q, identified) for q in spec.details):
-        units.append(("details", 0))
-    units += [("questions", i) for i, q in enumerate(spec.ratings) if applies(q, identified)]
-    if any(applies(q, identified) for q in spec.open_questions):
-        units.append(("comments", 0))
+    """The places this patient goes through after identification, in order, ending with the review."""
+    units, card = [], 0
+    for screen in spec.screens:
+        if screen.is_ratings:
+            for question in screen.questions:
+                if applies(question, identified):
+                    units.append(("questions", card))
+                card += 1
+        elif any(applies(question, identified) for question in screen.questions):
+            units.append((screen.name, 0))
     units.append(REVIEW)
     return units
 
 
 def unit_questions(spec: FormSpec, unit: tuple[str, int]) -> list:
     name, index = unit
-    if name == "details":
-        return spec.details
     if name == "questions":
         return spec.ratings[index : index + 1]
-    if name == "comments":
-        return spec.open_questions
-    return []
+    screen = spec.group(name)
+    return screen.questions if screen else []
 
 
 def unit_problems(spec: FormSpec, data, identified: bool, unit: tuple[str, int]) -> dict:
@@ -149,12 +171,14 @@ def resume_point(here: Place) -> tuple[str, int] | None:
         return REVIEW
     if here.return_to:
         return here.return_to
-    return here.unit if here.step in FLOW_STEPS else None
+    return here.unit if is_flow_step(here.step) else None
 
 
 def place_from(data, spec: FormSpec) -> Place:
     """The place the page was on when it was posted (hidden ``step`` / ``card`` / ``return``)."""
-    step = data.get("step") if data.get("step") in STEPS else "identify"
+    step = data.get("step")
+    if step not in STEPS and not spec.group(step):
+        step = "identify"
     try:
         card = int(data.get("card") or 0)
     except ValueError:
@@ -170,7 +194,7 @@ def navigate(spec: FormSpec, data, nav: str, identified: bool, uhid_valid: bool)
     """
     here = place_from(data, spec)
     if nav == "default":
-        nav = {"uhid": "uhid", "details": "next", "questions": "next", "comments": "next"}.get(here.step, "stay")
+        nav = "uhid" if here.step == "uhid" else "next" if here.step == "questions" or spec.group(here.step) else "stay"
 
     if nav in ("go:identify", "go:uhid", "go:scan"):
         # Leaving a question or the review to identify again: come back to it after.
@@ -235,7 +259,7 @@ def answer_label(question, value):
 def review_rows(spec: FormSpec, data, identified: bool) -> list[dict]:
     """One row per question asked of this patient, in page order (as kiosk.js builds it)."""
     rows = []
-    for question in [*spec.details, *spec.ratings, *spec.open_questions]:
+    for question in [question for screen in spec.screens for question in screen.questions]:
         if not applies(question, identified):
             continue
         value = answer_label(question, parse_answer(question, data.get(question.key)))

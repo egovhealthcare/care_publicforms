@@ -15,7 +15,7 @@ from django.utils.http import urlencode
 from public_forms.checks import check_languages
 from public_forms.models import Audience, FeedbackForm, FeedbackSubmission, QuestionType
 from public_forms.questionnaire import FormSpec, applies
-from public_forms.questions import question_errors, with_steps
+from public_forms.questions import question_errors, steps_errors, with_steps
 from public_forms.tests import PLAIN_STATIC_STORAGES, TEST_LANGUAGE, TEST_PLUGIN_CONFIGS, plugin_configs
 from public_forms.views import no_js_countdown
 
@@ -49,7 +49,8 @@ class PageTestBase(CareAPITestBase):
             "age_group": "31_45",
             "sex": "female",
         }
-        return {q.key: values[q.key] for q in FormSpec(form).details if q.required and applies(q, identified)}
+        first = FormSpec(form).group("screen-1")  # the default forms' step 1, before the ratings
+        return {q.key: values[q.key] for q in first.questions if q.required and applies(q, identified)}
 
     def add_question(self, form, key, **fields):
         form.questions = [*form.questions, {"key": key, "text": {"en": key.replace("_", " ").capitalize()}, **fields}]
@@ -113,7 +114,7 @@ class PublicPageTests(PageTestBase):
         response = self.client.get(self.url("form", "opd"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(dict(response.cookies), {})
-        for step in ("identify", "scan", "uhid", "details", "questions", "comments", "review"):
+        for step in ("identify", "scan", "uhid", "screen-1", "questions", "screen-3", "review"):
             self.assertContains(response, f'data-step="{step}"')
         self.assertContains(response, "data-card", count=len(FormSpec(self.opd).ratings))
         self.assertContains(response, f'class="l10n l10n--{TEST_LANGUAGE}"')
@@ -272,7 +273,7 @@ class SubmitTests(PageTestBase):
     def test_details_need_answers(self):
         guest = self.submit(**self.ratings(self.opd, identified=False))
         self.assertEqual(guest.context["errors"], dict.fromkeys(("clinic", "age_group", "sex"), "required"))
-        self.assertEqual(guest.context["current_step"], "details")
+        self.assertEqual(guest.context["current_step"], "screen-1")
         identified = self.submit(uhid=UHID, **self.ratings(self.opd))  # age and sex are asked of guests only
         self.assertEqual(identified.context["errors"], {"clinic": "required"})
         self.assertContains(identified, 'data-question-key="clinic" data-audience="all" data-required="1"')
@@ -441,7 +442,7 @@ class ConfigurationTests(PageTestBase):
         self.assertContains(page, 'name="parking"')
         response = self.submit(uhid=UHID, **self.answers(self.opd))
         self.assertEqual(response.context["errors"], {"parking": "required"})
-        self.assertEqual(response.context["current_step"], "comments")
+        self.assertEqual(response.context["current_step"], "screen-3")
         self.submit(uhid=UHID, parking="Inside", **self.answers(self.opd))
         self.assertEqual(FeedbackSubmission.objects.get().answers["parking"]["value"], "Inside")
 
@@ -550,14 +551,14 @@ class StepByStepWithoutJavaScriptTests(PageTestBase):
         self.assertEqual((self.place(wrong), wrong.context["errors"]), (("uhid", 0), {"uhid": "length"}))
         # Enter in the UHID field presses the hidden first button: "default" continues.
         details = self.press("default", step="uhid", uhid=UHID)
-        self.assertEqual(self.place(details), ("details", 0))
+        self.assertEqual(self.place(details), ("screen-1", 0))
         self.assertContains(details, 'id="idStripValue">123 4567 8901<')
         self.assertContains(details, 'data-question-key="age_group" data-audience="guest" data-required="1" hidden')
 
-        missing = self.press("next", step="details", uhid=UHID)
-        self.assertEqual((self.place(missing), missing.context["errors"]), (("details", 0), {"clinic": "required"}))
+        missing = self.press("next", step="screen-1", uhid=UHID)
+        self.assertEqual((self.place(missing), missing.context["errors"]), (("screen-1", 0), {"clinic": "required"}))
         answers = {"uhid": UHID, "clinic": "ent"}
-        first = self.press("next", step="details", **answers)
+        first = self.press("next", step="screen-1", **answers)
         self.assertEqual(self.place(first), ("questions", 0))
         self.assertContains(first, '<nav class="hdr-nav" id="hdrNav">')
         unanswered = self.press("next", step="questions", card=0, **answers)
@@ -566,9 +567,9 @@ class StepByStepWithoutJavaScriptTests(PageTestBase):
         for card, key in enumerate(keys):
             answers[key] = "4"
             response = self.press("next", step="questions", card=card, **answers)
-            expected = ("questions", card + 1) if card + 1 < len(keys) else ("comments", 0)
+            expected = ("questions", card + 1) if card + 1 < len(keys) else ("screen-3", 0)
             self.assertEqual(self.place(response), expected)
-        review = self.press("next", step="comments", would_return="yes", **answers)
+        review = self.press("next", step="screen-3", would_return="yes", **answers)
         self.assertEqual(self.place(review), ("review", 0))
         self.assertEqual(len(review.context["review_rows"]), 1 + len(keys) + 4)
         self.assertContains(review, 'name="nav" value="edit:registration_wait"')
@@ -607,25 +608,25 @@ class StepByStepWithoutJavaScriptTests(PageTestBase):
 
         # A guest: first the guest-only details (age and sex), then the fifth rating.
         guest = self.press("guest", step="uhid", **left_at)
-        self.assertEqual((self.place(guest), guest.context["return_to"]), (("details", 0), "questions:4"))
+        self.assertEqual((self.place(guest), guest.context["return_to"]), (("screen-1", 0), "questions:4"))
         self.assertNotContains(guest, 'class="is-editing"')  # Back still shows here
         self.assertContains(guest, f'name="{keys[3]}" value="4" checked')
         details = {**left_at, "uhid": "", "age_group": "31_45", "sex": "female"}
-        onward = self.press("next", step="details", **details)
+        onward = self.press("next", step="screen-1", **details)
         self.assertEqual((self.place(onward), onward.context["return_to"]), (("questions", 4), ""))
 
     def test_back_walks_the_steps_in_reverse(self):
         answers = {"uhid": UHID, "clinic": "ent"}
         self.assertEqual(self.place(self.press("back", step="questions", card=2, **answers)), ("questions", 1))
-        self.assertEqual(self.place(self.press("back", step="questions", card=0, **answers)), ("details", 0))
-        self.assertEqual(self.place(self.press("back", step="details", **answers)), ("identify", 0))
+        self.assertEqual(self.place(self.press("back", step="questions", card=0, **answers)), ("screen-1", 0))
+        self.assertEqual(self.place(self.press("back", step="screen-1", **answers)), ("identify", 0))
 
     def test_a_guest_answers_the_guest_details(self):
         details = self.press("guest", step="identify", uhid="12345")
-        self.assertEqual(self.place(details), ("details", 0))
+        self.assertEqual(self.place(details), ("screen-1", 0))
         self.assertContains(details, 'name="uhid" value=""')
         self.assertNotContains(details, 'data-question-key="age_group" data-audience="guest" data-required="1" hidden')
-        missing = self.press("next", step="details")
+        missing = self.press("next", step="screen-1")
         self.assertEqual(missing.context["errors"], dict.fromkeys(("clinic", "age_group", "sex"), "required"))
 
     def test_changing_the_uhid_from_the_review_comes_back_to_it(self):
@@ -634,15 +635,15 @@ class StepByStepWithoutJavaScriptTests(PageTestBase):
         self.assertEqual((self.place(uhid_step), uhid_step.context["returning"]), (("uhid", 0), True))
         # As a guest, age and sex now need answers first.
         guest = self.press("guest", step="uhid", uhid=UHID, **{**answers, "return": "review"})
-        self.assertEqual(self.place(guest), ("details", 0))
+        self.assertEqual(self.place(guest), ("screen-1", 0))
         review = self.press(
-            "next", step="details", **{**answers, "age_group": "18_30", "sex": "male", "return": "review"}
+            "next", step="screen-1", **{**answers, "age_group": "18_30", "sex": "male", "return": "review"}
         )
         self.assertEqual(self.place(review), ("review", 0))
 
     def test_switching_language_keeps_the_step_and_answers(self):
-        page = self.press(f"lang:{TEST_LANGUAGE}", step="details", uhid=UHID, clinic="ent", language="en")
-        self.assertEqual(self.place(page), ("details", 0))
+        page = self.press(f"lang:{TEST_LANGUAGE}", step="screen-1", uhid=UHID, clinic="ent", language="en")
+        self.assertEqual(self.place(page), ("screen-1", 0))
         self.assertContains(page, f'data-lang="{TEST_LANGUAGE}"')
         self.assertContains(page, f'name="language" value="{TEST_LANGUAGE}"')
         self.assertContains(page, 'value="ent" checked')
@@ -682,40 +683,107 @@ class QuestionsJsonTests(PageTestBase):
         )
 
     def test_every_question_says_its_step(self):
-        # The default forms, and forms saved before steps were written in (0004).
+        # The default forms (1 details, 2 ratings, 3 open), and forms saved before
+        # steps were numbered (0004): written in, or turned from a name into its number.
         for form in (self.opd, self.ipd):
-            self.assertTrue(all("step" in question for question in form.questions), form.code)
-        migration = importlib.import_module("public_forms.migrations.0004_explicit_question_steps")
+            self.assertTrue(all(isinstance(question.get("step"), int) for question in form.questions), form.code)
+        migration = importlib.import_module("public_forms.migrations.0004_numbered_steps")
         old = [
             {"key": "a", "type": "choice", "text": {"en": "A"}, "options": [{"value": "x", "en": "X"}]},
             {"key": "b", "type": "rating", "text": {"en": "B"}},
             {"key": "c", "type": "text", "text": {"en": "C"}},
             {"key": "d", "type": "date", "text": {"en": "D"}},
             {"key": "e", "type": "choice", "step": "open", "text": {"en": "E"}, "options": [{"value": "y", "en": "Y"}]},
+            {"key": "f", "type": "text", "step": 7, "text": {"en": "F"}},
         ]
-        new = migration.with_steps(old)
-        self.assertEqual([q["step"] for q in new], ["details", "ratings", "open", "details", "open"])
+        new = migration.numbered(old)
+        self.assertEqual([q["step"] for q in new], [1, 2, 3, 1, 3, 7])
         self.assertEqual(list(new[0])[:3], ["key", "type", "step"])  # written right after the type
         self.assertEqual(new, with_steps(old))  # the admin writes the same on save
 
-    def test_step_decides_the_screen(self):
-        # A text question can be asked on "A few details" too; its place there follows the list.
+    def test_step_numbers_order_the_screens(self):
+        # Any number of screens, in step order, whatever the order of the list:
+        # 1 details, 2 two ratings, 3 a yes/no, 4 one more rating, 5 a text box.
+        choice = {"type": "choice", "required": True, "options": [{"value": "a", "en": "A"}, {"value": "b", "en": "B"}]}
+        self.opd.questions = [
+            {"key": "late_rating", "type": "rating", "step": 4, "text": {"en": "Late rating"}},
+            {"key": "comment", "type": "text", "step": 5, "text": {"en": "Comment"}},
+            {"key": "clinic", "step": 1, "text": {"en": "Clinic"}, **choice},
+            {"key": "first_rating", "type": "rating", "step": 2, "text": {"en": "First rating"}},
+            {"key": "second_rating", "type": "rating", "step": 2, "text": {"en": "Second rating"}},
+            {"key": "come_back", "step": 3, "text": {"en": "Come back?"}, **choice},
+        ]
+        self.opd.steps = {"3": {"title": {"en": "About coming back"}, "lead": {"en": "One question."}}}
+        self.opd.full_clean()
+        self.opd.save()
+        spec = FormSpec(self.opd)
+        self.assertEqual([q.key for q in spec.ratings], ["first_rating", "second_rating", "late_rating"])
+        self.assertEqual([s.style for s in spec.groups], ["details", "open", "open"])
+
+        # Without JavaScript, Next walks them in that order.
+        data = {"uhid": UHID, "clinic": "a", "first_rating": "4", "second_rating": "4", "come_back": "a"}
+        data["late_rating"] = "3"
+        walk, place = [], ("screen-1", 0)
+        while place != ("review", 0):
+            walk.append(place)
+            posted = {"nav": "next", "step": place[0], "card": place[1], **data}
+            response = self.client.post(self.url("form", "opd"), posted)
+            place = (response.context["current_step"], response.context["current_card"])
+        expected = [("screen-1", 0), ("questions", 0), ("questions", 1), ("screen-3", 0), ("questions", 2)]
+        self.assertEqual(walk, [*expected, ("screen-5", 0)])
+
+        page = self.client.get(self.url("form", "opd")).content.decode()
+        third = page.split('data-step="screen-3"')[1].split("</section>")[0]
+        self.assertIn("About coming back", third)  # its own title
+        self.assertIn('<span class="ynbtn">', third)  # after the ratings: large Yes / No-style buttons
+        self.assertIn(">Next<", third)  # more rating cards come next, but the ratings have started
+        self.assertIn("Start the questions", page.split('data-step="screen-1"')[1].split("</section>")[0])
+        self.assertTrue(third.startswith(' data-order="3" data-home-reset>'))  # Home / Reset show here
+        fifth = page.split('data-step="screen-5"')[1].split("</section>")[0]
+        self.assertIn("In your own words", fifth)  # the default heading
+        self.assertIn("Review answers", fifth)  # the review comes next
+        first = page.split('data-step="screen-1"')[1].split("</section>")[0]
+        self.assertTrue(first.startswith(' data-order="1">'))  # before the ratings: no Home / Reset
+
+    def test_a_text_question_can_go_on_the_first_screen(self):
+        # Its place there follows the list.
         self.opd.questions = [
             *self.opd.questions,
-            {"key": "doctor_name", "type": "text", "step": "details", "required": True, "text": {"en": "Doctor"}},
+            {"key": "doctor_name", "type": "text", "step": 1, "required": True, "text": {"en": "Doctor"}},
         ]
         self.opd.save()
         spec = FormSpec(self.opd)
-        self.assertEqual(spec.details[-1].key, "doctor_name")
-        self.assertNotIn("doctor_name", [q.key for q in spec.open_questions])
+        self.assertEqual(spec.group("screen-1").questions[-1].key, "doctor_name")
         page = self.client.get(self.url("form", "opd"))
-        details = page.content.decode().split('data-step="details"')[1].split('data-step="questions"')[0]
-        self.assertIn('<textarea name="doctor_name"', details)
-        # It is required there like any details question (without JavaScript, too).
+        first = page.content.decode().split('data-step="screen-1"')[1].split("</section>")[0]
+        self.assertIn('<textarea name="doctor_name"', first)
+        # It is required there like any question on that screen (without JavaScript, too).
         step = self.client.post(
-            self.url("form", "opd"), {"nav": "next", "step": "details", "uhid": UHID, "clinic": "ent"}
+            self.url("form", "opd"), {"nav": "next", "step": "screen-1", "uhid": UHID, "clinic": "ent"}
         )
         self.assertEqual(step.context["errors"], {"doctor_name": "required"})
+
+    def test_step_titles_are_checked(self):
+        questions = [
+            {"key": "a", "type": "choice", "step": 1, "text": {"en": "A"}, "options": [{"value": "x", "en": "X"}]},
+            {"key": "b", "type": "rating", "step": 2, "text": {"en": "B"}},
+        ]
+        self.assertEqual(steps_errors({"1": {"title": {"en": "About you"}}}, questions), [])
+        titles = {
+            "2": {"title": {"en": "Ratings"}},
+            "9": {"title": {"en": "X"}},
+            "one": {},
+            "1": {"title": {"en": "<b>"}},
+        }
+        problems = steps_errors(titles, questions)
+        expected = [
+            "Step 2: has ratings, whose cards show each question",
+            "Step 9: no question has this step",
+            "Step one: the key must be a step number",
+            "Step 1: title (en) can't contain < >",
+        ]
+        for start in expected:
+            self.assertTrue(any(p.startswith(start) for p in problems), (start, problems))
 
     def test_default_forms_are_valid(self):
         for form in (self.opd, self.ipd):
@@ -738,8 +806,9 @@ class QuestionsJsonTests(PageTestBase):
                     "required": "yes",
                     "options": [{"value": "a", "en": "A"}],
                 },
-                {"key": "stay", "type": "text", "text": {"en": "Stay"}, "step": "details", "allow_comment": True},
-                {"key": "card", "type": "rating", "text": {"en": "Card"}, "step": "open"},
+                {"key": "stay", "type": "text", "text": {"en": "Stay"}, "step": 1, "allow_comment": True},
+                {"key": "card", "type": "rating", "text": {"en": "Card"}, "step": 1},
+                {"key": "zero", "type": "text", "text": {"en": "Zero"}, "step": 0},
                 {
                     "key": "back",
                     "type": "choice",
@@ -758,9 +827,10 @@ class QuestionsJsonTests(PageTestBase):
             "“visit”: text needs the English question",
             "“mood”: type must be one of",
             "“why”: required must be true or false",
-            "“stay”: allow_comment (“Why?”) is for choices only",  # a text question may go on details
-            '“card”: a rating question is asked on ratings, not "open"',
-            '“back”: a choice question is asked on details or open, not "later"',
+            "“stay”: allow_comment (“Why?”) is for choices only",
+            "“stay”: step 1 has ratings, which get a card each",  # “card” is a rating on step 1
+            "“zero”: step must be a whole number from 1 to 99",
+            "“back”: step must be a whole number from 1 to 99",
         ]
         for start in expected:
             self.assertTrue(any(p.startswith(start) for p in problems), (start, problems))
@@ -786,8 +856,9 @@ class QuestionsJsonTests(PageTestBase):
     def test_a_yes_no_question_is_an_open_choice(self):
         page = self.client.get(self.url("form", "opd"))
         spec = FormSpec(self.opd)
-        self.assertIn("would_return", [q.key for q in spec.open_questions])
-        self.assertNotIn("would_return", [q.key for q in spec.details])
+        self.assertIn("would_return", [q.key for q in spec.group("screen-3").questions])  # after the ratings
+        self.assertNotIn("would_return", [q.key for q in spec.group("screen-1").questions])
+
         # Two options on the "in your own words" step: large Yes / No buttons, with "Why?".
         self.assertContains(page, '<input type="radio" name="would_return" value="yes">')
         self.assertContains(page, 'name="would_return__comment"')
@@ -811,7 +882,7 @@ class TypedTextTests(PageTestBase):
         response = self.submit(uhid=UHID, **self.answers(self.opd), improvement="<script>alert(1)</script>")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["errors"], {"improvement": "characters"})
-        self.assertEqual(response.context["current_step"], "comments")
+        self.assertEqual(response.context["current_step"], "screen-3")
         self.assertContains(response, escape("Please don't use these characters: < > { } ` \\"))
         self.assertContains(response, 'maxlength="2000"')
         self.assertContains(response, 'data-blocked-characters="' + escape("<>{}`\\") + '"')
@@ -841,9 +912,9 @@ class TypedTextTests(PageTestBase):
 
     def test_without_javascript_the_step_shows_the_problem(self):
         data = {"uhid": UHID, **self.answers(self.opd), "improvement": "a > b"}
-        response = self.client.post(self.url("form", "opd"), {"nav": "next", "step": "comments", **data})
+        response = self.client.post(self.url("form", "opd"), {"nav": "next", "step": "screen-3", **data})
         self.assertEqual(
-            (response.context["current_step"], response.context["errors"]), ("comments", {"improvement": "characters"})
+            (response.context["current_step"], response.context["errors"]), ("screen-3", {"improvement": "characters"})
         )
 
 

@@ -67,6 +67,16 @@ class FeedbackForm(models.Model):
     title = models.JSONField(help_text=I18N_HELP)
     description = models.JSONField(default=dict, blank=True, help_text=I18N_HELP)
     questions = models.JSONField(default=list, blank=True, help_text=_("The questions, in order (see below)."))
+    steps = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("step titles"),
+        help_text=_(
+            'Optional heading for a step, by its number, per language: {"1": {"title": {"en": "About you"}, '
+            '"lead": {"en": "…"}}}. Steps without one get a default heading. Rating steps take none: each card '
+            "shows its question."
+        ),
+    )
     is_active = models.BooleanField(default=True)
     order = models.PositiveSmallIntegerField(default=0, help_text=_("Order on the form chooser."))
 
@@ -91,6 +101,8 @@ class FeedbackForm(models.Model):
         return f"{localize(self.title, BASE_LANGUAGE)} ({self.code})"
 
     def clean(self):
+        if self.steps is None:  # an empty JSON box in a form: no step titles
+            self.steps = {}
         errors = {}
         if not isinstance(self.title, dict) or not self.title.get(BASE_LANGUAGE):
             errors["title"] = _("An English title is required.")
@@ -102,10 +114,12 @@ class FeedbackForm(models.Model):
         same_code = FeedbackForm.objects.filter(code=self.code, facility_external_id=self.facility_external_id)
         if same_code.exclude(pk=self.pk).exists():
             errors["code"] = _("Another form already uses this code here.")
-        from public_forms.questions import question_errors  # imports this module
+        from public_forms.questions import question_errors, steps_errors  # imports this module
 
         if problems := question_errors(self.questions):
             errors["questions"] = problems
+        elif problems := steps_errors(self.steps, self.questions):
+            errors["steps"] = problems
         if errors:
             raise ValidationError(errors)
 

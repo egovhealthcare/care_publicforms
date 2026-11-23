@@ -40,7 +40,7 @@ test("without JavaScript the kiosk still goes step by step", async ({ page }) =>
   await page.locator("#uhidInput").fill("12345678901");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
 
-  await expectStep(page, "details");
+  await expectStep(page, "screen-1");
   await expect(page.locator("#idStripValue")).toHaveText("123 4567 8901");
   await expect(page.locator('[data-question-key="age_group"]')).toBeHidden();
   await page.getByRole("button", { name: "Start the questions" }).click();
@@ -56,7 +56,7 @@ test("without JavaScript the kiosk still goes step by step", async ({ page }) =>
   await expect(activeCard(page).locator("[data-error]")).toBeVisible();
   for (let i = 0; i < 10; i++) await answerCard(page, 4);
 
-  await expectStep(page, "comments");
+  await expectStep(page, "screen-3");
   await activeStep(page).locator("label.yn", { hasText: "Yes" }).click();
   await activeStep(page).getByLabel("Why? (optional)").fill("Friendly staff");
   await page.getByRole("button", { name: "Review answers" }).click();
@@ -81,7 +81,7 @@ test("without JavaScript the kiosk still goes step by step", async ({ page }) =>
 test("without JavaScript a guest answers the guest details, and Back works", async ({ page }) => {
   await page.goto(formUrl("opd"));
   await page.getByRole("button", { name: /Continue as guest/ }).click();
-  await expectStep(page, "details");
+  await expectStep(page, "screen-1");
   for (const key of ["clinic", "age_group", "sex"]) {
     await expect(page.locator(`[data-question-key="${key}"]`)).toBeVisible();
   }
@@ -94,7 +94,7 @@ test("without JavaScript a guest answers the guest details, and Back works", asy
   await expect(activeCard(page)).toHaveAttribute("data-question-key", "information_signage");
   await expect(activeCard(page).locator('input[value="5"]')).toBeChecked();
   await activeCard(page).getByRole("button", { name: "Back" }).click();
-  await expectStep(page, "details");
+  await expectStep(page, "screen-1");
   await expect(page.locator('input[name="sex"][value="female"]')).toBeChecked();
 });
 
@@ -105,6 +105,6 @@ test("without JavaScript switching language keeps the answers", async ({ page })
   await pickDetail(page, "clinic", "ENT");
   await language.button.click();
   await expect(page.locator("html")).toHaveAttribute("data-lang", language.code);
-  await expectStep(page, "details");
+  await expectStep(page, "screen-1");
   await expect(page.locator('input[name="clinic"][value="ent"]')).toBeChecked();
 });

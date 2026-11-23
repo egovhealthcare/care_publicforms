@@ -5,10 +5,10 @@
    every language, with the current step marked by the server. Without
    this file every step button posts the form and the server shows the
    next step (steps.py). With it:
-     · the same steps (identify → details → one card per rating → open
-       questions → review), switched in the page without reloading; the
-       form controls are the only state and the page is posted once, from
-       the review
+     · the same steps (identify → the form's steps in number order, a
+       screen of questions or a card per rating → review), switched in the
+       page without reloading; the form controls are the only state and
+       the page is posted once, from the review
      · the UHID cells, on-screen keypad and QR scanning (camera via
        BarcodeDetector, or a keyboard-mode USB/Bluetooth scanner)
      · questions shown only to guests or only to identified patients
@@ -173,9 +173,19 @@
   var progressFill = $('progressFill');
   var headerNav = $('hdrNav');
   var idStrip = $('idStrip');
-  // Home / Reset show from the first rating question on, in every flow.
-  var NAV_STEPS = ['questions', 'comments', 'review'];
-  var FLOW_STEPS = ['details', 'questions', 'comments', 'review'];  // after identification
+  // The screens of the form's steps (steps/screen.html): "screen-<step>".
+  var screens = form.querySelectorAll('[data-step^="screen-"]');
+
+  // A step after identification: a screen of questions, a rating card or the review.
+  function isFlow(name) {
+    return name === 'questions' || name === 'review' || /^screen-/.test(name || '');
+  }
+
+  // Home / Reset show from the first rating on: on the cards, the review and
+  // the screens after the ratings (data-home-reset).
+  function showsHomeReset(name) {
+    return name === 'questions' || name === 'review' || !!(steps[name] && steps[name].hasAttribute('data-home-reset'));
+  }
 
   // The step buttons are submit buttons for the page without JavaScript;
   // here they move in the page instead (only the final Submit posts).
@@ -291,10 +301,15 @@
     return true;
   }
 
-  // A place's position in the whole questionnaire, whoever the patient is.
+  // A place's position in the whole questionnaire, whoever the patient is:
+  // its step (data-order), then its card. Mirrors steps._rank.
   function rank(unit) {
-    var order = { details: 0, questions: 1, comments: 2, review: 3 };
-    return order[unit[0]] * 1000 + (unit[0] === 'questions' ? unit[1] : 0);
+    if (unit[0] === 'review') return 1e9;
+    if (unit[0] === 'questions') {
+      var card = cards[unit[1]];
+      return (card ? parseInt(card.getAttribute('data-order'), 10) : 0) * 1000 + 1 + unit[1];
+    }
+    return (parseInt(unit[0].slice(7), 10) || 0) * 1000;
   }
 
   // The first step (or rating card), before ``before`` if given, that still needs an answer.
@@ -312,11 +327,15 @@
 
   /* Moving between steps */
   function flow() {
-    // The steps after identification, in order, for progress and back/next.
+    // The places after identification, in step order, for progress and
+    // back/next: each screen with a question for this patient, each of
+    // their rating cards, then the review. Mirrors steps.flow_units.
     var units = [];
-    if (hasVisibleQuestions(steps.details)) units.push(['details', 0]);
+    each(screens, function (screen) {
+      if (hasVisibleQuestions(screen)) units.push([screen.getAttribute('data-step'), 0]);
+    });
     each(cards, function (card, i) { if (!card.hidden) units.push(['questions', i]); });
-    if (hasVisibleQuestions(steps.comments)) units.push(['comments', 0]);
+    units.sort(function (a, b) { return rank(a) - rank(b); });
     units.push(['review', 0]);
     return units;
   }
@@ -373,7 +392,7 @@
     if (current === 'scan' && name !== 'scan') stopCamera();
     // Leaving a question or the review to identify again (the UHID strip, or
     // Back to the first step): come back to that place after, answers kept.
-    if ((name === 'identify' || name === 'uhid' || name === 'scan') && FLOW_STEPS.indexOf(current) > -1) {
+    if ((name === 'identify' || name === 'uhid' || name === 'scan') && isFlow(current)) {
       resumeAt = current === 'review' ? ['review', 0] : returnTo || [current, currentCard];
       returnTo = null;
     }
@@ -403,7 +422,7 @@
     if (name === 'scan') startScan();
 
     var inFlow = name !== 'identify' && name !== 'scan' && name !== 'uhid';
-    if (headerNav) headerNav.hidden = NAV_STEPS.indexOf(name) < 0;
+    if (headerNav) headerNav.hidden = !showsHomeReset(name);
     if (idStrip) {
       idStrip.hidden = !(inFlow && identified);
       $('idStripValue').textContent = formatUhid(digitsOf(uhidInput.value));
@@ -804,11 +823,21 @@
     return div.innerHTML;
   }
 
+  // One row per question asked, in the order the patient met them.
+  function reviewQuestions() {
+    var out = [];
+    each(flow(), function (unit) {
+      if (unit[0] === 'questions') out.push(cards[unit[1]]);
+      else if (unit[0] !== 'review') each(visible(steps[unit[0]].querySelectorAll('[data-question-key]')), function (q) { out.push(q); });
+    });
+    return out;
+  }
+
   function buildReview() {
     var rows = $('reviewRows');
     var notAnswered = $('notAnsweredText').innerHTML;
     rows.innerHTML = '';
-    each(visible(form.querySelectorAll('[data-question-key]')), function (question) {
+    each(reviewQuestions(), function (question) {
       var step = closest(question, '[data-step]');
       if (!step) return;
       var value = answerHtml(question);
@@ -847,18 +876,25 @@
     switch (button.getAttribute('data-action')) {
       case 'guest': continueAsGuest(); break;
       case 'uhid-continue': submitUhid(); break;
-      case 'details-next': if (checkRequired(steps.details)) next(); break;
-      case 'comments-next': if (checkRequired(steps.comments)) next(); break;
-      case 'comments-back':
+      case 'screen-next': if (checkRequired(steps[current])) next(); break;
+      case 'screen-back':
       case 'review-back': back(); break;
     }
   });
 
-  // Reset (header): clear the ratings and open answers and start again at the
-  // first question. The UHID (or guest choice) and the details are kept.
+  // What Reset clears: the rating cards and the screens after the ratings
+  // (those that show Home / Reset). The UHID (or guest choice) and the
+  // screens before the ratings ("A few details") are kept.
+  function resetSteps() {
+    var out = [steps.questions];
+    each(screens, function (screen) { if (screen.hasAttribute('data-home-reset')) out.push(screen); });
+    return out;
+  }
+
+  // Reset (header): clear those answers and start again at the first of them.
   // Without JavaScript the link reloads the form, which clears everything.
   function resetAnswers() {
-    each([steps.questions, steps.comments], function (step) {
+    each(resetSteps(), function (step) {
       if (!step) return;
       each(step.querySelectorAll('input, textarea'), function (control) {
         if (control.type === 'radio' || control.type === 'checkbox') control.checked = false;
@@ -873,7 +909,7 @@
     resumeAt = null;
     var units = flow();
     for (var i = 0; i < units.length; i++) {
-      if (units[i][0] !== 'details') { goTo(units[i]); return; }
+      if (showsHomeReset(units[i][0])) { goTo(units[i]); return; }
     }
   }
 
@@ -910,10 +946,10 @@
     if (keepAnswers && (event.key === 'Escape' || event.keyCode === 27)) keepAnswers();
   });
 
-  // Anything Reset would clear: a rating, or an open answer.
+  // Anything Reset would clear: a rating, or an answer after the ratings.
   function answersToClear() {
     var found = false;
-    each([steps.questions, steps.comments], function (step) {
+    each(resetSteps(), function (step) {
       if (!step || found) return;
       if (step.querySelector('input[type=radio]:checked')) found = true;
       each(step.querySelectorAll('textarea'), function (field) {

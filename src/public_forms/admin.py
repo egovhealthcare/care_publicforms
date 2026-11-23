@@ -104,12 +104,16 @@ def language_fields(*names):
 
 
 class QuestionsJSONField(forms.JSONField):
-    """The questions as indented JSON in a large box."""
+    """The questions (or step titles) as indented JSON in a large box."""
+
+    def __init__(self, *args, empty=None, **kwargs):
+        self.empty = [] if empty is None else empty
+        super().__init__(*args, **kwargs)
 
     def prepare_value(self, value):
         if isinstance(value, InvalidJSONInput):
             return value
-        return json.dumps(value if value is not None else [], indent=2, ensure_ascii=False)
+        return json.dumps(value if value is not None else self.empty, indent=2, ensure_ascii=False)
 
 
 QUESTIONS_HELP = format_html(
@@ -143,6 +147,16 @@ QUESTIONS_HELP = format_html(
 )
 
 
+STEPS_HELP = format_html(
+    "{}<br><code>{}</code>",
+    _(
+        "Optional: a heading for a step of choice, date or text questions, by its number, per language. "
+        "A step without one gets a default (“A few quick details” before the ratings, “In your own words” "
+        "after them). Rating steps take none: each card shows its question."
+    ),
+    '{"1": {"title": {"en": "About your visit"}, "lead": {"en": "Two quick questions."}}}',
+)
+
 TEXT_FIELDS = {"title": (_("Title"), 1), "description": (_("Description"), 1)}
 TEXT_LIMITS = {"title": MAX_TITLE_LENGTH, "description": MAX_DESCRIPTION_LENGTH}
 
@@ -171,8 +185,23 @@ def _feedback_form_form(codes: tuple) -> type:
                     }
                 ),
             ),
-            # Every question is saved with its "step", so the JSON says where each is asked.
+            "steps": QuestionsJSONField(
+                required=False,
+                empty={},
+                label=_("Step titles"),
+                help_text=STEPS_HELP,
+                widget=forms.Textarea(
+                    attrs={
+                        "rows": 8,
+                        "cols": 110,
+                        "spellcheck": "false",
+                        "style": "font-family:ui-monospace,Menlo,monospace;font-size:12px",
+                    }
+                ),
+            ),
+            # Every question is saved with its step as a number, so the JSON says where each is asked.
             "clean_questions": lambda self: with_steps(self.cleaned_data.get("questions") or []),
+            "clean_steps": lambda self: self.cleaned_data.get("steps") or {},
         },
     )
 
@@ -188,7 +217,7 @@ class FeedbackFormAdmin(admin.ModelAdmin):
     def get_fieldsets(self, request, obj=None):
         return (
             (None, {"fields": ("code", "patient_type", *language_fields(*TEXT_FIELDS))}),
-            (_("Questions"), {"fields": ("questions",)}),
+            (_("Questions"), {"fields": ("questions", "steps")}),
             (_("Where"), {"fields": ("facility_external_id", "facility", "is_active", "order", "page_link")}),
         )
 

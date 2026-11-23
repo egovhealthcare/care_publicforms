@@ -1,0 +1,83 @@
+{% load public_forms_tags %}
+{# One step's questions (choice, date, text) on one screen; views.screen_context. #}
+{# style "details" (before the ratings): compact, small labels, chips.           #}
+{# style "open" (after them): larger labels and boxes, 2 or 3 options as buttons, #}
+{# and the main button pinned at the bottom (kiosk.css .screen--comments).       #}
+<section class="step screen {% if screen.open %}screen--comments{% else %}screen--details{% endif %}{% if current_step == screen.name %} is-active{% endif %}" data-step="{{ screen.name }}" data-order="{{ screen.number }}"{% if screen.home_reset %} data-home-reset{% endif %}>
+  <div class="area-head stack stack--8">
+    {% if screen.title %}
+    <h2 class="h2">{% tr screen.title %}</h2>
+    {% if screen.lead %}<p class="lead-sm">{% tr screen.lead %}</p>{% endif %}
+    {% elif screen.open %}
+    <span class="kicker">{% t "open_kicker" %}</span>
+    <h2 class="h2">{% if not screen.last %}{% t "more_heading" %}{% elif screen.fields|length == 1 %}{% if screen.required %}{% t "open_heading_one_required" %}{% else %}{% t "open_heading_one" %}{% endif %}{% elif screen.required %}{% t "open_heading_required" n=screen.fields|length %}{% else %}{% t "open_heading" n=screen.fields|length %}{% endif %}</h2>
+    {% if screen.lead %}<p class="lead-sm">{% tr screen.lead %}</p>{% endif %}
+    {% else %}
+    <h2 class="h2">{% t "details_heading" %}</h2>
+    {% if screen.lead %}
+    <p class="lead-sm">{% tr screen.lead %}</p>
+    {% else %}
+    <p class="lead-sm" data-audience="guest"{% if identified %} hidden{% endif %}>{% t "details_lead_guest" %}</p>
+    <p class="lead-sm" data-audience="identified"{% if not identified %} hidden{% endif %}>{% t "details_lead" %}</p>
+    {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="area-body stack {% if screen.open %}stack--26{% else %}stack--24{% endif %}">
+    {% for field in screen.fields %}
+    <fieldset class="group stack {% if screen.open %}stack--12{% else %}stack--10{% endif %}{% if field.error %} has-error{% endif %}" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}"{% if not field.shown %} hidden{% endif %}>
+      {% if screen.open %}
+      <legend class="qlabel">{% tr field.text %}{% if screen.required and not field.required %} <span class="kicker-note">· {% t "optional" %}</span>{% endif %}</legend>
+      {% else %}
+      <legend class="kicker">{% tr field.text %}{% if not field.required %} <span class="kicker-note">· {% t "optional" %}</span>{% endif %}</legend>
+      {% endif %}
+      <span class="q-label" hidden>{% tr field.label %}</span>
+      {% if field.hint %}<p class="lead-sm">{% tr field.hint %}</p>{% endif %}
+
+      {% if field.type == "choice" and field.buttons %}
+      {# Two or three options, e.g. Yes / No: large buttons side by side. #}
+      <div class="yesno">
+        {% for option in field.options %}
+        <label class="yn">
+          <input type="radio" name="{{ field.key }}" value="{{ option.value }}"{% if option.value == field.value %} checked{% endif %}>
+          <span class="ynbtn">{% tr option.label %}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% elif field.type == "choice" %}
+      <div class="chips{% if field.compact and not screen.open %} chips--wide chips--num{% endif %}">
+        {% for option in field.options %}
+        <label class="chip">
+          <input type="radio" name="{{ field.key }}" value="{{ option.value }}"{% if option.value == field.value %} checked{% endif %}>
+          <span class="chip-face">{% tr option.label %}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% elif field.type == "text" %}
+      <textarea name="{{ field.key }}" class="ta{% if not screen.open %} ta--short{% endif %}" rows="{% if screen.open %}3{% else %}2{% endif %}" maxlength="{{ max_answer_length }}" {% l10n_attr "aria-label" value=field.text %}>{{ field.value }}</textarea>
+      {% else %}
+      <input type="date" class="ta ta--date" name="{{ field.key }}" value="{{ field.value }}" max="{{ today|date:'Y-m-d' }}" {% l10n_attr "aria-label" value=field.text %}>
+      {% endif %}
+
+      {% if field.allow_comment %}
+      <textarea name="{{ field.comment_key }}" class="ta ta--short" rows="2" maxlength="{{ max_answer_length }}" data-comment {% l10n_attr "placeholder" "open_why" %} {% l10n_attr "aria-label" "open_why" %}>{{ field.comment }}</textarea>
+      {% endif %}
+      {% if field.type == "date" %}<p class="err" data-error-date role="alert"{% if field.error != "invalid" %} hidden{% endif %}>{% t "date_error" %}</p>{% endif %}
+      <p class="err" data-error role="alert"{% if field.error != "required" %} hidden{% endif %}>{% t "required_error" %}</p>
+      {% if field.allow_comment or field.type == "text" %}<p class="err" data-error-characters role="alert"{% if field.error != "characters" %} hidden{% endif %}>{% t "characters_error" chars=blocked_characters_shown %}</p>{% endif %}
+    </fieldset>
+    {% endfor %}
+  </div>
+
+  {% if screen.open %}
+  <div class="area-nav navrow">
+    <button type="submit" name="nav" value="back" class="btn btn--ghost btn--md btn-back" data-action="screen-back" data-edit-hidden>{% t "back" %}</button>
+    <button type="submit" name="nav" value="next" class="btn btn--primary btn--lg btn-cta btn-cta--grow" data-action="screen-next">{% t screen.next_label %}</button>
+  </div>
+  {% else %}
+  <div class="area-nav stack stack--10">
+    <button type="submit" name="nav" value="next" class="btn btn--primary btn--lg btn-cta" data-action="screen-next">{% t screen.next_label %}</button>
+    <button type="submit" name="nav" value="back" class="btn btn--ghost btn--md btn-quiet" data-action="screen-back" data-edit-hidden>{% t "back" %}</button>
+  </div>
+  {% endif %}
+</section>

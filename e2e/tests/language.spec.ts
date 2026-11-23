@@ -23,9 +23,9 @@ test("the patient's language lasts until the thank-you page, then resets", async
   await pickValue(page, "clinic", "ent");
   await pickValue(page, "age_group", "18_30");
   await pickValue(page, "sex", "female");
-  await page.locator('[data-action="details-next"]').click();
+  await page.locator('[data-step="screen-1"] [data-action="screen-next"]').click();
   await rateAll(page, 5);
-  await page.locator('[data-action="comments-next"]').click();
+  await page.locator('[data-step="screen-3"] [data-action="screen-next"]').click();
   await expectStep(page, "review");
   await page.locator('[data-step="review"] button[value="submit"]').click();
 

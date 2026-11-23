@@ -1,12 +1,20 @@
 """
 Turns a configured FeedbackForm into what the feedback page needs.
 
-Each question's "step" (questions.py) says where it is asked: "details"
-questions together on the "A few details" screen, "ratings" one card each,
-"open" questions together on "In your own words". Within a screen they keep
-their order in the form.
+Each question's "step" (questions.py) is a number: the screen that asks it.
+Screens come in the order of their numbers. A step of ratings is shown one
+card per rating; a step of other questions is one screen with all of them.
+Within a step, questions keep their order in the form.
+
+A screen of other questions looks one of two ways, by where it is:
+  "details"  before the first ratings (or, with no ratings, the first one):
+             compact, headed "A few quick details";
+  "open"     after the ratings: larger, headed "In your own words", with a
+             choice of 2 or 3 options shown as large buttons (a yes/no).
+The form's step titles can give any of them its own heading.
 """
 
+from dataclasses import dataclass, field
 from datetime import date
 
 from django.db.models import Q
@@ -18,11 +26,6 @@ from public_forms.questions import parse_questions
 from public_forms.text_rules import MAX_ANSWER_LENGTH, blocked_in, without_control_characters
 
 NO_COMMENT = 0  # the "No comments" rating; default rating labels are in the locale files
-
-
-def asked_on_open_step(question) -> bool:
-    """On "In your own words": questions with "step": "open" (free text, or a choice such as yes/no)."""
-    return question.step == "open" and question.type != QuestionType.RATING
 
 
 def forms_for_facility(facility) -> list[FeedbackForm]:
@@ -66,24 +69,57 @@ def applies(question, identified: bool) -> bool:
     return True
 
 
+@dataclass
+class Screen:
+    """The questions of one step: rating cards, or one screen of other questions."""
+
+    number: int
+    questions: list = field(default_factory=list)
+    is_ratings: bool = False
+    style: str = "details"  # screens of other questions: "details" or "open" (see the module docstring)
+
+    @property
+    def name(self) -> str:
+        """The page's name for a screen of other questions (data-step, the hidden "step" field)."""
+        return f"screen-{self.number}"
+
+
 class FormSpec:
-    """A form's active questions, grouped the way the page asks them."""
+    """A form's active questions, grouped into screens in the order the page asks them."""
 
     def __init__(self, form: FeedbackForm):
         self.form = form
         self.questions = [question for question in parse_questions(form.questions) if question.active]
+        self.screens = []
+        for number in sorted({question.step for question in self.questions}):
+            here = [question for question in self.questions if question.step == number]
+            # A step holds ratings or other questions (questions.py checks it); were
+            # both ever saved, the other questions come first, then the cards.
+            others = [question for question in here if question.type != QuestionType.RATING]
+            ratings = [question for question in here if question.type == QuestionType.RATING]
+            if others:
+                self.screens.append(Screen(number, others))
+            if ratings:
+                self.screens.append(Screen(number, ratings, is_ratings=True))
+        first_ratings = next((i for i, screen in enumerate(self.screens) if screen.is_ratings), None)
+        groups = [i for i, screen in enumerate(self.screens) if not screen.is_ratings]
+        for i in groups:
+            before_ratings = first_ratings is not None and i < first_ratings
+            first_without_ratings = first_ratings is None and i == groups[0]
+            self.screens[i].style = "details" if before_ratings or first_without_ratings else "open"
 
     @property
-    def details(self):
-        return [q for q in self.questions if q.step == "details" and q.type != QuestionType.RATING]
+    def ratings(self) -> list:
+        """Every rating, in the order asked: a rating card's index is its place here."""
+        return [question for screen in self.screens if screen.is_ratings for question in screen.questions]
 
     @property
-    def ratings(self):
-        return [q for q in self.questions if q.type == QuestionType.RATING]
+    def groups(self) -> list:
+        """The screens of other questions (choice, date, text), in order."""
+        return [screen for screen in self.screens if not screen.is_ratings]
 
-    @property
-    def open_questions(self):
-        return [q for q in self.questions if asked_on_open_step(q)]
+    def group(self, name: str):
+        return next((screen for screen in self.groups if screen.name == name), None)
 
     @property
     def rating_count_for_everyone(self) -> int:

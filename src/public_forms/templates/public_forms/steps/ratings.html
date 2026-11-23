@@ -3,7 +3,7 @@
   {# kiosk.js renumbers the cards from this when some only apply to guests or identified patients. #}
   <span id="counterTemplate" hidden>{% t "question_counter" n="{n}" total="{total}" %}</span>
   {% for question in ratings %}
-  <div class="qcard{% if question.error %} has-error{% endif %}{% if question.index == current_card %} is-active{% endif %}" data-card data-question-key="{{ question.key }}" data-audience="{{ question.audience }}" data-required="1"{% if not question.shown %} hidden{% endif %}>
+  <div class="qcard{% if question.error %} has-error{% endif %}{% if question.index == current_card %} is-active{% endif %}" data-card data-order="{{ question.step }}" data-question-key="{{ question.key }}" data-audience="{{ question.audience }}" data-required="1"{% if not question.shown %} hidden{% endif %}>
     <div class="qhead">
       <span class="kicker kicker--tnum" data-counter>{% t "question_counter" n=question.number total=rating_total %}</span>
       <h2 class="qtitle" id="qt-{{ question.key }}">{% tr question.text %}</h2>

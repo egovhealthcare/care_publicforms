@@ -62,7 +62,16 @@ from public_forms.services import (
     uhid_length,
 )
 from public_forms.settings import plugin_settings
-from public_forms.steps import FLOW_STEPS, NAV_STEPS, Place, flow_units, navigate, review_rows, unit_value
+from public_forms.steps import (
+    Place,
+    flow_units,
+    is_flow_step,
+    navigate,
+    review_rows,
+    shows_home_reset,
+    unit_questions,
+    unit_value,
+)
 from public_forms.text_rules import BLOCKED_CHARACTERS, MAX_ANSWER_LENGTH, spaced
 
 SCAN_MODES = ("camera", "scanner", "off")
@@ -296,10 +305,11 @@ class FormView(FeedbackPage):
             gaps.add(position)
         shown_ratings = [q for q in spec.ratings if applies(q, identified)]
 
-        def field(question, index=None):
+        def field(question, index=None, style=None):
             item = {
                 "key": question.key,
                 "type": question.type,
+                "step": question.step,
                 "text": question.text,
                 "hint": question.hint,
                 "label": question.short_text or question.text,
@@ -321,8 +331,8 @@ class FormView(FeedbackPage):
                 item.update(
                     options=[{"value": code, "label": labels} for code, labels in options.items()],
                     compact=all(len(localize(labels, BASE_LANGUAGE)) <= 12 for labels in options.values()),
-                    # On the "in your own words" step, 2 or 3 options are large buttons (e.g. Yes / No).
-                    buttons=question.step == "open" and 2 <= len(options) <= 3,
+                    # On an "open" screen, 2 or 3 options are large buttons (e.g. Yes / No).
+                    buttons=style == "open" and 2 <= len(options) <= 3,
                     allow_comment=question.allow_comment,
                     comment_key=comment_key(question),
                     comment=data.get(comment_key(question), ""),
@@ -330,26 +340,26 @@ class FormView(FeedbackPage):
             return item
 
         ratings = [field(q, i) for i, q in enumerate(spec.ratings)]
-        details = [field(q) for q in spec.details]
-        open_questions = [field(q) for q in spec.open_questions]
+        screens = [
+            self.screen_context(spec, screen, [field(q, style=screen.style) for q in screen.questions])
+            for screen in spec.groups
+        ]
+        units = flow_units(spec, identified)
 
         if place is None:
-            # After a failed submit, open the first step with a problem; when only
+            # After a failed submit, open the first place with a problem; when only
             # rate-limited, the review, so the patient can simply submit again.
             place = Place()
             if banner == "too_many":
                 place.step = "review"
+            elif "uhid" in errors:
+                place.step = "uhid"
             elif errors:
-                if "uhid" in errors:
-                    place.step = "uhid"
-                elif any(f["error"] for f in details):
-                    place.step = "details"
-                elif any(r["error"] for r in ratings):
-                    place.step, place.card = "questions", next(r["index"] for r in ratings if r["error"])
-                else:
-                    place.step = "comments"
-        in_flow = place.step in FLOW_STEPS
-        units = flow_units(spec, identified)
+                for unit in units:
+                    if any(errors.get(question.key) for question in unit_questions(spec, unit)):
+                        place.step, place.card = unit
+                        break
+        in_flow = is_flow_step(place.step)
         progress = 0
         if in_flow and place.unit in units:
             progress = round((units.index(place.unit) + 1) / (len(units) + 1) * 100)
@@ -365,10 +375,8 @@ class FormView(FeedbackPage):
             back_to_chooser=(self.chooser_url(**self.carry()) if came_from_chooser and len(self.forms) > 1 else None),
             came_from_chooser=came_from_chooser,
             step_number=2 if came_from_chooser and len(self.forms) > 1 else 1,
-            details=details,
+            screens=screens,
             ratings=ratings,
-            open_questions=open_questions,
-            open_questions_required=any(f["required"] for f in open_questions),
             rating_count=spec.rating_count_for_everyone,
             minutes=max(1, math.ceil(len(spec.questions) * SECONDS_PER_QUESTION / 60)),
             uhid=uhid,
@@ -387,7 +395,7 @@ class FormView(FeedbackPage):
             identified=identified,
             rating_total=len(shown_ratings),
             progress=progress,
-            nav_shown=place.step in NAV_STEPS,
+            nav_shown=shows_home_reset(spec, place.step),
             id_strip_shown=identified and in_flow,
             uhid_display=" ".join(
                 uhid[start:end] for start, end in zip([0, *sorted(gaps)], [*sorted(gaps), len(uhid)], strict=False)
@@ -400,6 +408,36 @@ class FormView(FeedbackPage):
             blocked_characters_shown=spaced(),
         )
         return render(self.request, "public_forms/form.html", context, status=status)
+
+    def screen_context(self, spec, screen, fields) -> dict:
+        """
+        A screen of one step's questions (steps/screen.html): its fields, its
+        heading (the form's step title, else the default for its style and
+        place) and where its main button leads.
+        """
+        position = spec.screens.index(screen)
+        following = spec.screens[position + 1] if position + 1 < len(spec.screens) else None
+        titles = self.form.steps if isinstance(self.form.steps, dict) else {}
+        own = titles.get(str(screen.number)) if isinstance(titles.get(str(screen.number)), dict) else {}
+        return {
+            "name": screen.name,
+            "number": screen.number,
+            "style": screen.style,  # "details" or "open" (questionnaire.py)
+            "open": screen.style == "open",
+            "fields": fields,
+            "required": any(f["required"] for f in fields),
+            "title": own.get("title") or None,
+            "lead": own.get("lead") or None,
+            "last": following is None,  # the review comes next
+            # The main button: "Review answers" before the review, "Start the
+            # questions" before the first rating cards, otherwise "Next".
+            "next_label": "review_answers"
+            if following is None
+            else "start_questions"
+            if following.is_ratings and not any(earlier.is_ratings for earlier in spec.screens[:position])
+            else "next",
+            "home_reset": screen.style == "open",
+        }
 
 
 # ── Thank you ──────────────────────────────────────────────────────────

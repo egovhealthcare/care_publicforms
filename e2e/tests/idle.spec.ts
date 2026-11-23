@@ -9,7 +9,7 @@ test("an abandoned form warns, then starts over for the next patient", async ({ 
   await page.clock.install();
   await page.goto(formUrl("opd"));
   await enterUhid(page);
-  await expectStep(page, "details");
+  await expectStep(page, "screen-1");
 
   await page.clock.fastForward(76_000);
   await expect(page.locator("#idleOverlay")).toBeVisible();
@@ -29,7 +29,7 @@ test("a touch during the warning keeps the patient's answers", async ({ page }) 
   await page.mouse.click(10, 10);
   await expect(page.locator("#idleOverlay")).toBeHidden();
   await page.clock.fastForward(30_000);
-  await expectStep(page, "details");
+  await expectStep(page, "screen-1");
   await expect(page.locator("#uhidInput")).toHaveValue("12345678901");
 });
 

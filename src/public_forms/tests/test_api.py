@@ -227,7 +227,7 @@ class AdminTests(CareAPITestBase):
         saved = form.save()
         # Saved with the step written in, right after the type: the JSON says where each is asked.
         self.assertEqual(saved.title, {"en": "Parking"})
-        self.assertEqual(saved.questions, [{"key": "where", "type": "choice", "step": "details", **questions[0]}])
+        self.assertEqual(saved.questions, [{"key": "where", "type": "choice", "step": 1, **questions[0]}])
         self.assertEqual(list(saved.questions[0])[:3], ["key", "type", "step"])
 
     def test_title_and_description_follow_the_text_rules(self):
