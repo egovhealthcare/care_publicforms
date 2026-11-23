@@ -22,8 +22,11 @@
 <link rel="icon" href="{% static 'public_forms/favicon.ico' %}">
 <link rel="stylesheet" href="{% static 'public_forms/kiosk.css' %}">
 {# Every string is in the page in each language; show the current one. Fonts and script rules come from each language's locale file. #}
+{# A language's font comes after DM Sans: DM Sans has no letters of that script, so the browser draws them  #}
+{# with the language's font, while English words and digits stay in DM Sans (Google's Noto fonts carry     #}
+{# Latin letters too, which would otherwise replace DM Sans across the page).                               #}
 <style>.l10n{display:none}{% for language in languages %}html[data-lang="{{ language.code }}"] .l10n--{{ language.code }}{% if not forloop.last %},{% endif %}{% endfor %}{display:inline}
-{% for language in languages %}{% if language.font %}html[lang="{{ language.code }}"] body,[lang="{{ language.code }}"]{font-family:'{{ language.font }}','DM Sans',ui-sans-serif,system-ui,Arial,sans-serif}
+{% for language in languages %}{% if language.font %}html[lang="{{ language.code }}"] body,[lang="{{ language.code }}"]{font-family:'DM Sans','{{ language.font }}',ui-sans-serif,system-ui,Arial,sans-serif}
 {% endif %}{% if language.tall_script %}html[lang="{{ language.code }}"] .kicker,html[lang="{{ language.code }}"] .idstrip-kicker{letter-spacing:normal;text-transform:none}
 html[lang="{{ language.code }}"] .h2,html[lang="{{ language.code }}"] .hero-title,html[lang="{{ language.code }}"] .qtitle,html[lang="{{ language.code }}"] .done-title{line-height:1.45;letter-spacing:normal}
 html[lang="{{ language.code }}"] .hero-title{font-size:clamp(1.625rem,7.2vw,2.125rem)}

@@ -73,7 +73,7 @@ class LocaleFileTests(PageTestBase):
             self.assertContains(page, 'data-set-lang="yy"')
             self.assertContains(page, ">YY</button>")
             self.assertContains(page, "family=Noto%20Sans%20Example")
-            self.assertContains(page, """[lang="yy"]{font-family:'Noto Sans Example'""")
+            self.assertContains(page, """[lang="yy"]{font-family:'DM Sans','Noto Sans Example'""")
             self.assertContains(page, 'html[lang="yy"] .kicker')
             self.assertContains(page, "Y5")  # rating label from the file
             ids = [w.id for w in check_languages(None)]
@@ -104,7 +104,9 @@ class LocaleFileTests(PageTestBase):
     def test_font_and_script_rules_follow_the_files(self):
         font = known_languages()[TEST_LANGUAGE]["font"]
         page = self.client.get(self.url("form", "opd")).content.decode()
-        self.assertIn(f"""html[lang="{TEST_LANGUAGE}"] body,[lang="{TEST_LANGUAGE}"]{{font-family:'{font}'""", page)
+        # DM Sans first, for English words and digits; the language's font draws its own script.
+        rule = f"""html[lang="{TEST_LANGUAGE}"] body,[lang="{TEST_LANGUAGE}"]{{font-family:'DM Sans','{font}'"""
+        self.assertIn(rule, page)
         self.assertIn(f'html[lang="{TEST_LANGUAGE}"] .kicker', page)  # a tall script
         self.assertIn(f'html[lang="{TEST_LANGUAGE}"] .hero-title{{font-size:', page)  # long words fit phones
         self.assertNotIn(f'html[lang="{BASE_LANGUAGE}"] .kicker', page)
