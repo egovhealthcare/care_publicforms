@@ -1,173 +1,86 @@
 # care_publicforms
 
-**Public forms** is a [Care](https://github.com/ohcnetwork/care) plugin
-that runs **patient satisfaction surveys (OPD and inpatient) on touch-screen
-TV kiosks**. The
-pages are rendered on the server (Django templates), so it needs no frontend
-build and works on the limited browsers built into TVs and signage players,
-even with JavaScript switched off.
+A [Care](https://github.com/ohcnetwork/care) plugin that runs **patient
+satisfaction surveys on touch-screen kiosks**. The pages are rendered on the
+server, so they need no frontend build and work on the limited browsers in
+TVs and signage players, even with JavaScript off.
 
-The forms and questions are configurable. It ships with the two NQAS patient
-satisfaction formats: **OPD feedback** (10 attributes) and **inpatient
-feedback** (20 attributes), each with four open questions and the patient
-details from the paper form.
+It ships the two NQAS formats, **OPD feedback** (10 ratings) and **inpatient
+feedback** (20 ratings), each with the patient details and four open
+questions. Forms and questions can be changed in the admin.
 
-Flow (in each language of the `LANGUAGES` setting):
+The pages are **public**: no login, session or cookie. The plugin has two
+tables, forms and submissions, and doesn't link to Care's tables (a facility
+is kept by its id). [docs/architecture.md](docs/architecture.md) describes
+the design.
 
-```
-choose form (OP visit / IP stay)        ← skipped on a screen pinned to one form
-  → identify: scan QR on OP slip | type UHID | continue as guest
-  → a few details (clinic / ward, date of admission; age and sex for guests)
-  → ratings, one card at a time (Poor → Excellent, No comments)
-  → open questions → review → thank you + reference number
-```
+## Features
 
-The pages are **public**: anyone in the hospital can open them, with no
-login, kiosk key, session or cookie. The plugin has **two tables**: forms
-(each with its questions as one JSON list) and submissions (one row per
-response, each answer saved with its question). The **only relation** is
-between them: each submission belongs to its form. **Nothing links to
-Care's tables**: facilities are kept by their id.
+- **The whole questionnaire is one page, sent once.** `kiosk.js` moves
+  between the steps without reloading. Without JavaScript each step posts
+  the page and the server shows the next one.
+- **Identify by QR, UHID or as a guest:** a QR read by the camera or a USB
+  scanner, an on-screen keypad, or no UHID at all.
+- **Questions in numbered steps:** details, rating cards and open questions,
+  in any order you set (see [Writing a questionnaire](#writing-a-questionnaire)).
+- **Several languages:** a header toggle, each text per language, English as
+  the fallback. The language a patient picks stays with them until the
+  thank-you page; the next patient starts in the screen's language.
+- **Safe on a shared screen:**
+  - **Idle reset:** after 90 s without a touch the screen starts over,
+    with an "Are you still there?" warning for the last 15 s. An untouched
+    screen never reloads.
+  - **Home and Reset** (from the first rating on) ask before clearing
+    answers. Reset keeps the UHID and the details before the ratings.
+  - **Back** never shows the previous patient's page or reference number.
+  - **Reloading or closing with answers** asks first (the browser's "Leave
+    site?"; not on iPhone or iPad). Pull-to-refresh is off in Chromium.
+  - **Changing the UHID or switching to guest** keeps every answer and
+    returns to the same question.
+- **Checked twice:** in the browser and on the server. Text that could carry
+  code (`<` `>` `{` `}` `` ` `` `\`) is refused, and submissions are
+  rate-limited.
+- **Its own admin**, apart from Django's `/admin/`, plus an API and CSV
+  export for reports.
+- **Care's colours**, one column that scales to TVs, tablets and phones.
+- **Accessible:** every control is named in the current language, errors
+  are announced, and a TV remote's arrows and OK work.
 
-For how it is built (request flow, the in-browser step machine, languages,
-validation) and the database tables, see
-[docs/architecture.md](docs/architecture.md).
-
-## How it works
-
-- **One page per form, posted once.** The whole questionnaire (identify,
-  details, every rating, open questions, review) is one server-rendered form
-  with every language in it. `kiosk.js` shows one step at a time and
-  switches language instantly; the form controls are the only state. Nothing
-  reaches the server until the patient taps *Submit feedback*, which posts
-  the page once. The server validates it and either saves it and shows the
-  thank-you page, or shows the page again at the first step with a problem.
-- **JavaScript is optional.** Without it the kiosk still goes step by step,
-  with the same screens, checks, review and guest option: each step button
-  posts the page (every answer so far travels in it) and the server shows the
-  next step, still with no session. `kiosk.js` (ES5, no dependencies) makes
-  the steps instant (no reload) and adds the UHID cells and on-screen keypad,
-  QR scanning, auto-advance on ratings and the idle warning. Without
-  JavaScript a UHID is typed in a plain field (or by a keyboard-mode scanner)
-  and an idle step starts over after `IDLE_TIMEOUT_SECONDS`.
-- **Nothing stored until submit.** No session, cookie or draft rows; the
-  UHID is stored as entered and is not looked up in Care. Submissions are
-  rate-limited per IP address (`SUBMIT_RATE_LIMIT`; see
-  [Behind a proxy](#behind-a-proxy)).
-- **Checked twice.** The browser checks each step before moving on (required
-  answers, a UHID of the right length, no dates in the future), and the
-  server checks the whole page again on submit. If anything is wrong the page
-  comes back at the first step with a problem, with every answer kept and
-  the problem marked in red.
-- **No code in typed text.** No text anyone types, on the kiosk or in the
-  admin, can contain `<` `>` `{` `}` `` ` `` `\`, the characters used to
-  write markup or code. The kiosk drops them as they are typed or pasted
-  and says why; the server refuses them too. Invisible control characters
-  are dropped. Answers and each "Why?" hold up to 2000 characters. The
-  admin's text has its own limits (see [Forms and questions](#forms-and-questions)).
-  The admin's sign-in form is the exception: a password may use any character.
-- **Configurable forms.** Forms and questions live in the database and are
-  edited in the plugin's own admin, with a text box per language. See
-  [Forms and questions](#forms-and-questions) and [The admin](#the-admin).
-- **The OPD feedback design in Care's colours.** DM Sans with light
-  headings, pill buttons, tinted cards and soft shadows, coloured with
-  care_fe's palette: emerald primary, emerald-50 surfaces, Care's link blue
-  for the guest option and red for Reset. Rating faces run from red (poor)
-  to emerald (excellent). Hex colours, so older TV browsers render it.
-- **One layout on every screen.** The original single-column kiosk design
-  is used everywhere. Sizes are in `rem`, so on TVs the column scales up to
-  the screen (the smaller of height/60 and width/32). A question fits
-  without scrolling on 1920×1080, 960×540 TV browsers, 1080×1920 portrait
-  and tablets. The longer comments and review steps scroll, with their main
-  button pinned at the bottom. On short screens (or with the on-screen
-  keyboard open), a field the browser scrolls to stops clear of the header
-  and that button instead of beneath them.
-- **Home and Reset.** From the first rating question on (ratings, open
-  questions, review), the header shows *Home*, which drops everything and
-  goes back to the chooser (or the start of a pinned form), and *Reset*,
-  which clears the ratings and open answers and goes back to the first
-  question, keeping the UHID and details. Once either would clear
-  something, it asks first ("Leave this feedback?" / "Clear your
-  answers?", with *No, keep my answers* as the default). The question is a
-  card in the page, not a browser pop-up, so the idle reset still clears
-  the screen if the patient walks away. Without JavaScript both are plain
-  links.
-- **Changing the UHID keeps the answers.** Changing the UHID (tap it at the
-  top) or switching to guest keeps every answer and returns to the same
-  question, or to the review, stopping first at any question that now needs
-  an answer (age and sex for a guest).
-- **Unattended use.** Once someone has used the screen, 90 s without a
-  touch shows *"Are you still there?"*, then reloads the start page in the
-  screen's own language, which drops everything entered. The timer runs from
-  the moment a page holds a patient's choices (their form, their language,
-  or their answers sent back after a failed submit), so nothing is left on
-  screen for the next patient; an untouched screen never reloads. Without
-  JavaScript the page can't see touches, so it starts over 3 minutes
-  (`NO_JS_IDLE_TIMEOUT_SECONDS`) after each page loads instead, and the
-  header counts down to it (drawn by CSS alone; red for the last 30
-  seconds). With JavaScript there is no countdown.
-- **Answers aren't lost by accident.** Once anything is entered, reloading
-  or closing the page first asks with the browser's own "Leave site?" /
-  "Reload site?" question (browsers word it themselves; iPhone and iPad
-  browsers don't show it). Submitting, *Home* and the idle reset don't ask.
-  In Chrome and other Chromium browsers, pulling down at the top of the page
-  no longer reloads it.
-- **Back doesn't bring anything back.** The pages are never cached, the
-  thank-you page shows only just after its submission, and its *Start new*
-  and timed return replace it in the browser's history. A page that the
-  browser's Back button restores starts over. The next patient never sees
-  the previous patient's answers or reference number.
-- **Accessible.** Every control has a name in the current language
-  (screen readers, TV remotes), errors are announced, ratings are real
-  radio groups, and a TV remote's OK button picks the focused answer.
+Without JavaScript the kiosk still works, with these differences: each step
+reloads the page; there is no QR camera or on-screen keypad (the UHID is
+typed, so the screen needs a keyboard or a keyboard-mode scanner); Home and
+Reset don't ask first; and since the page can't see touches, it starts over
+3 minutes after each page loads, counting down in the header.
 
 ## Installation
 
 The repository and Python package are `care_publicforms`. The Django app
-inside is `public_forms`: the plug's `name`, the start of its URLs and its
-`configs` key. The tables keep the repository's name:
-`care_publicforms_form` and `care_publicforms_submission`.
+inside is `public_forms`: the plug's `name`, its URL prefix and its `configs`
+key.
 
 ### Production
 
-Add the plug to [`plug_config.py`](https://github.com/ohcnetwork/care/blob/develop/plug_config.py) in Care:
+Add the plug to Care's [`plug_config.py`](https://github.com/ohcnetwork/care/blob/develop/plug_config.py),
+then rebuild the image and run migrations. Care's start scripts collect the
+plugin's CSS and JS.
 
 ```python
 public_forms_plug = Plug(
     name="public_forms",
     package_name="git+https://github.com/egovhealthcare/care_publicforms.git",
     version="@main",
-    configs={},  # see Settings below
+    configs={},  # see Settings
 )
 plugs = [public_forms_plug]
 ```
 
-Then rebuild the image and run migrations. Care's start scripts run
-`collectstatic`, which picks up the plugin's CSS and JS.
-
 ### Local development (Care in Docker)
 
-1. Put the plugin inside the Care checkout so it is mounted into the
-   container at `/app/care_publicforms`:
-
-   ```bash
-   cd care
-   git clone https://github.com/egovhealthcare/care_publicforms.git
-   ```
-
-2. Register it in `plug_config.py`:
-
-   ```python
-   public_forms_plug = Plug(
-       name="public_forms",
-       package_name="/app/care_publicforms",
-       version="",  # empty for a local path
-       configs={},
-   )
-   plugs = [public_forms_plug]
-   ```
-
-3. Install in editable mode by adding `-e` in `plugs/manager.py`
+1. Clone the plugin inside the Care checkout, so it is mounted at
+   `/app/care_publicforms`: `cd care && git clone https://github.com/egovhealthcare/care_publicforms.git`
+2. In `plug_config.py`, use `package_name="/app/care_publicforms"` and
+   `version=""`.
+3. In `plugs/manager.py`, install in editable mode
    (`[sys.executable, "-m", "pip", "install", "-e", *packages]`), then
    `make re-build`, `make up` and `make migrate`.
 
@@ -176,109 +89,84 @@ Then rebuild the image and run migrations. Care's start scripts run
 
 ## Putting a form on a screen
 
-There is nothing to register: open the page for the facility on the TV and
-set it as the browser's start page.
+Open the facility's page on the screen and make it the browser's start page:
 
-- `…/facility/<facility_id>/public_forms/`: patients choose OPD or
-  inpatient feedback (opens the form directly if only one is active);
-- `…/facility/<facility_id>/public_forms/type/<form code>/form/`, e.g.
-  `…/public_forms/type/ipd/form/`: the screen is **pinned to that form**,
-  with no chooser. Idle reset and the thank-you page return to that form.
+- `/facility/<facility_id>/public_forms/`: patients choose a form (it opens
+  directly if only one is active).
+- `/facility/<facility_id>/public_forms/type/<form code>/form/`: the screen
+  stays on that form.
 
-The admin shows each form's link (**Feedback forms**, open a form). A screen can set its own options in the URL:
+The admin shows each form's link. A screen can set options in the URL, e.g.
+`…/type/ipd/form/?lang=en&scan=scanner`:
 
 | Parameter | What it does |
 | --- | --- |
-| `lang=<code>` | Language each new patient starts in, one of `LANGUAGES`. Default: `DEFAULT_LANGUAGE`. |
-| `scan=camera` | The browser reads the QR with the TV's camera (needs HTTPS and a browser with `BarcodeDetector`, e.g. Chrome on Android / ChromeOS / macOS). The scan option is hidden when that can't work: no camera, camera permission denied, or a browser that can't read QR codes; patients then type their UHID or continue as guests. |
-| `scan=scanner` | A USB/Bluetooth QR scanner in keyboard mode, which works on any browser. A scanner also works on the first step in camera mode. |
-| `scan=off` | Hides the scan option. |
-| `keypad=0` / `keypad=1` | On-screen number pad for the UHID. Keep it on for TVs without a system keyboard. |
-
-For example `…/public_forms/type/ipd/form/?lang=en&scan=scanner` pins a
-ward screen to the inpatient form, in English, with a USB scanner.
-
-A language the patient picks with the toggle stays with them for their whole
-visit, from the chooser to the thank-you page (it travels as `?language=`).
-The idle reset and the thank-you page's return switch back to the screen's
-starting language for the next patient.
+| `lang=<code>` | The language each new patient starts in. Default: `DEFAULT_LANGUAGE`. |
+| `scan=camera` | Read the QR with the camera. Needs HTTPS and a browser with `BarcodeDetector` (Chrome on Android, ChromeOS, macOS); hidden when it can't work. |
+| `scan=scanner` | A USB/Bluetooth QR scanner in keyboard mode, on any browser. |
+| `scan=off` | No scan option. |
+| `keypad=0` / `keypad=1` | The on-screen number pad for the UHID. Keep it on for screens without a system keyboard. |
 
 > [!NOTE]
-> The pages are served by the Care **backend**. If your deployment serves
-> care_fe and the backend from the same domain, route
-> `/facility/<id>/public_forms/…` to the backend (for example the regex
-> `^/facility/[^/]+/public_forms/`), since care_fe also
-> uses `/facility/...` paths.
+> The pages are served by the Care **backend**. If care_fe and the backend
+> share a domain, route `^/facility/[^/]+/public_forms/` (and the admin's
+> path) to the backend.
 
-### Kiosk browser tips
+Kiosk tips:
 
-- Chromium kiosk mode: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/public_forms/type/opd/form/"`.
-- The camera only works over HTTPS. Allow camera access for the site once;
-  if it is denied, the scan option disappears until access is allowed again.
-- Following the NQAS guidance, take exit feedback: put the OPD kiosk near
-  the pharmacy counter and the inpatient kiosk where patients are discharged.
-- QR payloads count as a UHID when they contain exactly 11 digits once other
-  characters are removed (`UHID:123-4567-8901` works).
+- Chromium: `chromium --kiosk --disable-pinch --overscroll-history-navigation=0 "https://<care-api-host>/facility/<facility_id>/public_forms/type/opd/form/"`.
+- The camera needs HTTPS and the site's camera permission; if permission is
+  refused, the scan option is hidden.
+- Following NQAS guidance, take exit feedback: put the OPD kiosk near the
+  pharmacy and the inpatient kiosk where patients are discharged.
+- A QR counts as a UHID when it holds exactly 11 digits once other characters
+  are removed (`UHID:123-4567-8901` works).
 - Without internet access to Google Fonts, set `LOAD_WEB_FONTS=False` and
-  install *DM Sans* and each language's `font` (from its locale file) on the
-  device (or ship the fonts yourself); otherwise system fonts are used and
-  some scripts may not render.
+  install DM Sans and each language's `font` on the device.
 
 ## The admin
 
-Forms and submissions are managed in the plugin's own admin, at
-`https://<care-api-host>/public_forms/admin/`. It is separate from Django's
-`/admin/` and holds only two screens: **Feedback forms** and **Feedback
-submissions**.
+Forms and submissions are managed at `https://<care-api-host>/public_forms/admin/`
+(the `ADMIN_URL` setting). It is separate from Django's `/admin/` and holds
+only **Feedback forms** and **Feedback submissions**.
 
-- **Who can sign in:** Care superusers, and any active user given at least
-  one of this app's permissions. Those users don't need Django staff
-  access, so the rest of Django's admin stays closed to them. They sign in
-  with their Care username and password.
-- **Giving someone access:** a superuser adds the permissions to the user in
-  Django's admin (**Users →** the user **→ User permissions**, the ones
-  starting `public_forms |`), or to a group the user is in. Each screen
-  shows only what the permissions allow:
+- **Who can sign in:** Care superusers, and active users given any of this
+  app's permissions, with their Care username and password. They don't need
+  Django staff access, so the rest of Django's admin stays closed to them.
+- **Giving access:** in Django's admin, add the permissions to the user or
+  their group (**User permissions**, the ones starting `public_forms |`):
 
   | To | Permissions |
   | --- | --- |
   | View and export submissions | `Can view feedback submission` |
-  | Edit forms | `Can view feedback form` and `Can change feedback form`; add `Can add` / `Can delete feedback form` to create or remove forms |
+  | Edit forms | `Can view feedback form`, `Can change feedback form` (and `Can add` / `Can delete` to create or remove forms) |
 
-- **Sign-in limit:** `ADMIN_LOGIN_RATE_LIMIT` attempts (5 a minute by
-  default) per IP address and per username; see
-  [Behind a proxy](#behind-a-proxy).
-- **Another path:** set `ADMIN_URL` to serve it somewhere else, e.g.
-  `"feedback-admin"` for `/feedback-admin/`. Like the kiosk pages, it is
-  served by the Care backend: open it on the API host, or route its path to
-  the backend.
+- **Sign-in limit:** 5 attempts a minute per IP address and per username
+  (`ADMIN_LOGIN_RATE_LIMIT`).
+- Like the kiosk pages, the admin is served by the Care backend: open it on
+  the API host, or route its path there.
 
 ## Forms and questions
 
-In [the admin](#the-admin) under **Feedback forms**:
+In the admin, under **Feedback forms**, each form has:
 
-- **Form**: a code stored with every response and used in the URL (`opd`,
-  `ipd`), the patient type (**OP** or **IP**), a title and description per
-  language, and active / order. A form with no **facility id** is offered
-  everywhere; a facility can have its own form with the same code (say,
-  with its own clinic list), which replaces the shared one for that
-  facility. Enter the facility's id (the UUID in its Care URL); the admin
-  checks it exists and shows the facility's name.
-  Switching that facility form off hides the code there; the shared form
-  doesn't come back. Keep codes short: reference numbers use the first 12
-  characters (`OPD-20261118-4821`). Titles hold up to 100 characters per
-  language, descriptions up to 300.
-- **Questions**: one JSON list on the form; each question's `step` number
-  says which screen asks it. See [Writing a questionnaire](#writing-a-questionnaire).
-  The admin checks it on save and names the question in every error.
-- **Step titles** (optional): a heading for a screen, by its step number,
-  e.g. `{"1": {"title": {"en": "About your visit"}, "lead": {"en": "Two quick questions."}}}`.
-  Steps without one get a default heading.
+- **Code** (`opd`, `ipd`): stored with every response, used in the URL and
+  in reference numbers (`OPD-20261118-4821`, first 12 characters).
+- **Patient type** (OP or IP), **title** and **description** per language,
+  **active** and **order**.
+- **Facility id:** empty offers the form everywhere. A facility can have its
+  own form with the same code, which replaces the shared one there.
+- **Questions:** one JSON list (below). The admin checks it on save and
+  names the question in every error.
+- **Step titles** (optional): a heading per step, e.g.
+  `{"1": {"title": {"en": "About your visit"}, "lead": {"en": "Two quick questions."}}}`.
+
+A form that has feedback can't be deleted; switch it off instead.
+`python manage.py seed_feedback_forms` re-creates a deleted default form.
 
 ### Writing a questionnaire
 
-A small but complete questionnaire. Paste it into **Questions** and it
-shows as three screens:
+A small but complete questionnaire:
 
 ```json
 [
@@ -304,97 +192,62 @@ shows as three screens:
 ]
 ```
 
-What the patient goes through:
+After the patient identifies, this shows:
 
-1. **Identify**: scan the QR, type the UHID or continue as a guest. This
-   always comes first.
-2. **Step 1**: one screen with both questions, the clinic as chips and the
-   date as a date field. Headed "A few quick details", or the step 1 title.
-3. **Step 2**: one card per rating, "Question 1 of 2", then "Question 2
-   of 2". Picking a face moves on by itself.
-4. **Step 3**: one screen headed "In your own words". *Yes* / *No* show as
-   two large buttons with a "Why?" box, then a text box.
-5. **Review**: every answer, in this order. A tap on a row changes it. Then
-   **Submit** and the thank-you page with a reference number.
+1. **Step 1:** one screen with the clinic and the date.
+2. **Step 2:** one card per rating.
+3. **Step 3:** one screen with *Yes* / *No* buttons, a "Why?" box and a text
+   box.
+4. **The review**, then Submit and a reference number.
 
-The rules:
+Rules:
 
-- **`step` is a number, and the numbers set the order of the screens.**
-  Gaps are fine (1, 2, 5); up to 99 screens.
-- **A step holds either ratings or other questions, not both.** Ratings
-  show one card each. Choice, date and text questions in the same step
-  share one screen. More ratings in a step add cards; more questions add
-  to their screen.
-- **Within a step, questions keep their order in the list.** Where a
-  question sits in the list only matters among the questions of its step.
-- **How a screen looks depends on where it is.** Screens before the first
-  ratings are compact ("A few quick details", chips, small labels).
-  Screens after the ratings are larger ("In your own words"; a choice of 2
-  or 3 options shows as large buttons). The last one says "Last N
-  questions", one in the middle "A few more questions". A step title
-  replaces the default heading.
-- **Home and Reset** show from the first rating on. Reset clears the
-  ratings and the screens after them, and keeps the UHID and the screens
-  before them.
-- **A screen with no question for this patient is skipped**, e.g. a step
-  of guest-only questions (`"audience": "guest"`) for a patient who gave a
-  UHID.
-- **Every text is per language**: `"en"` (required) and one entry per other
-  language code, e.g. `{"en": "Clinic visited", "<code>": "…"}`. Missing
-  languages show the English.
-- **`key` is where the answer is stored.** Keep it once feedback has come
-  in; give a question with a new meaning a new key.
-- **Limits:** per language, a question's `text` and `hint` hold up to 300
-  characters, its `short_text` 60 and each option's label 100; an option's
-  `value` up to 64. No text can contain `<` `>` `{` `}` `` ` `` `\`.
-
-Every field, with its default when left out:
+- **Screens follow the `step` numbers** (gaps are fine, up to 99). Within a
+  step, questions keep their order in the list.
+- **A step holds either ratings (a card each) or other questions (one
+  screen), not both.**
+- **A screen's look depends on its place.** Before the first ratings it is
+  compact ("A few quick details"). After them it is larger ("In your own
+  words"), and a choice of 2 or 3 options shows as large buttons. A step
+  title replaces the default heading.
+- **A screen with nothing for this patient is skipped,** e.g. guest-only
+  questions for a patient who gave a UHID.
+- **Home and Reset appear from the first ratings on.** Reset clears the
+  ratings and the screens after them, and keeps the screens before them.
+- **Every text is per language:** `"en"` is required, plus
+  `"<code>": "…"` for each other language. Missing languages show the
+  English.
+- **`key` is where answers are stored.** Keep it once feedback has come in;
+  a question with a new meaning needs a new key. Each answer is saved with
+  its question's wording, so later edits don't change past feedback.
+- **Limits per language:** `text` and `hint` 300 characters, `short_text`
+  60, option labels 100; option `value` 64. Answers hold up to 2000
+  characters.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `key` | required | Stable id the answer is stored under: lowercase letters, digits, `_` |
-| `type` | required | `rating`, `choice`, `date` or `text` (see below) |
-| `step` | by type | The screen that asks it, a number. Left out: `choice` and `date` 1, `rating` 2, `text` 3; saving in the admin writes it in |
-| `text` | required | The question per language; English required |
-| `short_text` | `{}` | Shorter label for the review screen |
+| `key` | required | Lowercase letters, digits and `_`; unique in the form |
+| `type` | required | `choice`, `date`, `rating` or `text` |
+| `step` | by type | The screen, a number. Left out: `choice` and `date` 1, `rating` 2, `text` 3 (saving writes it in) |
+| `text` | required | The question; English required |
+| `short_text` | `{}` | Shorter label on the review |
 | `hint` | `{}` | Hint under the question |
-| `options` | `[]` | Choices, or five rating labels (see below) |
+| `options` | `[]` | `choice`: `[{"value": "ent", "en": "ENT"}, …]`. `rating`: optionally five labels, Poor → Excellent |
 | `required` | `false` | Needs an answer (ratings always do) |
 | `audience` | `"all"` | `all`, `guest` (no UHID) or `identified` (gave a UHID) |
 | `allow_no_comment` | `true` | Ratings: offer "No comments" |
-| `allow_comment` | `false` | Choices: also ask "Why?" under the answer |
-| `active` | `true` | `false` keeps the question in the form without asking it |
+| `allow_comment` | `false` | Choices: also ask "Why?" |
+| `active` | `true` | `false` keeps the question without asking it |
 
-| Type | Shown as | Notes |
-| --- | --- | --- |
-| `choice` | Chips; after the ratings, 2 or 3 options as large buttons | `options`: `[{"value": "ent", "en": "ENT", "<code>": "…"}]`. A **yes/no** question is a choice with the options `yes` and `no` |
-| `date` | A date field | e.g. date of admission; future dates are refused |
-| `rating` | A card with five faces, Excellent → Poor, plus "No comments" (can be turned off) | `options` can relabel the five faces, Poor → Excellent, e.g. waiting time "More than 30 mins" … "Immediate". Ratings always need an answer |
-| `text` | A text box: short before the ratings, large after them | Up to 2000 characters |
-
-The default forms use step 1 for the details (clinic or ward, date of
-admission, and age and sex for guests only, since UHID patients already
-have a record), step 2 for the ratings and step 3 for the open questions.
-Their details are required; a question on those screens that isn't is
-marked *optional*.
-
-Every submission saves each answer **with its question as asked**, so
-editing, reordering or removing questions never changes feedback already
-given. Statistics group answers by `key`: fixing a typo keeps them together,
-while a question with a new meaning should get a new key.
-`python manage.py seed_feedback_forms` re-creates either default form if it
-was deleted.
+A **yes/no** question is a `choice` with the options `yes` and `no`. A `date`
+can't be in the future. A `text` box is short before the ratings and large
+after them.
 
 ## Viewing feedback
 
-Responses go to the `care_publicforms_submission` table, with only these
-columns: `external_id`, `reference_number`, `facility_external_id` (not
-linked to Care), `form` (the form answered; its code and OP/IP type come from
-there), `language`, `uhid` (empty for guests), `answers` and `submitted_at`.
-A form that has feedback can't be deleted; switch it off instead.
-
-`answers` holds every answered question under its key, **with the question
-as it was asked**:
+Each submission (`care_publicforms_submission`) has its reference number,
+facility id, form, language, UHID (empty for guests), time, and `answers`:
+every answered question under its key, with the question as asked.
 
 ```json
 {
@@ -408,232 +261,161 @@ as it was asked**:
 }
 ```
 
-- `value`: ratings `0` to `5` (`0` = *No comments*, left out of averages),
-  the choice's code (`"yes"` / `"no"` for a yes/no question), `YYYY-MM-DD`,
-  or text as typed.
-- `answer` (ratings and choices only): the label the patient picked.
-- `comment` (choices that ask "Why?", when given): the reason.
-- `question` and `answer` are in English; the patient's language is in the
-  `language` column. Questions not answered are left out.
+`value` is a rating `0`–`5` (`0` = No comments, left out of averages), a
+choice's code, a `YYYY-MM-DD` date or the text typed. `answer` is the label
+picked and `comment` the "Why?". Wording is in English; the patient's
+language is in the `language` column.
 
-- **[The admin](#the-admin) → Feedback submissions**: filter by OP/IP, form and
-  language; search by reference number or UHID; each submission shows its
-  answers with the questions as they were asked. **Export selected as CSV**
-  gives one column per answer key (the `value`; a "Why?" in
-  `<key>__comment`). Submissions are read-only there.
-- **API** (Care auth; needs permission to view questionnaire responses for
-  the facility):
-  - `GET /api/public_forms/facility/<facility_id>/responses/`: paginated
-    submissions, with the fields above
-  - `GET /api/public_forms/facility/<facility_id>/summary/`: one block
-    per form with the overall score, attribute-wise averages and
-    distributions, the **two lowest-scoring attributes** (the NQAS "Check"
-    step) and counts for yes/no and choice questions
-
-  Both accept `patient_type` (`op` | `ip`), `form` (code) and
-  `submitted_after` / `submitted_before` (YYYY-MM-DD).
-  `GET /api/public_forms/health` returns `OK`.
+- **Admin → Feedback submissions:** filter by OP/IP, form and language;
+  search by reference or UHID; each shows its answers with the questions as
+  asked; **Export selected as CSV** (one column per question key, a "Why?"
+  in `<key>__comment`). Submissions are read-only.
+- **API** (Care login, with permission to view the facility's questionnaire
+  responses):
+  - `GET /api/public_forms/facility/<facility_id>/responses/`: the
+    submissions, paginated.
+  - `GET /api/public_forms/facility/<facility_id>/summary/`: per form, the
+    overall score, each attribute's average and spread, the two
+    lowest-scoring attributes and counts for choice questions.
+  - Both take `patient_type` (`op` | `ip`), `form`, and `submitted_after` /
+    `submitted_before` (YYYY-MM-DD).
+  - `GET /api/public_forms/health` returns `OK`.
 
 ## Settings
 
-Set in the plug's `configs={}` or as environment variables:
+Set in the plug's `configs={}`, or as environment variables:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `LANGUAGES` | `["en", "kn"]` | Language codes in the header toggle, in order (env: `LANGUAGES=en,<code>`). Each needs a locale file (see [Translations](#translations)); the built-in ones are the files in `locale/`. With one language the toggle is hidden. The admin shows a text box for English and each of these. |
-| `LOCALE_DIRS` | `[]` | Extra folders of locale files (`<code>.json`), read after the plugin's own: add a language or correct strings without changing the plugin. Restart after editing them. |
-| `DEFAULT_LANGUAGE` | `"en"` | Starting language, one of `LANGUAGES` (otherwise the first); a screen can override it with `?lang=`. |
+| `LANGUAGES` | `["en", "kn"]` | Languages offered, in order (env: `LANGUAGES=en,kn`). Each needs a locale file; one language hides the toggle. The admin shows a text box for each on a form's title and description. |
+| `DEFAULT_LANGUAGE` | `"en"` | Starting language; a screen can override it with `?lang=`. |
+| `LOCALE_DIRS` | `[]` | Extra folders of locale files, to add or correct a language without changing the plugin. Restart after editing them. |
 | `SCAN_MODE` | `"camera"` | `camera`, `scanner` or `off`; a screen can override it with `?scan=`. |
-| `SHOW_KEYPAD` | `True` | On-screen UHID keypad; a screen can override it with `?keypad=`. |
-| `UHID_LENGTH` | `11` | Digits in a UHID. |
-| `UHID_GROUPS` | `[3, 4, 4]` | Display grouping (`123 4567 8901`); must add up to `UHID_LENGTH`. |
-| `REFERENCE_PREFIX` | `""` | Reference numbers look like `OPD-20261118-4821` / `IPD-…` (unique per facility). Empty uses the form's code. |
-| `IDLE_TIMEOUT_SECONDS` | `90` | Idle time before the screen warns, then starts over. |
-| `NO_JS_IDLE_TIMEOUT_SECONDS` | `180` | Without JavaScript: seconds after a page loads before it starts over, counted down in the header. `0` turns it off. |
+| `SHOW_KEYPAD` | `True` | The on-screen UHID keypad; a screen can override it with `?keypad=`. |
+| `UHID_LENGTH` / `UHID_GROUPS` | `11` / `[3, 4, 4]` | UHID digits, and their grouping on screen (must add up to the length). |
+| `REFERENCE_PREFIX` | `""` | Start of reference numbers; empty uses the form's code. |
+| `IDLE_TIMEOUT_SECONDS` | `90` | Seconds without a touch before the screen warns, then starts over. |
+| `NO_JS_IDLE_TIMEOUT_SECONDS` | `180` | Without JavaScript: seconds after a page loads before it starts over (counted down in the header; `0` turns it off). |
 | `DONE_TIMEOUT_SECONDS` | `20` | How long the thank-you page stays up. |
-| `SUBMIT_RATE_LIMIT` | `"60/m"` | Submissions allowed per IP (django-ratelimit rate). A kiosk is one IP, so keep it well above a busy hour. |
-| `ADMIN_URL` | `"public_forms/admin"` | Path of [the admin](#the-admin) on the API host. Read when Care starts. |
-| `ADMIN_LOGIN_RATE_LIMIT` | `"5/m"` | Sign-in attempts allowed on the admin per IP address, and per username (django-ratelimit rate). `""` turns it off. |
-| `LOAD_WEB_FONTS` | `True` | Load DM Sans and each offered language's `font` from Google Fonts. |
+| `SUBMIT_RATE_LIMIT` | `"60/m"` | Submissions per IP address (django-ratelimit rate; `""` turns it off). A kiosk is one IP, so keep it well above a busy hour. |
+| `ADMIN_URL` | `"public_forms/admin"` | Path of the admin; read when Care starts. |
+| `ADMIN_LOGIN_RATE_LIMIT` | `"5/m"` | Admin sign-in attempts per IP address and per username (`""` turns it off). |
+| `LOAD_WEB_FONTS` | `True` | Load DM Sans and the languages' fonts from Google Fonts. |
 
-### Behind a proxy
+**Behind a proxy**, every request seems to come from the proxy, so the rate
+limits are shared by all kiosks. Set Django's `RATELIMIT_IP_META_KEY` in Care
+to the header the proxy sets (e.g. `HTTP_X_REAL_IP`). Care's
+`DISABLE_RATELIMIT` turns off every limit.
 
-The submit limit and the admin's sign-in limit count per IP address using
-django-ratelimit, like Care's own login limit. Behind a reverse proxy or
-load balancer every request comes from the proxy's address, so set Django's
-`RATELIMIT_IP_META_KEY` in Care's settings to the header your proxy sets
-(for example `HTTP_X_REAL_IP`), or the kiosks share one limit. Set
-`SUBMIT_RATE_LIMIT` or `ADMIN_LOGIN_RATE_LIMIT` to `""` to turn that limit
-off; Care's `DISABLE_RATELIMIT` turns off all limits.
+## Languages
 
-## Translations
+A language has a **locale file** for the screen text, and its text in each
+**form** (titles, questions, options) under the same code. Anything missing
+shows in English.
 
-A language is a code (`en`, or any other) with:
-
-- a **locale file**, `<code>.json`: the screen text (buttons, headings,
-  messages, default rating labels);
-- the **forms' text** under the same code: titles, questions and options.
-
-English is the base: every text needs it, and anything missing in another
-language shows in English.
-
-### Locale files
-
-One per language in [`src/public_forms/locale/`](src/public_forms/locale):
+Locale files live in [`src/public_forms/locale/`](src/public_forms/locale),
+one per language (`<code>.json`):
 
 ```json
 {
-  "language": {"name": "<name in English>", "toggle": "<name in the language>", "font": "<Google Fonts family, or null>", "tall_script": true},
+  "language": {"name": "Kannada", "toggle": "ಕನ್ನಡ", "font": "Noto Sans Kannada", "tall_script": true},
   "strings": {"back": "…", "next": "…", "…": "…"},
   "ratings": {"5": "…", "4": "…", "3": "…", "2": "…", "1": "…", "0": "…"}
 }
 ```
 
-| Part | Meaning |
-| --- | --- |
-| `language.name` | For screen readers and the admin's text boxes |
-| `language.toggle` | The header button, in the language itself |
-| `language.font` | A Google Fonts family for the script, loaded and applied automatically (`null`: DM Sans covers it) |
-| `language.tall_script` | `true` for scripts with tall letters and no capitals (e.g. most Indian scripts): small labels aren't uppercased, headings get more line height, and the big headline shrinks on narrow screens so long words fit |
-| `strings` | The screen text by key, as in `en.json`. Keep placeholders such as `{n}` exactly |
-| `ratings` | Default rating labels: 5 (Excellent) → 1 (Poor), and 0 (No comments) |
+- `name`: for screen readers and the admin. `toggle`: the header button.
+- `font`: a Google Fonts family for the script (`null` if DM Sans covers it).
+- `tall_script`: `true` for scripts with tall letters and no capitals (most
+  Indian scripts): no uppercase labels, more line height.
+- `strings`: the screen text, keyed as in `en.json`; keep placeholders such
+  as `{n}`. `ratings`: the default rating labels, 5 (Excellent) to 0 (No
+  comments).
 
-`manage.py check` reports unreadable files, untranslated strings,
-placeholders that differ from English (those strings show in English rather
-than break the page), and unknown keys.
+`manage.py check` warns about unreadable files, untranslated strings,
+changed placeholders and unknown keys.
 
 ### Adding a language
 
-Three steps, in this order; `<code>` is the language's code (e.g. `hi`).
-
-1. **Add the locale file.** Copy `locale/en.json` to `locale/<code>.json`,
-   translate `strings` and `ratings`, and fill in `language` (see
-   [Locale files](#locale-files)).
-
-2. **Add the language to the questionnaires in the database.** Each form's
-   title, description, questions and options hold their text per language,
-   so the new code goes next to `"en"`:
-
-   ```json
-   {
-     "key": "clinic",
-     "text": {"en": "Clinic visited", "<code>": "…"},
-     "options": [{"value": "ent", "en": "ENT", "<code>": "…"}]
-   }
-   ```
-
-   A data migration does this for the default forms. In
-   [`migrations/`](src/public_forms/migrations), copy the latest
-   language migration (the newest file with `LANGUAGE` and `TRANSLATIONS`)
-   to the next number, e.g. `0004_<language>_default_forms.py`, then:
-
-   - set `LANGUAGE` to the code;
-   - translate each value in `TRANSLATIONS`, which lists every English
-     text of the default forms;
-   - set `dependencies` to the latest migration.
-
-   Run `manage.py migrate` (`make migrate` in Care) to write the text into
-   the forms. It fills in only text that is still the default English and
-   has nothing in the language yet, so forms edited in the admin keep their
-   edits. It works on new installs and existing ones alike, and
-   `seed_feedback_forms` applies it when it re-creates a default form.
-
-3. **Turn it on in the plugin config.** Add the code to `LANGUAGES` in the
-   plug's `configs` in Care's `plug_config.py` (or the `LANGUAGES`
-   environment variable) and restart. The list replaces the default, so
-   include every language to offer:
+1. **Locale file:** copy `locale/en.json` to `locale/<code>.json` and
+   translate it.
+2. **The default forms' text:** add a data migration that adds the language
+   to them. It only fills text that is still the default English, so forms
+   edited in the admin keep their edits, and `seed_feedback_forms` reuses
+   it. `TRANSLATIONS` maps each English text of the default forms (in
+   `seed.py`) to the language:
 
    ```python
-   configs={"LANGUAGES": ["en", "<code>"]},
+   # src/public_forms/migrations/0005_hindi_default_forms.py
+   from django.db import migrations
+
+   from public_forms.seed import add_language_to_forms
+
+   LANGUAGE = "hi"
+   TRANSLATIONS = {"OPD feedback": "…", "Clinic visited": "…", "ENT": "…"}  # …every English text
+
+
+   def forwards(apps, schema_editor):
+       add_language_to_forms(apps.get_model("public_forms", "FeedbackForm"), LANGUAGE, TRANSLATIONS)
+
+
+   class Migration(migrations.Migration):
+       dependencies = [("public_forms", "0004_numbered_steps")]
+       operations = [migrations.RunPython(forwards, migrations.RunPython.noop)]
    ```
 
-   The header then shows the language's button, and the admin shows a text
-   box for it on each form's title and description. For forms you created
-   or reworded yourself, type the text there, or add `"<code>": "…"` next
-   to `"en"` in their questions JSON.
+   Then run `manage.py migrate`. For your own forms, type the text in the
+   admin.
+3. **Turn it on:** add the code to `LANGUAGES` (e.g. `["en", "hi"]`; the
+   list replaces the default) and restart.
 
-A code in `LANGUAGES` without a locale file is not offered, and
-`manage.py check` warns about it.
-
-The tests check that every locale file in the plugin is complete and that
-the default forms have every text in each of those languages.
-
-For one deployment only, without changing the plugin, put the locale file in
-a folder listed in `LOCALE_DIRS` and translate the forms in the admin. A
-`LOCALE_DIRS` file for a built-in language corrects just the strings it
-contains.
-
-Have a native speaker check a language before patients use it; drafts are
-marked in the code (`# review` in `seed.py`, "Draft" in a language
-migration).
+The tests check that every bundled locale file is complete and that the
+default forms have every text in each of those languages. For a single
+deployment, put the locale file in a `LOCALE_DIRS` folder instead. Have a
+native speaker check a language before patients use it.
 
 ## Development
 
-[docs/architecture.md](docs/architecture.md) describes the design, every
-table and JSON column, the API responses, and how to add a language or a
-question type.
-
 ```
 src/public_forms/
-├── views.py          # the public pages: chooser, questionnaire (GET + one POST), thank you
-├── pages.py          # page URLs under /facility/<id>/public_forms/ (chooser, type/<form>/form/, type/<form>/done/)
-├── urls.py, api.py   # staff API, mounted by Care at /api/public_forms/
-├── questions.py      # the questions JSON: fields, defaults, validation
-├── questionnaire.py  # a configured form → steps; answer parsing and labels
-├── services.py       # UHID format, collecting answers, saving submissions
-├── steps.py          # the steps on the server (without JavaScript); mirrors kiosk.js
-├── seed.py           # default OPD / inpatient forms (NQAS format); adding a language to forms
-├── migrations/       # schema, the default forms, and one questionnaire migration per added language
-├── i18n.py           # loads the locale files; translate(), languages
-├── locale/           # screen text, one JSON file per language (<code>.json)
-├── checks.py         # `manage.py check` warnings for the language settings
-├── models.py, admin.py, admin_site.py, text_rules.py, settings.py
-├── templates/public_forms/   # form.html + steps/, choose, done, empty
-├── static/public_forms/      # kiosk.css, kiosk.js, favicon.ico (Care's icon)
-└── tests/            # Django tests (pages, API, admin)
-e2e/                  # Playwright tests in a real browser
+├── views.py, pages.py    # the public pages and their URLs
+├── api.py, urls.py       # the staff API (/api/public_forms/)
+├── admin.py, admin_site.py
+├── questions.py          # the questions JSON: fields, defaults, checks
+├── questionnaire.py      # a form → its screens; answer parsing
+├── steps.py              # navigation without JavaScript (mirrors kiosk.js)
+├── services.py           # UHID format, collecting and saving answers
+├── text_rules.py         # blocked characters and length limits
+├── seed.py, migrations/  # the default forms, adding a language
+├── i18n.py, locale/      # languages and their screen text
+├── templates/, static/   # pages, kiosk.css, kiosk.js
+└── tests/
+e2e/                      # Playwright tests
 ```
 
-### Django tests
-
-Run them from the Care checkout with the plugin installed:
+**Django tests**, from the Care checkout with the plugin installed:
 
 ```bash
 python manage.py test public_forms --keepdb
 ```
 
-They run with English and a test language generated from `en.json`, whatever
-`plug_config.py` sets, so adding or removing a language doesn't affect them.
-Lint with `ruff check src && ruff format src`.
+They use English and a generated test language, whatever `plug_config.py`
+sets. Lint with `ruff check src && ruff format src`.
 
-### Browser tests (Playwright)
-
-[`e2e/`](e2e) drives the pages in Chromium against a running Care backend
-with the plugin installed: the patient flows (UHID by keypad and by a
-keyboard QR scanner, guest details, editing from the review, Reset and Home
-with their confirmation, future dates), the safeguards for a shared screen
-(Back after the thank-you page, the "Leave site?" warning, blocked
-characters, keeping the place after a UHID change, boxes clear of the
-pinned buttons on short screens), the scan option hiding when the camera
-can't be used, the language carried to the thank-you page, the idle reset
-(with a mocked clock), the step-by-step flow and its 3-minute countdown
-without JavaScript, and the layout on five
-screen shapes (1080p and 960×540 TVs, a portrait screen, a tablet, a phone:
-no sideways scrolling, nothing clipped, main buttons on screen, unique ids,
-named controls), in English and in the second offered language.
+**Browser tests** run Chromium against a running Care backend. They cover
+the patient flows, the shared-screen safeguards, the camera and scanner, the
+languages, the idle reset, the flow without JavaScript, and the layout on
+five screen shapes:
 
 ```bash
-cd e2e
-npm install
-npx playwright install chromium   # once, if Playwright's Chromium isn't installed
+cd e2e && npm install
+npx playwright install chromium   # once
 PF_FACILITY_ID=<facility external id> npx playwright test
 ```
 
-- `PF_BASE_URL` is the backend (default `http://localhost:9000`).
+- `PF_BASE_URL` sets the backend (default `http://localhost:9000`).
 - The tests submit feedback, so use a development database.
-- They open every page with `?lang=en`, so any `LANGUAGES` works. The
-  language tests use the first language offered after English, whichever it
-  is, and skip themselves when only English is offered.
-- `npx playwright show-report` opens the last run. The layout test saves a
-  full-page screenshot of every step per screen shape in
-  `e2e/screenshots/`.
+- They open pages with `?lang=en`, so any `LANGUAGES` works; the language
+  tests use the first language after English and skip when there is none.
+- `npx playwright show-report` opens the last run; the layout tests save a
+  screenshot of every step per screen shape in `e2e/screenshots/`.
