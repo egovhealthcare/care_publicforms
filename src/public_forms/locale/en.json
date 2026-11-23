@@ -63,6 +63,13 @@
     "done_lead": "Your feedback has been recorded. Keep this reference number if you need to follow up at the May I Help You desk.",
     "reference_number": "Reference number",
     "restart": "Submit another response",
+    "confirm_home_title": "Leave this feedback?",
+    "confirm_home_body": "Your answers so far will be cleared.",
+    "confirm_home_yes": "Yes, go to home",
+    "confirm_reset_title": "Clear your answers?",
+    "confirm_reset_body": "Your ratings and comments will be cleared, and you start again from question\u00a01. Your UHID and details stay.",
+    "confirm_reset_yes": "Yes, clear them",
+    "confirm_keep": "No, keep my answers",
     "idle_title": "Are you still there?",
     "idle_body": "Tap anywhere to continue. Starting over in {n} seconds."
   },

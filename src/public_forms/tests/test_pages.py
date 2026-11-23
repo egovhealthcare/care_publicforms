@@ -133,6 +133,15 @@ class PublicPageTests(PageTestBase):
         self.assertContains(pinned, '<nav class="hdr-nav" id="hdrNav" hidden>')
         self.assertContains(pinned, f'class="navbtn navbtn--home" href="{self.url("form", "opd")}"')
 
+    def test_home_and_reset_ask_first(self):
+        # kiosk.js opens these cards once Home or Reset would clear answers.
+        page = self.client.get(self.url("form", "opd"))
+        self.assertContains(page, '<div class="idle confirm" id="confirmHome" hidden>')
+        self.assertContains(page, '<div class="idle confirm" id="confirmReset" hidden>')
+        for text in ("Leave this feedback?", "Clear your answers?", "Yes, go to home", "Yes, clear them"):
+            self.assertContains(page, text)
+        self.assertContains(page, "data-confirm-keep", count=2)  # "No, keep my answers" on each card
+
     def test_screen_options_in_the_url(self):
         response = self.client.get(self.url(lang=TEST_LANGUAGE, scan="off", keypad="0"))
         self.assertContains(response, f'data-lang="{TEST_LANGUAGE}"')

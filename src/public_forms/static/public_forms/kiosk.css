@@ -580,9 +580,11 @@ button.row::after{
 .btn--primary{background:var(--primary);color:#FFFFFF;border-color:var(--primary)}
 .btn--outline{background:transparent;color:var(--primary-700);border-color:var(--primary-700)}
 .btn--ghost{background:transparent;color:var(--primary)}
+.btn--danger{background:transparent;color:var(--destructive-text);border-color:var(--destructive-border)}
 @media (hover:hover){
   .btn:not([disabled]):not(.is-disabled):hover{filter:brightness(1.08)}
   .btn--outline:hover{background:var(--primary-50)}
+  .btn--danger:hover{background:var(--destructive-soft)}
 }
 .btn:not([disabled]):not(.is-disabled):active{transform:translateY(1px)}
 
@@ -618,6 +620,11 @@ button.row::after{
 }
 .idle-title{margin:0;font-size:1.5rem;font-weight:300;color:var(--foreground)}
 .idle-body{margin:.75rem 0 0;font-size:1rem;line-height:1.55;color:var(--soft-foreground);font-feature-settings:'tnum'}
+
+/* Home / Reset ask first: the same card, under the idle warning */
+.confirm{z-index:40}
+.confirm-actions{margin-top:1.5rem}
+.confirm-actions > :not(:first-child){margin-top:.625rem}
 
 /* ── Empty states (unknown facility, no forms) ──────────────────── */
 .page--blocked{align-items:center;padding:1.5rem}

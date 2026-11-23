@@ -15,6 +15,7 @@
      · instant language switching
      · an idle timer that starts over for the next patient
      · the browser's "Leave site?" question before a reload drops the answers
+     · Home and Reset ask first before clearing answers
      · a Back button that never brings back a previous patient's page
      · typed text without the characters text_rules.py blocks (< > …)
    Plain ES5 so it runs on older TV browsers.
@@ -876,11 +877,70 @@
     }
   }
 
+  /* ── Home and Reset ask first ────────────────────────────────── */
+  // Home drops everything entered; Reset the ratings and open answers. Once
+  // that would lose something, a card asks first, with "No, keep my answers"
+  // as the default. The card is part of the page (not a browser pop-up, which
+  // would freeze it), so the idle reset still clears the screen if the
+  // patient walks away from it.
+  var keepAnswers = null;  // closes the open card, if any
+
+  function askFirst(card, opener, yes) {
+    if (!card) { yes(); return; }
+    var keepButton = card.querySelector('[data-confirm-keep]');
+    var close = function () {
+      card.hidden = true;
+      keepAnswers = null;
+    };
+    keepButton.onclick = function () {
+      close();
+      if (opener && opener.focus) opener.focus();
+    };
+    card.querySelector('[data-confirm-yes]').onclick = function () {
+      close();
+      yes();
+    };
+    card.hidden = false;
+    keepAnswers = keepButton.onclick;
+    keepButton.focus();
+  }
+
+  // Escape (a keyboard, or a remote's Back key that sends it) keeps the answers.
+  document.addEventListener('keydown', function (event) {
+    if (keepAnswers && (event.key === 'Escape' || event.keyCode === 27)) keepAnswers();
+  });
+
+  // Anything Reset would clear: a rating, or an open answer.
+  function answersToClear() {
+    var found = false;
+    each([steps.questions, steps.comments], function (step) {
+      if (!step || found) return;
+      if (step.querySelector('input[type=radio]:checked')) found = true;
+      each(step.querySelectorAll('textarea'), function (field) {
+        if (String(field.value).replace(/\s+/g, '') !== '') found = true;
+      });
+    });
+    return found;
+  }
+
+  var homeLink = headerNav && headerNav.querySelector('.navbtn--home');
+  if (homeLink) {
+    homeLink.addEventListener('click', function (event) {
+      if (!anythingEntered()) return; // nothing to lose: just go
+      event.preventDefault();
+      askFirst($('confirmHome'), homeLink, function () {
+        leavingOnPurpose = true; // no "Leave site?" on top
+        window.location.href = homeLink.getAttribute('href');
+      });
+    });
+  }
+
   var resetLink = headerNav && headerNav.querySelector('[data-action="reset"]');
   if (resetLink) {
     resetLink.addEventListener('click', function (event) {
       event.preventDefault();
-      resetAnswers();
+      if (answersToClear()) askFirst($('confirmReset'), resetLink, resetAnswers);
+      else resetAnswers();
     });
   }
 

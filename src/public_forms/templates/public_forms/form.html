@@ -4,8 +4,8 @@
 {% block header_nav %}
 {# Shown from the first rating question on (ratings, open questions, review), as in the #}
 {# original design. Home drops everything entered. Reset clears the ratings and open    #}
-{# answers and goes back to the first question (kiosk.js); without JavaScript both are  #}
-{# plain links that start the form again.                                               #}
+{# answers and goes back to the first question (kiosk.js); both ask first (the cards at #}
+{# the end of this page). Without JavaScript both are plain links that start again.     #}
 <nav class="hdr-nav" id="hdrNav"{% if not nav_shown %} hidden{% endif %}>
   <a class="navbtn navbtn--home" href="{{ nav_home_url }}" data-carry-lang>
     <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4v-5.5H9V20H5a1 1 0 0 1-1-1z"/></svg>
@@ -55,4 +55,28 @@
   {% if open_questions %}{% include "public_forms/steps/comments.html" %}{% endif %}
   {% include "public_forms/steps/review.html" %}
 </form>
+
+{# Home and Reset ask first once they would clear something (kiosk.js; without #}
+{# JavaScript they are plain links). Cards in the page, not browser pop-ups, so  #}
+{# the idle reset can still clear the screen if the patient walks away.          #}
+<div class="idle confirm" id="confirmHome" hidden>
+  <div class="idle-card" role="alertdialog" aria-modal="true" aria-labelledby="confirmHomeTitle" aria-describedby="confirmHomeBody">
+    <p class="idle-title" id="confirmHomeTitle">{% t "confirm_home_title" %}</p>
+    <p class="idle-body" id="confirmHomeBody">{% t "confirm_home_body" %}</p>
+    <div class="confirm-actions">
+      <button type="button" class="btn btn--primary btn--lg btn-wide" data-confirm-keep>{% t "confirm_keep" %}</button>
+      <button type="button" class="btn btn--danger btn--lg btn-wide" data-confirm-yes>{% t "confirm_home_yes" %}</button>
+    </div>
+  </div>
+</div>
+<div class="idle confirm" id="confirmReset" hidden>
+  <div class="idle-card" role="alertdialog" aria-modal="true" aria-labelledby="confirmResetTitle" aria-describedby="confirmResetBody">
+    <p class="idle-title" id="confirmResetTitle">{% t "confirm_reset_title" %}</p>
+    <p class="idle-body" id="confirmResetBody">{% t "confirm_reset_body" %}</p>
+    <div class="confirm-actions">
+      <button type="button" class="btn btn--primary btn--lg btn-wide" data-confirm-keep>{% t "confirm_keep" %}</button>
+      <button type="button" class="btn btn--danger btn--lg btn-wide" data-confirm-yes>{% t "confirm_reset_yes" %}</button>
+    </div>
+  </div>
+</div>
 {% endblock %}

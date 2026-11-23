@@ -86,7 +86,12 @@ validation) and the database tables, see
   questions, review), the header shows *Home*, which drops everything and
   goes back to the chooser (or the start of a pinned form), and *Reset*,
   which clears the ratings and open answers and goes back to the first
-  question, keeping the UHID and details.
+  question, keeping the UHID and details. Once either would clear
+  something, it asks first ("Leave this feedback?" / "Clear your
+  answers?", with *No, keep my answers* as the default). The question is a
+  card in the page, not a browser pop-up, so the idle reset still clears
+  the screen if the patient walks away. Without JavaScript both are plain
+  links.
 - **Changing the UHID keeps the answers.** Changing the UHID (tap it at the
   top) or switching to guest keeps every answer and returns to the same
   question, or to the review, stopping first at any question that now needs
