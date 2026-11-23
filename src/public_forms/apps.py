@@ -20,7 +20,14 @@ class PublicFormsConfig(AppConfig):
         # The feedback pages are server-rendered HTML, so they live outside
         # /api/, under /facility/<id>/public_forms/ like Care's own facility
         # routes (see pages.py for the paths).
+        # The admin for forms and submissions is its own site at ADMIN_URL,
+        # apart from Django's /admin/ (see admin_site.py). Its screens are
+        # registered first: the site's URLs are built from them.
+        import_module(f"{PLUGIN_NAME}.admin")
+        from public_forms.admin_site import admin_path, site
+
         urlconf = import_module(settings.ROOT_URLCONF)
         urlconf.urlpatterns += [
             path(f"facility/<uuid:facility_id>/{PLUGIN_NAME}/", include(f"{PLUGIN_NAME}.pages")),
+            path(admin_path(), site.urls),
         ]

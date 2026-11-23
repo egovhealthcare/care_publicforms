@@ -44,6 +44,7 @@
     "start_questions": "Start the questions",
     "required_error": "This question needs an answer.",
     "date_error": "Choose today or an earlier date.",
+    "characters_error": "Please don't use these characters: {chars}",
     "error_summary": "Please answer the questions marked below.",
     "too_many": "Too many responses from this screen just now. Please wait a minute and try again.",
     "optional": "optional",

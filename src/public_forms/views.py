@@ -20,9 +20,15 @@ The language the patient picks travels with them as ?language=kn: from the
 chooser to the form (and Back / Home / Reset), and through the submit to the
 thank-you page. The idle reset and the thank-you page's return go back to the
 screen's starting language for the next patient.
+
+The screen is shared, so the browser's Back button must not bring back a
+previous patient's page: the pages are never cached, the thank-you page
+shows only just after its submission, and kiosk.js starts over when a page
+comes back from the browser's history.
 """
 
 import math
+from datetime import timedelta
 
 from care.facility.models import Facility
 from django.conf import settings
@@ -33,6 +39,7 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.utils.http import urlencode
 from django.views import View
+from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django_ratelimit.core import is_ratelimited
 
@@ -56,11 +63,17 @@ from public_forms.services import (
 )
 from public_forms.settings import plugin_settings
 from public_forms.steps import FLOW_STEPS, NAV_STEPS, Place, flow_units, navigate, review_rows
+from public_forms.text_rules import BLOCKED_CHARACTERS, MAX_ANSWER_LENGTH, spaced
 
 SCAN_MODES = ("camera", "scanner", "off")
 SECONDS_PER_QUESTION = 12  # for "about N minutes"
+# The thank-you page shows for DONE_TIMEOUT_SECONDS after the submission, plus
+# this margin for a slow screen; later, its link goes back to the start.
+DONE_GRACE_SECONDS = 10
 
 
+# Never cached, so Back asks the server again instead of showing a stored copy.
+@method_decorator(never_cache, name="dispatch")
 class FeedbackPage(View):
     """Resolves the facility, its forms and the screen's URL options."""
 
@@ -353,6 +366,10 @@ class FormView(FeedbackPage):
             ),
             review_rows=review_rows(spec, data, identified),
             language_form="feedback",  # the language toggle posts the form, keeping the answers
+            # Typed text: its length limit, and the characters it can't contain (text_rules.py).
+            max_answer_length=MAX_ANSWER_LENGTH,
+            blocked_characters=BLOCKED_CHARACTERS,
+            blocked_characters_shown=spaced(),
         )
         return render(self.request, "public_forms/form.html", context, status=status)
 
@@ -363,10 +380,17 @@ class DoneView(FeedbackPage):
         came_from_chooser = request.GET.get("from") == "start"
         home = self.home_url(came_from_chooser)
         reference = request.GET.get("ref", "")
-        exists = FeedbackSubmission.objects.filter(
-            facility_external_id=self.facility.external_id, form=self.form, reference_number=reference
+        # Only just after the submission: reached again later (Back, the
+        # browser's history), it goes to the start, so the next patient
+        # doesn't see the previous patient's reference number.
+        shown_until = timedelta(seconds=int(plugin_settings.DONE_TIMEOUT_SECONDS) + DONE_GRACE_SECONDS)
+        recent = FeedbackSubmission.objects.filter(
+            facility_external_id=self.facility.external_id,
+            form=self.form,
+            reference_number=reference,
+            submitted_at__gte=timezone.now() - shown_until,
         ).exists()
-        if not exists:
+        if not recent:
             return HttpResponseRedirect(home)
         context = self.base_context(self.form.title)
         context.update(

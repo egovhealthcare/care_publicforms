@@ -14,6 +14,7 @@ from django.utils import timezone
 from public_forms.i18n import default_rating_labels
 from public_forms.models import Audience, FeedbackForm, QuestionType
 from public_forms.questions import parse_questions
+from public_forms.text_rules import MAX_ANSWER_LENGTH, blocked_in, without_control_characters
 
 NO_COMMENT = 0  # the "No comments" rating; default rating labels are in the locale files
 
@@ -21,9 +22,6 @@ NO_COMMENT = 0  # the "No comments" rating; default rating labels are in the loc
 def asked_on_open_step(question) -> bool:
     """Free text, and choices marked "step": "open" (e.g. yes/no), go on the "in your own words" step."""
     return question.type == QuestionType.TEXT or (question.type == QuestionType.CHOICE and question.step == "open")
-
-
-MAX_TEXT_LENGTH = 2000
 
 
 def forms_for_facility(facility) -> list[FeedbackForm]:
@@ -112,8 +110,19 @@ def choice_labels(question) -> dict:
 
 
 def clean_text(raw) -> str | None:
-    text = str(raw or "").strip()[:MAX_TEXT_LENGTH]
+    """Typed text as it is saved: without control characters, trimmed, at most MAX_ANSWER_LENGTH."""
+    text = without_control_characters(str(raw or "")).strip()[:MAX_ANSWER_LENGTH]
     return text or None
+
+
+def typed_blocked_characters(question, data) -> str:
+    """Blocked characters (text_rules) in what the patient typed for ``question``: its text answer or its "Why?"."""
+    typed = []
+    if question.type == QuestionType.TEXT:
+        typed.append(data.get(question.key))
+    elif question.type == QuestionType.CHOICE and question.allow_comment:
+        typed.append(data.get(comment_key(question)))
+    return "".join(blocked_in(text) for text in typed)
 
 
 def parse_answer(question, raw):

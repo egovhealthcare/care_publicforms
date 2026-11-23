@@ -2,6 +2,9 @@ import json
 from datetime import timedelta
 
 from care.utils.tests.base import CareAPITestBase
+from django.contrib import admin
+from django.contrib.auth.models import Permission
+from django.core.cache import cache
 from django.forms.models import model_to_dict
 from django.test import override_settings
 from django.urls import reverse
@@ -161,7 +164,7 @@ class AdminTests(CareAPITestBase):
     def test_form_page_shows_a_box_per_language_and_the_page_link(self):
         self.opd.title = {**self.opd.title, TEST_LANGUAGE: "Test title"}
         self.opd.save()
-        url = reverse("admin:public_forms_feedbackform_change", args=[self.opd.pk])
+        url = reverse("public_forms_admin:public_forms_feedbackform_change", args=[self.opd.pk])
         response = self.client.get(url)
         self.assertContains(response, "Title (English)")
         self.assertContains(response, f"Title ({TEST_LANGUAGE_NAME})")
@@ -182,17 +185,17 @@ class AdminTests(CareAPITestBase):
         known = feedback_form_form()(data={**base, "facility_external_id": str(self.facility.external_id)})
         self.assertTrue(known.is_valid(), known.errors)  # its own "opd", next to the shared one
         own = known.save()
-        changelist = self.client.get(reverse("admin:public_forms_feedbackform_changelist"))
+        changelist = self.client.get(reverse("public_forms_admin:public_forms_feedbackform_changelist"))
         self.assertContains(changelist, "District Hospital, Mysuru")
         self.assertContains(changelist, "Every facility")
-        page = self.client.get(reverse("admin:public_forms_feedbackform_change", args=[own.pk]))
+        page = self.client.get(reverse("public_forms_admin:public_forms_feedbackform_change", args=[own.pk]))
         self.assertContains(page, "District Hospital, Mysuru")
 
     def test_facility_form_shows_its_full_link(self):
         own = FeedbackForm.objects.create(
             facility_external_id=self.facility.external_id, code="opd", patient_type="op", title={"en": "Ours"}
         )
-        response = self.client.get(reverse("admin:public_forms_feedbackform_change", args=[own.pk]))
+        response = self.client.get(reverse("public_forms_admin:public_forms_feedbackform_change", args=[own.pk]))
         self.assertContains(
             response, f"http://testserver/facility/{self.facility.external_id}/public_forms/type/opd/form/"
         )
@@ -220,6 +223,18 @@ class AdminTests(CareAPITestBase):
         self.assertTrue(form.is_valid(), form.errors)
         saved = form.save()
         self.assertEqual((saved.title, saved.questions), ({"en": "Parking"}, questions))
+
+    def test_title_and_description_follow_the_text_rules(self):
+        base = {"code": "x", "patient_type": "op", "order": 0}
+        form = feedback_form_form()(
+            data={**base, "title__en": "<b>Ours</b>", f"description__{TEST_LANGUAGE}": "Uses `ticks`"}
+        )
+        self.assertFalse(form.is_valid())
+        self.assertEqual(form.errors["title__en"], ["Don't use these characters: < >"])
+        self.assertEqual(form.errors[f"description__{TEST_LANGUAGE}"], ["Don't use these characters: `"])
+        too_long = feedback_form_form()(data={**base, "title__en": "x" * 101})
+        self.assertIn("at most 100 characters", too_long.errors["title__en"][0])
+        self.assertIn('maxlength="100"', str(too_long["title__en"]))
 
     def test_text_in_languages_not_offered_is_kept(self):
         self.opd.title = {"en": "OPD feedback", TEST_LANGUAGE: "Test title"}
@@ -259,7 +274,9 @@ class AdminTests(CareAPITestBase):
             if question["key"] == "clinic":
                 question["text"] = {"en": "Which clinic did you visit?"}
         self.opd.save()
-        response = self.client.get(reverse("admin:public_forms_feedbacksubmission_change", args=[submission.pk]))
+        response = self.client.get(
+            reverse("public_forms_admin:public_forms_feedbacksubmission_change", args=[submission.pk])
+        )
         self.assertContains(response, "Clinic visited")
         self.assertNotContains(response, "Which clinic did you visit?")
         self.assertContains(response, "District Hospital, Mysuru")
@@ -268,9 +285,11 @@ class AdminTests(CareAPITestBase):
         self.assertContains(response, "Yes (Kind staff)")
 
     def test_submissions_are_read_only(self):
-        changelist = reverse("admin:public_forms_feedbacksubmission_changelist")
+        changelist = reverse("public_forms_admin:public_forms_feedbacksubmission_changelist")
         self.assertEqual(self.client.get(changelist).status_code, 200)
-        self.assertEqual(self.client.get(reverse("admin:public_forms_feedbacksubmission_add")).status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse("public_forms_admin:public_forms_feedbacksubmission_add")).status_code, 403
+        )
 
     def test_csv_export_has_a_column_per_answer(self):
         make_submission(
@@ -282,7 +301,7 @@ class AdminTests(CareAPITestBase):
         )
         make_submission(self.facility, "IPD-1", "ipd", {"diet": 2})
         response = self.client.post(
-            reverse("admin:public_forms_feedbacksubmission_changelist"),
+            reverse("public_forms_admin:public_forms_feedbacksubmission_changelist"),
             {"action": "export_csv", "_selected_action": FeedbackSubmission.objects.values_list("pk", flat=True)},
         )
         lines = b"".join(response.streaming_content).decode().splitlines()
@@ -305,3 +324,65 @@ class AdminTests(CareAPITestBase):
         self.assertIn("District Hospital, Mysuru", lines[1])
         self.assertTrue(lines[1].endswith(",4,yes,'=cmd(),"))
         self.assertTrue(lines[2].endswith(",,,,2"))
+
+
+@override_settings(STORAGES=PLAIN_STATIC_STORAGES, PLUGIN_CONFIGS=TEST_PLUGIN_CONFIGS)
+class AdminSiteTests(CareAPITestBase):
+    """The admin is its own site at /public_forms/admin/, apart from Django's /admin/."""
+
+    password = "test-only-Pw-4821"
+
+    def sign_in(self, user, password=None):
+        # As the sign-in page posts it, with its hidden "next" (the admin's index).
+        data = {"username": user.username, "password": password or self.password}
+        return self.client.post(
+            reverse("public_forms_admin:login"), {**data, "next": reverse("public_forms_admin:index")}
+        )
+
+    def test_screens_are_off_djangos_admin(self):
+        self.assertEqual(reverse("public_forms_admin:index"), "/public_forms/admin/")
+        self.assertNotIn(FeedbackForm, admin.site._registry)
+        self.assertNotIn(FeedbackSubmission, admin.site._registry)
+        self.client.force_login(self.create_super_user(is_staff=True))
+        old = f"{reverse('admin:index')}public_forms/feedbackform/"
+        self.assertEqual(self.client.get(old).status_code, 404)
+        forms = self.client.get(reverse("public_forms_admin:public_forms_feedbackform_changelist"))
+        self.assertContains(forms, "Public Forms")
+
+    def test_signing_in_is_required(self):
+        index = reverse("public_forms_admin:index")
+        self.assertRedirects(
+            self.client.get(index), f"{reverse('public_forms_admin:login')}?next={index}", fetch_redirect_response=False
+        )
+
+    def test_this_apps_permission_opens_it_without_staff_access(self):
+        user = self.create_user_with_password(self.password, is_staff=False, is_superuser=False)
+        response = self.sign_in(user)
+        self.assertContains(response, "an account that can manage feedback forms")
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+        user.user_permissions.add(
+            Permission.objects.get(content_type__app_label="public_forms", codename="view_feedbacksubmission")
+        )
+        self.assertRedirects(self.sign_in(user), reverse("public_forms_admin:index"), fetch_redirect_response=False)
+        submissions = reverse("public_forms_admin:public_forms_feedbacksubmission_changelist")
+        self.assertEqual(self.client.get(submissions).status_code, 200)
+        # Only what the permissions allow: viewing submissions, not the forms.
+        forms = reverse("public_forms_admin:public_forms_feedbackform_changelist")
+        self.assertEqual(self.client.get(forms).status_code, 403)
+        # The rest of Django's admin stays closed.
+        self.assertRedirects(
+            self.client.get(reverse("admin:index")),
+            f"{reverse('admin:login')}?next={reverse('admin:index')}",
+            fetch_redirect_response=False,
+        )
+
+    @override_settings(DISABLE_RATELIMIT=False, PLUGIN_CONFIGS=plugin_configs(ADMIN_LOGIN_RATE_LIMIT="2/m"))
+    def test_sign_in_attempts_are_rate_limited(self):
+        cache.clear()  # the counts live in the cache
+        user = self.create_user_with_password(self.password, is_superuser=True)
+        for _attempt in range(2):
+            self.assertContains(self.sign_in(user, "wrong"), "an account that can manage feedback forms")
+        response = self.sign_in(user)  # the right password, but too soon
+        self.assertContains(response, "Too many sign-in attempts")
+        self.assertNotIn("_auth_user_id", self.client.session)

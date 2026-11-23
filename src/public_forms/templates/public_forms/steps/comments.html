@@ -33,17 +33,19 @@
       </div>
       {% endif %}
       {% if field.allow_comment %}
-      <textarea name="{{ field.comment_key }}" class="ta ta--short" rows="2" maxlength="2000" data-comment {% l10n_attr "placeholder" "open_why" %} {% l10n_attr "aria-label" "open_why" %}>{{ field.comment }}</textarea>
+      <textarea name="{{ field.comment_key }}" class="ta ta--short" rows="2" maxlength="{{ max_answer_length }}" data-comment {% l10n_attr "placeholder" "open_why" %} {% l10n_attr "aria-label" "open_why" %}>{{ field.comment }}</textarea>
       {% endif %}
-      <p class="err" data-error role="alert"{% if not field.error %} hidden{% endif %}>{% t "required_error" %}</p>
+      <p class="err" data-error role="alert"{% if field.error != "required" %} hidden{% endif %}>{% t "required_error" %}</p>
+      <p class="err" data-error-characters role="alert"{% if field.error != "characters" %} hidden{% endif %}>{% t "characters_error" chars=blocked_characters_shown %}</p>
     </fieldset>
     {% else %}
     <div class="stack stack--10{% if field.error %} has-error{% endif %}" data-question-key="{{ field.key }}" data-audience="{{ field.audience }}" data-required="{{ field.required|yesno:'1,0' }}"{% if not field.shown %} hidden{% endif %}>
       <label class="qlabel" for="q-{{ field.key }}">{% tr field.text %}</label>
       <span class="q-label" hidden>{% tr field.label %}</span>
       {% if field.hint %}<p class="lead-sm">{% tr field.hint %}</p>{% endif %}
-      <textarea id="q-{{ field.key }}" name="{{ field.key }}" class="ta" rows="3" maxlength="2000">{{ field.value }}</textarea>
-      <p class="err" data-error role="alert"{% if not field.error %} hidden{% endif %}>{% t "required_error" %}</p>
+      <textarea id="q-{{ field.key }}" name="{{ field.key }}" class="ta" rows="3" maxlength="{{ max_answer_length }}">{{ field.value }}</textarea>
+      <p class="err" data-error role="alert"{% if field.error != "required" %} hidden{% endif %}>{% t "required_error" %}</p>
+      <p class="err" data-error-characters role="alert"{% if field.error != "characters" %} hidden{% endif %}>{% t "characters_error" chars=blocked_characters_shown %}</p>
     </div>
     {% endif %}
     {% endfor %}

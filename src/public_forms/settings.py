@@ -119,6 +119,13 @@ DEFAULTS = {
     # The pages are public, so limit how often one IP address can submit
     # (django-ratelimit rate; Care's DISABLE_RATELIMIT turns it off).
     "SUBMIT_RATE_LIMIT": "60/m",
+    # Path of the admin for forms and submissions on the API host. It is
+    # its own site, apart from Django's /admin/ (see admin_site.py). Read
+    # when Care starts.
+    "ADMIN_URL": "public_forms/admin",
+    # Sign-in attempts allowed on that admin per IP address, and per
+    # username (django-ratelimit rate; Care's DISABLE_RATELIMIT turns it off).
+    "ADMIN_LOGIN_RATE_LIMIT": "5/m",
     # Load Figtree (care_fe's font) and Noto Sans Kannada from Google Fonts.
     # Turn off for screens without internet access (system fonts are used).
     "LOAD_WEB_FONTS": True,

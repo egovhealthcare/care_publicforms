@@ -352,6 +352,26 @@ class DoneTests(PageTestBase):
         response, _ = self.done_page(**{"from": "start"})
         self.assertContains(response, f'content="20;url={self.url()}"')
 
+    def test_back_cannot_return_to_it_later(self):
+        # The screen is shared: once the thank-you page has had its time, Back
+        # (or the browser's history) goes to the start, not to the previous
+        # patient's reference number.
+        response, submission = self.done_page()
+        self.assertIn("no-store", response["Cache-Control"])  # Back asks the server again
+        self.assertContains(response, "data-replace")  # "Start new" replaces it in the history
+        FeedbackSubmission.objects.filter(pk=submission.pk).update(
+            submitted_at=timezone.now() - timedelta(seconds=20 + 10 + 1)
+        )
+        self.assertRedirects(
+            self.client.get(self.url("done", "opd", ref=submission.reference_number)),
+            self.url("form", "opd"),
+            fetch_redirect_response=False,
+        )
+
+    def test_kiosk_pages_are_never_cached(self):
+        for response in (self.client.get(self.url()), self.client.get(self.url("form", "opd"))):
+            self.assertIn("no-store", response["Cache-Control"])
+
     def test_unknown_reference_goes_back_to_the_start(self):
         self.done_page()
         for form, ref in (("opd", "OPD-0"), ("ipd", FeedbackSubmission.objects.get().reference_number)):
@@ -597,6 +617,31 @@ class StepByStepWithoutJavaScriptTests(PageTestBase):
 
 
 class QuestionsJsonTests(PageTestBase):
+    def test_text_rules_apply_to_every_text(self):
+        problems = question_errors(
+            [
+                {
+                    "key": "clinic",
+                    "type": "choice",
+                    "text": {"en": "Clinic <b>visited</b>"},
+                    "short_text": {"en": "x" * 61},
+                    "hint": {TEST_LANGUAGE: "Pick {one}"},
+                    "options": [{"value": "a<b", "en": "ENT"}, {"value": "dental", "en": "Dental `x`" + "y" * 100}],
+                }
+            ]
+        )
+        self.assertEqual(
+            problems,
+            [
+                "“clinic”: text (en) can't contain < >.",
+                "“clinic”: short_text (en) is longer than 60 characters.",
+                f"“clinic”: hint ({TEST_LANGUAGE}) can't contain {{ }}.",
+                "“clinic”: option 1's value can't contain <.",
+                "“clinic”: option 2 (en) can't contain `.",
+                "“clinic”: option 2 (en) is longer than 100 characters.",
+            ],
+        )
+
     def test_default_forms_are_valid(self):
         for form in (self.opd, self.ipd):
             self.assertEqual(question_errors(form.questions), [])
@@ -680,4 +725,47 @@ class QuestionsJsonTests(PageTestBase):
                 "answer": "No",
                 "comment": "Long queue",
             },
+        )
+
+
+class TypedTextTests(PageTestBase):
+    """text_rules: typed text can't hold < > { } ` \\, drops control characters and has a length limit."""
+
+    def test_script_characters_are_refused(self):
+        response = self.submit(uhid=UHID, **self.answers(self.opd), improvement="<script>alert(1)</script>")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["errors"], {"improvement": "characters"})
+        self.assertEqual(response.context["current_step"], "comments")
+        self.assertContains(response, escape("Please don't use these characters: < > { } ` \\"))
+        self.assertContains(response, 'maxlength="2000"')
+        self.assertContains(response, 'data-blocked-characters="' + escape("<>{}`\\") + '"')
+        self.assertFalse(FeedbackSubmission.objects.exists())
+
+    def test_a_why_is_checked_too(self):
+        response = self.submit(uhid=UHID, **self.answers(self.opd), would_return="no", would_return__comment="{{7*7}}")
+        self.assertEqual(response.context["errors"], {"would_return": "characters"})
+        self.assertFalse(FeedbackSubmission.objects.exists())
+
+    def test_everyday_text_is_kept(self):
+        text = 'Doctor\'s room & lab (2nd floor) were clean; "thanks"! ಧನ್ಯವಾದಗಳು'
+        self.assertEqual(self.submit(uhid=UHID, **self.answers(self.opd), improvement=text).status_code, 302)
+        self.assertEqual(FeedbackSubmission.objects.get().answers["improvement"]["value"], text)
+
+    def test_control_characters_are_dropped_and_long_text_is_cut(self):
+        self.submit(
+            uhid=UHID,
+            **self.answers(self.opd),
+            improvement="Clean\x00 rooms\x07",
+            would_return="yes",
+            would_return__comment="a" * 2100,
+        )
+        answers = FeedbackSubmission.objects.get().answers
+        self.assertEqual(answers["improvement"]["value"], "Clean rooms")
+        self.assertEqual(len(answers["would_return"]["comment"]), 2000)
+
+    def test_without_javascript_the_step_shows_the_problem(self):
+        data = {"uhid": UHID, **self.answers(self.opd), "improvement": "a > b"}
+        response = self.client.post(self.url("form", "opd"), {"nav": "next", "step": "comments", **data})
+        self.assertEqual(
+            (response.context["current_step"], response.context["errors"]), ("comments", {"improvement": "characters"})
         )

@@ -14,6 +14,7 @@ from public_forms.questionnaire import (
     comment_key,
     parse_answer,
     rating_labels,
+    typed_blocked_characters,
 )
 from public_forms.settings import plugin_settings
 
@@ -65,14 +66,18 @@ def stored_answer(question, value, data) -> dict:
 def collect_answers(spec: FormSpec, data, identified: bool) -> tuple[dict, dict]:
     """
     ``({question_key: stored answer}, {question_key: problem})`` from a submitted
-    form, where problem is "required" (no answer) or "invalid" (a date in the
-    future or not a date). Questions not meant for this patient (guest-only
+    form, where problem is "required" (no answer), "invalid" (a date in the
+    future or not a date) or "characters" (typed text, or its "Why?", holds a
+    character text_rules blocks, such as < or >). Questions not meant for this patient (guest-only
     questions when a UHID was given, and the other way round) are ignored, as
     are invalid values of optional questions. Ratings always need an answer.
     """
     answers, missing = {}, {}
     for question in spec.questions:
         if not applies(question, identified):
+            continue
+        if typed_blocked_characters(question, data):
+            missing[question.key] = "characters"
             continue
         raw = data.get(question.key)
         value = parse_answer(question, raw)

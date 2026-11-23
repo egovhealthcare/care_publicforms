@@ -25,7 +25,8 @@
 {# hidden steps) with name="nav", and the server shows the next step (steps.py).     #}
 <form id="feedback" method="post" novalidate autocomplete="off"
       data-start-step="{{ current_step }}" data-start-card="{{ current_card }}"
-      data-uhid-length="{{ uhid_length }}" data-scan-mode="{{ scan_mode }}">
+      data-uhid-length="{{ uhid_length }}" data-scan-mode="{{ scan_mode }}"
+      data-blocked-characters="{{ blocked_characters }}">
   <input type="hidden" name="language" value="{{ lang }}" id="fLang">
   {% if came_from_chooser %}<input type="hidden" name="from" value="start">{% endif %}
   <input type="hidden" name="step" value="{{ current_step }}" id="fStep">

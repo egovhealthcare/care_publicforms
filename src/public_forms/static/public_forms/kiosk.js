@@ -14,6 +14,8 @@
      · questions shown only to guests or only to identified patients
      · instant language switching
      · an idle timer that starts over for the next patient
+     · a Back button that never brings back a previous patient's page
+     · typed text without the characters text_rules.py blocks (< > …)
    Plain ES5 so it runs on older TV browsers.
    ────────────────────────────────────────────────────────────────── */
 (function () {
@@ -85,6 +87,24 @@
     link.addEventListener('click', function (event) {
       event.preventDefault();
       setLanguage(link.getAttribute('data-set-lang'));
+    });
+  });
+
+  /* ── Back button ─────────────────────────────────────────────── */
+  // The screen is shared, so the browser's history must not bring back a
+  // previous patient's page. A page restored by Back (from the browser's
+  // back/forward cache) starts over for the next patient.
+  window.addEventListener('pageshow', function (event) {
+    var start = body.getAttribute('data-home-url');
+    if (event.persisted && start) window.location.replace(start);
+  });
+  // Links marked data-replace (the thank-you page's "Start new") replace
+  // the page in the history, so Back can't return to it. Its timed return
+  // (meta refresh) replaces the page too.
+  each(document.querySelectorAll('a[data-replace]'), function (link) {
+    link.addEventListener('click', function (event) {
+      event.preventDefault();
+      window.location.replace(link.href);
     });
   });
 
@@ -663,6 +683,51 @@
     if (question && hasAnswer(question)) showError(question, false);
   });
 
+  /* ── Typed text ──────────────────────────────────────────────── */
+  // Characters used to write markup or code (< > { } ` \, text_rules.py)
+  // can't be typed; the server refuses them too. They are dropped as they
+  // are typed or pasted, and the question says why for a few seconds.
+  var blocked = form.getAttribute('data-blocked-characters') || '';
+  var blockedTimers = {};
+
+  function withoutBlocked(text) {
+    var kept = '';
+    for (var i = 0; i < text.length; i++) {
+      if (blocked.indexOf(text.charAt(i)) === -1) kept += text.charAt(i);
+    }
+    return kept;
+  }
+
+  function sayBlocked(question) {
+    var message = question && question.querySelector('[data-error-characters]');
+    if (!message) return;
+    var key = question.getAttribute('data-question-key');
+    message.hidden = false;
+    clearTimeout(blockedTimers[key]);
+    blockedTimers[key] = setTimeout(function () { message.hidden = true; }, 6000);
+  }
+
+  function dropBlocked(field) {
+    var cleaned = withoutBlocked(field.value);
+    if (cleaned === field.value) return;
+    var caret = withoutBlocked(field.value.slice(0, field.selectionStart || 0)).length;
+    field.value = cleaned;
+    try { field.setSelectionRange(caret, caret); } catch (e) { /* not focused */ }
+    sayBlocked(closest(field, '[data-question-key]'));
+  }
+
+  if (blocked) {
+    form.addEventListener('input', function (event) {
+      // Wait for an input method (e.g. a Kannada keyboard) to finish a character.
+      if (event.target.tagName === 'TEXTAREA' && !event.isComposing) dropBlocked(event.target);
+    });
+    form.addEventListener('compositionend', function (event) {
+      if (event.target.tagName === 'TEXTAREA') dropBlocked(event.target);
+    });
+    // Text sent back by the server after a refused submit.
+    each(form.querySelectorAll('textarea'), dropBlocked);
+  }
+
   /* ── Review ──────────────────────────────────────────────────── */
   function answerHtml(question) {
     var checked = question.querySelector('input[type=radio]:checked');
@@ -753,7 +818,7 @@
         if (control.type === 'radio' || control.type === 'checkbox') control.checked = false;
         else control.value = '';
       });
-      each(step.querySelectorAll('[data-error]'), function (error) { error.hidden = true; });
+      each(step.querySelectorAll('[data-error], [data-error-characters]'), function (error) { error.hidden = true; });
       each(step.querySelectorAll('.has-error'), function (question) { question.classList.remove('has-error'); });
     });
     each(form.querySelectorAll('.banner'), function (banner) { banner.hidden = true; });
@@ -795,11 +860,6 @@
     if (!identified) uhidInput.value = '';
     if (returnField) returnField.value = '';
     submitting = true;
-  });
-
-  // Pages restored from the back/forward cache must accept input again.
-  window.addEventListener('pageshow', function (event) {
-    if (event.persisted) submitting = false;
   });
 
   /* ── Start ───────────────────────────────────────────────────── */

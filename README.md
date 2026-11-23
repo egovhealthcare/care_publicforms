@@ -59,9 +59,16 @@ validation) and the database tables, see
   server checks the whole page again on submit. If anything is wrong the page
   comes back at the first step with a problem, with every answer kept and
   the problem marked in red.
+- **No code in typed text.** No text anyone types, on the kiosk or in the
+  admin, can contain `<` `>` `{` `}` `` ` `` `\`, the characters used to
+  write markup or code. The kiosk drops them as they are typed or pasted
+  and says why; the server refuses them too. Invisible control characters
+  are dropped. Answers and each "Why?" hold up to 2000 characters. The
+  admin's text has its own limits (see [Forms and questions](#forms-and-questions)).
+  The admin's sign-in form is the exception: a password may use any character.
 - **Configurable forms.** Forms and questions live in the database and are
-  edited in the Django admin, with a text box per language. See
-  [Forms and questions](#forms-and-questions).
+  edited in the plugin's own admin, with a text box per language. See
+  [Forms and questions](#forms-and-questions) and [The admin](#the-admin).
 - **care_fe look.** Styled with care_fe's CareUI theme (Figtree, emerald
   primary, neutral greys, care_fe buttons/cards), using hex colours so older
   TV browsers render it.
@@ -82,6 +89,11 @@ validation) and the database tables, see
   the moment a page holds a patient's choices (their form, their language,
   or their answers sent back after a failed submit), so nothing is left on
   screen for the next patient; an untouched screen never reloads.
+- **Back doesn't bring anything back.** The pages are never cached, the
+  thank-you page shows only just after its submission, and its *Start new*
+  and timed return replace it in the browser's history. A page that the
+  browser's Back button restores starts over. The next patient never sees
+  the previous patient's answers or reference number.
 - **Accessible.** Every control has a name in the current language
   (screen readers, TV remotes), errors are announced, ratings are real
   radio groups, and a TV remote's OK button picks the focused answer.
@@ -150,8 +162,7 @@ set it as the browser's start page.
   `…/public_forms/type/ipd/form/`: the screen is **pinned to that form**,
   with no chooser. Idle reset and the thank-you page return to that form.
 
-The Django admin shows each form's link (**Public Forms → Feedback
-forms**, open a form). A screen can set its own options in the URL:
+The admin shows each form's link (**Feedback forms**, open a form). A screen can set its own options in the URL:
 
 | Parameter | What it does |
 | --- | --- |
@@ -190,9 +201,38 @@ starting language for the next patient.
   device (or ship the fonts yourself); otherwise system fonts are used and
   some scripts may not render.
 
+## The admin
+
+Forms and submissions are managed in the plugin's own admin, at
+`https://<care-api-host>/public_forms/admin/`. It is separate from Django's
+`/admin/` and holds only two screens: **Feedback forms** and **Feedback
+submissions**.
+
+- **Who can sign in:** Care superusers, and any active user given at least
+  one of this app's permissions. Those users don't need Django staff
+  access, so the rest of Django's admin stays closed to them. They sign in
+  with their Care username and password.
+- **Giving someone access:** a superuser adds the permissions to the user in
+  Django's admin (**Users →** the user **→ User permissions**, the ones
+  starting `public_forms |`), or to a group the user is in. Each screen
+  shows only what the permissions allow:
+
+  | To | Permissions |
+  | --- | --- |
+  | View and export submissions | `Can view feedback submission` |
+  | Edit forms | `Can view feedback form` and `Can change feedback form`; add `Can add` / `Can delete feedback form` to create or remove forms |
+
+- **Sign-in limit:** `ADMIN_LOGIN_RATE_LIMIT` attempts (5 a minute by
+  default) per IP address and per username; see
+  [Behind a proxy](#behind-a-proxy).
+- **Another path:** set `ADMIN_URL` to serve it somewhere else, e.g.
+  `"feedback-admin"` for `/feedback-admin/`. Like the kiosk pages, it is
+  served by the Care backend: open it on the API host, or route its path to
+  the backend.
+
 ## Forms and questions
 
-In the Django admin under **Public Forms → Feedback forms**:
+In [the admin](#the-admin) under **Feedback forms**:
 
 - **Form**: a code stored with every response and used in the URL (`opd`,
   `ipd`), the patient type (**OP** or **IP**), a title and description per
@@ -203,9 +243,13 @@ In the Django admin under **Public Forms → Feedback forms**:
   checks it exists and shows the facility's name.
   Switching that facility form off hides the code there; the shared form
   doesn't come back. Keep codes short: reference numbers use the first 12
-  characters (`OPD-20261118-4821`).
+  characters (`OPD-20261118-4821`). Titles hold up to 100 characters per
+  language, descriptions up to 300.
 - **Questions**: one JSON list on the form, in the order they are asked
   (the admin checks it on save and names the question in every error).
+  Per language, a question's `text` and `hint` hold up to 300 characters,
+  its `short_text` 60 and each option's label 100; an option's `value` up
+  to 64. No text can contain `<` `>` `{` `}` `` ` `` `\`.
   Fields left out take their default:
 
   ```json
@@ -295,7 +339,7 @@ as it was asked**:
 - `question` and `answer` are in English; the patient's language is in the
   `language` column. Questions not answered are left out.
 
-- **Django admin → Feedback submissions**: filter by OP/IP, form and
+- **[The admin](#the-admin) → Feedback submissions**: filter by OP/IP, form and
   language; search by reference number or UHID; each submission shows its
   answers with the questions as they were asked. **Export selected as CSV**
   gives one column per answer key (the `value`; a "Why?" in
@@ -330,16 +374,19 @@ Set in the plug's `configs={}` or as environment variables:
 | `IDLE_TIMEOUT_SECONDS` | `90` | Idle time before the screen warns, then starts over. |
 | `DONE_TIMEOUT_SECONDS` | `20` | How long the thank-you page stays up. |
 | `SUBMIT_RATE_LIMIT` | `"60/m"` | Submissions allowed per IP (django-ratelimit rate). A kiosk is one IP, so keep it well above a busy hour. |
+| `ADMIN_URL` | `"public_forms/admin"` | Path of [the admin](#the-admin) on the API host. Read when Care starts. |
+| `ADMIN_LOGIN_RATE_LIMIT` | `"5/m"` | Sign-in attempts allowed on the admin per IP address, and per username (django-ratelimit rate). `""` turns it off. |
 | `LOAD_WEB_FONTS` | `True` | Load Figtree (care_fe's font) and each offered language's `font` from Google Fonts. |
 
 ### Behind a proxy
 
-The submit limit counts per IP address using django-ratelimit, like Care's
-own login limit. Behind a reverse proxy or load balancer every request comes
-from the proxy's address, so set Django's `RATELIMIT_IP_META_KEY` in Care's
-settings to the header your proxy sets (for example `HTTP_X_REAL_IP`), or
-the kiosks share one limit. Set `SUBMIT_RATE_LIMIT` to `""` to turn the
-plugin's limit off; Care's `DISABLE_RATELIMIT` turns off all limits.
+The submit limit and the admin's sign-in limit count per IP address using
+django-ratelimit, like Care's own login limit. Behind a reverse proxy or
+load balancer every request comes from the proxy's address, so set Django's
+`RATELIMIT_IP_META_KEY` in Care's settings to the header your proxy sets
+(for example `HTTP_X_REAL_IP`), or the kiosks share one limit. Set
+`SUBMIT_RATE_LIMIT` or `ADMIN_LOGIN_RATE_LIMIT` to `""` to turn that limit
+off; Care's `DISABLE_RATELIMIT` turns off all limits.
 
 ## Translations
 
@@ -462,7 +509,7 @@ src/public_forms/
 ├── i18n.py           # loads the locale files; translate(), languages
 ├── locale/           # screen text, one JSON file per language (<code>.json)
 ├── checks.py         # `manage.py check` warnings for the language settings
-├── models.py, admin.py, settings.py
+├── models.py, admin.py, admin_site.py, text_rules.py, settings.py
 ├── templates/public_forms/   # form.html + steps/, choose, done, empty
 ├── static/public_forms/      # kiosk.css, kiosk.js, favicon.ico (Care's icon)
 └── tests/            # Django tests (pages, API, admin)

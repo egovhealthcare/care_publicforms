@@ -2,7 +2,7 @@
 {% load public_forms_tags %}
 
 {% block head_extra %}
-{# Back to the start for the next patient; works without JavaScript. #}
+{# Back to the start for the next patient, without JavaScript too; the browser replaces this page in its history. #}
 <meta http-equiv="refresh" content="{{ done_timeout }};url={{ home_url }}">
 {% endblock %}
 
@@ -19,6 +19,6 @@
     <span class="kicker">{% t "reference_number" %}</span>
     <span class="token">{{ reference }}</span>
   </div>
-  <a class="btn btn--outline btn--lg btn-wide" href="{{ home_url }}">{% t "restart" %}</a>
+  <a class="btn btn--outline btn--lg btn-wide" href="{{ home_url }}" data-replace>{% t "restart" %}</a>
 </section>
 {% endblock %}

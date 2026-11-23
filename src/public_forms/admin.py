@@ -14,9 +14,23 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 
+from public_forms.admin_site import site
 from public_forms.i18n import BASE_LANGUAGE, admin_languages, localize
 from public_forms.models import FeedbackForm, FeedbackSubmission
 from public_forms.questions import FIELDS, parse_questions
+from public_forms.text_rules import (
+    MAX_DESCRIPTION_LENGTH,
+    MAX_OPTION_LENGTH,
+    MAX_OPTION_VALUE_LENGTH,
+    MAX_QUESTION_LENGTH,
+    MAX_SHORT_TEXT_LENGTH,
+    MAX_TITLE_LENGTH,
+    spaced,
+    validate_typed_text,
+)
+
+# The screens are registered on the plugin's own admin site (admin_site.py),
+# not on Django's /admin/.
 
 # The admin's readonly-field callables only receive the object; this lets the
 # page link use the host the admin is being served from.
@@ -31,7 +45,8 @@ def localized_form(model, localized: dict, required: tuple = ()):
 
     ``localized`` maps field name → (label, rows). Fields in ``required``
     need their English text. There is a box for English and each offered
-    language; text in other languages is kept as it is.
+    language; text in other languages is kept as it is. Each box follows
+    text_rules: no blocked characters, and the field's length limit.
     """
     codes = admin_languages()
     attrs = {}
@@ -44,6 +59,8 @@ def localized_form(model, localized: dict, required: tuple = ()):
                 label=f"{label} ({meta['name']})",
                 required=name in required and code == BASE_LANGUAGE,
                 widget=widget,
+                max_length=TEXT_LIMITS.get(name),
+                validators=[validate_typed_text],
             )
 
     def __init__(self, *args, **kwargs):
@@ -67,11 +84,14 @@ def localized_form(model, localized: dict, required: tuple = ()):
         return cleaned
 
     def _update_errors(self, errors):
-        # Model validation reports the JSON field ("text"); show it on the English box.
+        # Model validation reports the JSON field ("text"); show it on the English box,
+        # unless that box already has its own error (e.g. a blocked character).
         if hasattr(errors, "error_dict"):
             for name in localized:
                 if name in errors.error_dict:
-                    errors.error_dict[f"{name}__{BASE_LANGUAGE}"] = errors.error_dict.pop(name)
+                    moved = errors.error_dict.pop(name)
+                    if f"{name}__{BASE_LANGUAGE}" not in self._errors:
+                        errors.error_dict[f"{name}__{BASE_LANGUAGE}"] = moved
         forms.ModelForm._update_errors(self, errors)
 
     attrs.update(__init__=__init__, clean=clean, _update_errors=_update_errors)
@@ -93,7 +113,7 @@ class QuestionsJSONField(forms.JSONField):
 
 
 QUESTIONS_HELP = format_html(
-    "{}<br><code>{}</code><ul>{}</ul>",
+    "{}<br><code>{}</code><ul>{}</ul>{}",
     _(
         "A list of questions in the order they are asked. Fields with their default can be left out. "
         "Submissions keep their own copy of each question, so editing, reordering or removing a question "
@@ -109,10 +129,22 @@ QUESTIONS_HELP = format_html(
             for name, (default, text) in FIELDS.items()
         ),
     ),
+    _(
+        "No text can contain %(characters)s. Limits per language: text and hint %(question)s characters, "
+        "short_text %(short)s, each option's label %(option)s; an option's value %(value)s."
+    )
+    % {
+        "characters": spaced(),
+        "question": MAX_QUESTION_LENGTH,
+        "short": MAX_SHORT_TEXT_LENGTH,
+        "option": MAX_OPTION_LENGTH,
+        "value": MAX_OPTION_VALUE_LENGTH,
+    },
 )
 
 
 TEXT_FIELDS = {"title": (_("Title"), 1), "description": (_("Description"), 1)}
+TEXT_LIMITS = {"title": MAX_TITLE_LENGTH, "description": MAX_DESCRIPTION_LENGTH}
 
 
 def feedback_form_form() -> type:
@@ -145,7 +177,7 @@ def _feedback_form_form(codes: tuple) -> type:
 
 
 # ── Forms ─────────────────────────────────────────────────────────────
-@admin.register(FeedbackForm)
+@admin.register(FeedbackForm, site=site)
 class FeedbackFormAdmin(admin.ModelAdmin):
     list_display = ("form_title", "code", "patient_type", "facility", "is_active", "question_count", "order")
     list_filter = ("patient_type", "is_active")
@@ -252,7 +284,7 @@ def with_facility_name(queryset):
     )
 
 
-@admin.register(FeedbackSubmission)
+@admin.register(FeedbackSubmission, site=site)
 class FeedbackSubmissionAdmin(admin.ModelAdmin):
     list_display = ("reference_number", "facility", "form_code", "patient_type", "uhid", "submitted_at")
     list_filter = ("form__patient_type", "form", "language")

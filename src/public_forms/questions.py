@@ -27,6 +27,18 @@ from dataclasses import dataclass, field
 
 from public_forms.i18n import BASE_LANGUAGE
 from public_forms.models import Audience, QuestionType
+from public_forms.text_rules import (
+    MAX_OPTION_LENGTH,
+    MAX_OPTION_VALUE_LENGTH,
+    MAX_QUESTION_LENGTH,
+    MAX_SHORT_TEXT_LENGTH,
+    blocked_in,
+    spaced,
+    without_control_characters,
+)
+
+# Length limits of a question's text per language, in FIELDS order.
+TEXT_LIMITS = {"text": MAX_QUESTION_LENGTH, "short_text": MAX_SHORT_TEXT_LENGTH, "hint": MAX_QUESTION_LENGTH}
 
 KEY_PATTERN = re.compile(r"[a-z][a-z0-9_]{0,63}")
 STEPS = ("details", "open")  # where a choice is asked
@@ -87,6 +99,20 @@ def _is_text(value, required=False) -> bool:
     return bool(value.get(BASE_LANGUAGE, "").strip()) if required else True
 
 
+def _typed_text_errors(name: str, what: str, text, max_length: int) -> list[str]:
+    """text_rules for one piece of a question's text: no blocked or control characters, and its length limit."""
+    if not isinstance(text, str):
+        return []
+    errors = []
+    if found := blocked_in(text):
+        errors.append(f"{name}: {what} can't contain {spaced(found)}.")
+    if without_control_characters(text) != text:
+        errors.append(f"{name}: {what} has invisible control characters; remove them.")
+    if len(text) > max_length:
+        errors.append(f"{name}: {what} is longer than {max_length} characters.")
+    return errors
+
+
 def question_errors(raw) -> list[str]:
     """Problems in a form's questions JSON, each naming the question; empty when valid."""
     if not isinstance(raw, list):
@@ -116,6 +142,10 @@ def question_errors(raw) -> list[str]:
         for text_field in ("short_text", "hint"):
             if text_field in item and not _is_text(item[text_field]):
                 errors.append(f'{name}: {text_field} must be text per language, e.g. {{"en": "…"}}.')
+        for text_field, max_length in TEXT_LIMITS.items():
+            if isinstance(item.get(text_field), dict):
+                for code, text in item[text_field].items():
+                    errors += _typed_text_errors(name, f"{text_field} ({code})", text, max_length)
         for flag in ("required", "allow_no_comment", "allow_comment", "active"):
             if flag in item and not isinstance(item[flag], bool):
                 errors.append(f"{name}: {flag} must be true or false.")
@@ -123,7 +153,8 @@ def question_errors(raw) -> list[str]:
             errors.append(f"{name}: audience must be one of {', '.join(Audience.values)}.")
 
         options = item.get("options", [])
-        if not isinstance(options, list) or not all(isinstance(o, dict) for o in options):
+        options_listed = isinstance(options, list) and all(isinstance(o, dict) for o in options)
+        if not options_listed:
             errors.append(f"{name}: options must be a list of objects.")
         elif kind == QuestionType.CHOICE:
             values = [o.get("value") for o in options]
@@ -140,6 +171,12 @@ def question_errors(raw) -> list[str]:
                 errors.append(f"{name}: give exactly five labels with English text, Poor → Excellent, or none.")
         elif kind in (QuestionType.DATE, QuestionType.TEXT) and options:
             errors.append(f"{name}: a {kind} question has no options.")
+        for number, option in enumerate(options if options_listed else [], start=1):
+            for code, text in option.items():
+                if code == "value":
+                    errors += _typed_text_errors(name, f"option {number}'s value", text, MAX_OPTION_VALUE_LENGTH)
+                else:
+                    errors += _typed_text_errors(name, f"option {number} ({code})", text, MAX_OPTION_LENGTH)
         if "step" in item and (kind != QuestionType.CHOICE or item["step"] not in STEPS):
             errors.append(f"{name}: step is for choices only: {' or '.join(STEPS)}.")
         if item.get("allow_comment") and kind != QuestionType.CHOICE:
