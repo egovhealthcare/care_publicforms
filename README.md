@@ -183,6 +183,10 @@ removes the shared forms. Seed the other facilities afterwards.
 
 ### Writing a questionnaire
 
+For a step-by-step guide written for non-developers, with every question
+type, how pages are formed and common recipes, see
+[docs/questionnaire-guide.md](docs/questionnaire-guide.md).
+
 A small but complete questionnaire:
 
 ```json
