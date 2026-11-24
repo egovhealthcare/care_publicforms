@@ -141,8 +141,12 @@ def choice_labels(question) -> dict:
 
 
 def clean_text(raw) -> str | None:
-    """Typed text as it is saved: without control characters, trimmed, at most MAX_ANSWER_LENGTH."""
-    text = without_control_characters(str(raw or "")).strip()[:MAX_ANSWER_LENGTH]
+    """
+    Typed text as it is saved: without control characters, trimmed, at most
+    MAX_ANSWER_LENGTH. Line breaks are kept, as "\n" (browsers post "\r\n").
+    """
+    text = without_control_characters(str(raw or "")).replace("\r\n", "\n").replace("\r", "\n")
+    text = text.strip()[:MAX_ANSWER_LENGTH]
     return text or None
 
 

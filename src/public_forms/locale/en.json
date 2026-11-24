@@ -74,6 +74,7 @@
     "confirm_reset_yes": "Yes, clear them",
     "confirm_keep": "No, keep my answers",
     "idle_timer": "Time left before this screen starts over",
+    "scroll_down": "Scroll down",
     "idle_title": "Are you still there?",
     "idle_body": "Tap anywhere to continue. Starting over in {n} seconds."
   },

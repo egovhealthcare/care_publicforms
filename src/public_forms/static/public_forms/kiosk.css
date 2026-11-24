@@ -524,6 +524,23 @@ input:checked + .rate--v0 .rate-face{background:#737373}
 .ta--short{min-height:0}
 .ta--date{max-width:16rem;min-height:3.25rem;font-feature-settings:'tnum';font-weight:500}
 .ta:focus{border-color:var(--ring);box-shadow:var(--focus-ring)}
+/* With JavaScript a text box grows with what is typed (kiosk.js), so it isn't dragged to size. */
+.js .ta{resize:none}
+
+/* ── Down arrow ─────────────────────────────────────────────────── */
+/* A screen taller than the window: a tap scrolls to the bottom (kiosk.js).
+   It floats above the pinned main button, in the middle of the column. */
+.scroll-down{
+  position:fixed;left:50%;bottom:6.25rem;z-index:3;
+  width:3.25rem;height:3.25rem;margin-left:-1.625rem;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--border);border-radius:var(--radius-pill);
+  background:var(--background);color:var(--primary);cursor:pointer;
+  box-shadow:0 .375rem 1.25rem rgba(15,23,42,.16);
+  animation:rise .25s var(--ease) both;
+}
+.scroll-down svg{width:1.625rem;height:1.625rem}
+.scroll-down:active{background:var(--soft-background)}
 
 /* ── Review ─────────────────────────────────────────────────────── */
 .rows{border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;align-self:start;background:var(--background)}

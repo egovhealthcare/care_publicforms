@@ -108,6 +108,7 @@ test("without JavaScript the kiosk still goes step by step", async ({ page }) =>
   for (let i = 0; i < 10; i++) await answerCard(page, 4);
 
   await expectStep(page, "screen-3");
+  await expect(page.locator("#scrollDown")).toBeHidden(); // the down arrow needs JavaScript
   await activeStep(page).locator("label.yn", { hasText: "Yes" }).click();
   await activeStep(page).getByLabel("Why? (optional)").fill("Friendly staff");
   await page.getByRole("button", { name: "Review answers" }).click();

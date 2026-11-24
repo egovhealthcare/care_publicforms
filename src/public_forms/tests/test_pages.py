@@ -1012,6 +1012,25 @@ class QuestionsJsonTests(PageTestBase):
         self.assertEqual(answers["registration_wait"]["question"], "Waiting time at the registration counter")
         self.assertEqual(answers["staff_behaviour"]["question"], "Behaviour and attitude of the hospital staff")
 
+    def test_text_boxes_are_small_and_keep_line_breaks(self):
+        # Two lines after the ratings; one before them, and for a "Why?".
+        page = self.client.get(self.url("form", "opd"))
+        self.assertContains(page, '<textarea name="improvement" class="ta" rows="2"')
+        self.assertContains(page, '<textarea name="would_return__comment" class="ta ta--short" rows="1"')
+        self.add_question(self.opd, "doctor_name", page=0, type=QuestionType.TEXT)
+        page = self.client.get(self.url("form", "opd"))
+        self.assertContains(page, '<textarea name="doctor_name" class="ta ta--short" rows="1"')
+
+        # Line breaks are kept, saved as "\n" whatever the browser posted; the ends are trimmed.
+        typed = {
+            "improvement": "  Shorter queues.\r\nMore seats.\r\n\r\nThanks  \r\n",
+            "would_return__comment": "Kind\rstaff",
+        }
+        self.submit(uhid=UHID, would_return="yes", **typed, **self.answers(self.opd))
+        answers = FeedbackSubmission.objects.get().answers
+        self.assertEqual(answers["improvement"]["value"], "Shorter queues.\nMore seats.\n\nThanks")
+        self.assertEqual(answers["would_return"]["comment"], "Kind\nstaff")
+
     def test_a_form_with_feedback_cant_be_deleted(self):
         self.submit(uhid=UHID, **self.answers(self.opd))
         with self.assertRaises(ProtectedError):

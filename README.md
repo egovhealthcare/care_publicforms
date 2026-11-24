@@ -303,8 +303,10 @@ A question:
 | `active` | `true` | `false` keeps the question without asking it |
 
 A **yes/no** question is a `choice` with the options `yes` and `no`. A `date`
-can't be in the future. A `text` box is short before the ratings and large
-after them.
+can't be in the future. A `text` box is one line before the ratings and two
+after them; with JavaScript it grows as the patient types, up to eight lines.
+Typed answers keep their line breaks (saved as `\n`), and the admin shows
+them.
 
 ## Viewing feedback
 

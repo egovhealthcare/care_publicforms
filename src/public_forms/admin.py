@@ -9,6 +9,7 @@ from django.contrib import admin
 from django.db.models import OuterRef, Subquery
 from django.forms.fields import InvalidJSONInput
 from django.http import StreamingHttpResponse
+from django.template.defaultfilters import linebreaksbr
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
@@ -388,7 +389,8 @@ class FeedbackSubmissionAdmin(admin.ModelAdmin):
                 shown = _("Yes") if shown else _("No")
             if entry.get("comment"):
                 shown = f"{shown} ({entry['comment']})"
-            rows.append((entry.get("question") or key, shown))
+            # Typed answers keep their line breaks.
+            rows.append((entry.get("question") or key, linebreaksbr(str(shown))))
         return format_html(
             "<table>{}</table>", format_html_join("", "<tr><td>{}</td><td><strong>{}</strong></td></tr>", rows)
         )

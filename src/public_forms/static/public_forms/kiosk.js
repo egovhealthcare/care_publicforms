@@ -440,6 +440,8 @@
     // An answer opened from the review returns to it: its step shows no Back (kiosk.css).
     form.classList.toggle('is-editing', !!returnTo && returnTo[0] === 'review');
     window.scrollTo(0, 0);
+    each(steps[name].querySelectorAll('textarea'), fitTextBox);
+    scheduleScrollHint();
     // Keep TV-remote focus inside the visible step.
     if (document.activeElement && document.activeElement !== body && (name !== 'questions' || cards[currentCard])) {
       var target = name === 'questions'
@@ -1033,6 +1035,66 @@
     event.returnValue = ''; // older browsers ask only when this is set
     return '';
   });
+
+  /* ── Text boxes ──────────────────────────────────────────────── */
+  // A text box starts one or two lines tall (steps/screen.html) and grows
+  // with what is typed, up to TEXT_BOX_LINES lines; after that it scrolls.
+  var TEXT_BOX_LINES = 8;
+  function fitTextBox(box) {
+    if (!box.offsetHeight) return; // on a hidden step: fitted when it shows
+    var style = window.getComputedStyle(box);
+    var line = parseFloat(style.lineHeight) || 24;
+    var padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    var border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+    var most = TEXT_BOX_LINES * line + padding + border;
+    box.style.height = 'auto'; // back to its rows, to measure the text
+    var wanted = box.scrollHeight + border;
+    box.style.height = Math.min(wanted, most) + 'px';
+    box.style.overflowY = wanted > most ? 'auto' : 'hidden';
+  }
+  form.addEventListener('input', function (event) {
+    if (event.target.tagName === 'TEXTAREA') fitTextBox(event.target);
+  });
+
+  /* ── Down arrow ──────────────────────────────────────────────── */
+  // A screen taller than the window shows a down arrow while there is more
+  // below (more than two lines' worth); a tap scrolls to the bottom, where
+  // the main button is. It steps aside while the patient types in a text
+  // box, which it could cover.
+  var scrollDown = $('scrollDown');
+  var hintPending = false;
+  function bottomOffset() {
+    return Math.max(body.scrollHeight, root.scrollHeight) - window.innerHeight;
+  }
+  function updateScrollHint() {
+    hintPending = false;
+    if (!scrollDown) return;
+    var rem = parseFloat(window.getComputedStyle(root).fontSize) || 16;
+    var below = bottomOffset() - (window.pageYOffset || root.scrollTop || 0);
+    var typing = !!document.activeElement && document.activeElement.tagName === 'TEXTAREA';
+    scrollDown.hidden = typing || below < 2 * rem;
+  }
+  function scheduleScrollHint() {
+    if (hintPending) return;
+    hintPending = true;
+    (window.requestAnimationFrame || function (fn) { setTimeout(fn, 16); })(updateScrollHint);
+  }
+  if (scrollDown) {
+    // A tap doesn't take the focus: the arrow hides at the bottom, and the
+    // focus would go with it.
+    scrollDown.addEventListener('mousedown', function (event) { event.preventDefault(); });
+    scrollDown.addEventListener('click', function () {
+      var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!still && 'scrollBehavior' in root.style) window.scrollTo({ top: bottomOffset(), behavior: 'smooth' });
+      else window.scrollTo(0, bottomOffset());
+    });
+    each(['scroll', 'resize', 'load'], function (name) { window.addEventListener(name, scheduleScrollHint); });
+    // Anything that can change the screen's height or the focus: answers,
+    // errors, a "Why?" box, the language. Checked after the page handled it.
+    each(['click', 'input', 'change', 'focusin', 'focusout', 'keyup'], function (name) {
+      document.addEventListener(name, function () { setTimeout(scheduleScrollHint, 0); }, true);
+    });
+  }
 
   /* ── Start ───────────────────────────────────────────────────── */
   checkCamera();

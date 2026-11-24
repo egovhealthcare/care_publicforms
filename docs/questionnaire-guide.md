@@ -318,8 +318,10 @@ A date box with a calendar. The date can't be in the future.
 
 ### Text: type in your own words
 
-A box for free text, up to 2,000 characters. Before the ratings it is a small
-box. After the ratings it is larger.
+A box for free text, up to 2,000 characters. It starts small: one line
+before the ratings, two lines after them. As the patient types it grows, up
+to eight lines, and then scrolls. The patient can start new lines; the
+answer keeps them, and the admin shows them.
 
 ```json
 {"key": "suggestions", "type": "text",

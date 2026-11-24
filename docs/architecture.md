@@ -333,6 +333,8 @@ stateDiagram-v2
 | Camera QR | `BarcodeDetector` on a `getUserMedia` stream, polled every 350 ms; stopped when leaving the step or hiding the page. The scan option is hidden while scanning can't work: no `BarcodeDetector` (or no `qr_code` format), no camera (`enumerateDevices`, rechecked on `devicechange`), or camera permission `denied` (`permissions.query`, rechecked on change). If opening the camera fails, the option is hidden and the patient goes to the UHID step. |
 | Language | Sets `html[data-lang]`, swaps `data-l10n-*` attributes, updates the hidden `language` field and rewrites `a[data-carry-lang]` links with `?language=`. |
 | Layout | One centred column; the root font size follows the viewport (`1.66vh` on TVs, `3.125vw` on tall portrait screens, 16 px on phones), so the same layout scales instead of re-flowing. |
+| Down arrow | A screen taller than the window shows a round down arrow (`#scrollDown`) above the pinned main button while more than two lines' worth is below it; a tap scrolls to the bottom (smoothly, unless reduced motion is asked for). It hides while a text box has the focus, and without JavaScript (it can't know the screen scrolls). Rechecked on scroll, resize, step changes and after any click or input. |
+| Text boxes | One line before the ratings and for a "Why?", two after them (`rows`); `fitTextBox()` grows a box with what is typed, up to eight lines, then it scrolls. Without JavaScript they keep their rows and scroll. |
 
 ## 6. Languages
 
@@ -604,7 +606,7 @@ in English (`stored_answer()`):
 | --- | --- | --- |
 | `question` | always | The question text (English) at submit time |
 | `type` | always | The question type, so answers can be summarised after the question is removed |
-| `value` | always | Rating `0` to `5` (`0` = "No comments", left out of averages); the choice's `value`; `YYYY-MM-DD` (not after the submit date); or text as typed (trimmed, ≤ 2000 characters) |
+| `value` | always | Rating `0` to `5` (`0` = "No comments", left out of averages); the choice's `value`; `YYYY-MM-DD` (not after the submit date); or text as typed (trimmed, ≤ 2000 characters, line breaks kept as `\n`) |
 | `answer` | ratings and choices | The English label the patient picked |
 | `comment` | choices with `allow_comment`, when given | The "Why?" text |
 

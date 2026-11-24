@@ -18,6 +18,7 @@ import {
   opdToReview,
   pickDetail,
   rate,
+  rateAll,
   requiredError,
   reviewRow,
   shown,
@@ -175,4 +176,52 @@ test("the thank-you page returns by itself and leaves no way Back to it", async 
   await expectStep(page, "identify");
   await page.goBack();
   await expect(page).not.toHaveURL(/\/done\//);
+});
+
+test("a screen taller than the window shows a down arrow to its bottom", async ({ page }) => {
+  const arrow = page.locator("#scrollDown");
+  await page.goto(formUrl("opd"));
+  await enterUhid(page);
+  await expectStep(page, "screen-1");
+  await expect(arrow).toBeHidden(); // the screen fits the window
+
+  // A small window: "In your own words" scrolls.
+  await page.setViewportSize({ width: 420, height: 600 });
+  await pickDetail(page, "clinic", "ENT");
+  await next(page, "screen-1");
+  await rateAll(page);
+  await expectStep(page, "screen-3");
+  await expect(arrow).toBeVisible();
+  await arrow.click();
+  await expect
+    .poll(() => page.evaluate(() => Math.ceil(window.scrollY + window.innerHeight) >= document.documentElement.scrollHeight - 1))
+    .toBe(true);
+  await expect(arrow).toBeHidden(); // nothing more below
+  await expect(activeStep(page).locator('[data-action="screen-next"]')).toBeInViewport();
+
+  // Back at the top it shows again, and steps aside while the patient types.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(arrow).toBeVisible();
+  await activeStep(page).locator('textarea[name="improvement"]').focus();
+  await expect(arrow).toBeHidden();
+});
+
+test("a text box starts small and grows with what is typed, then scrolls", async ({ page }) => {
+  await opdToOpenQuestions(page);
+  const box = activeStep(page).locator('textarea[name="improvement"]');
+  await expect(box).toHaveAttribute("rows", "2");
+  const height = async () => (await box.boundingBox())!.height;
+  const lines = (n: number) => Array.from({ length: n }, (_, i) => `Line ${i + 1}`).join("\n");
+  const empty = await height();
+  await box.fill(lines(4));
+  const four = await height();
+  expect(four).toBeGreaterThan(empty * 1.5);
+  await box.fill(lines(12));
+  const most = await height();
+  expect(most).toBeGreaterThan(four);
+  await box.fill(lines(30)); // no taller: it scrolls instead
+  expect(await height()).toBeCloseTo(most, 0);
+  expect(await box.evaluate((el) => getComputedStyle(el).overflowY)).toBe("auto");
+  await box.fill("");
+  expect(await height()).toBeCloseTo(empty, 0);
 });

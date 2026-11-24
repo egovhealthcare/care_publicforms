@@ -306,6 +306,18 @@ class AdminTests(CareAPITestBase):
         self.assertContains(response, "4 · Very good")
         self.assertContains(response, "Yes (Kind staff)")
 
+    def test_submission_page_keeps_line_breaks_and_escapes(self):
+        submission = make_submission(
+            self.facility,
+            "OPD-1",
+            "opd",
+            {"clinic": "ent", "improvement": "Shorter queues.\nMore seats & <b>chairs</b>.\n\nThanks"},
+        )
+        response = self.client.get(
+            reverse("public_forms_admin:public_forms_feedbacksubmission_change", args=[submission.pk])
+        )
+        self.assertContains(response, "Shorter queues.<br>More seats &amp; &lt;b&gt;chairs&lt;/b&gt;.<br><br>Thanks")
+
     def test_submissions_are_read_only(self):
         changelist = reverse("public_forms_admin:public_forms_feedbacksubmission_changelist")
         self.assertEqual(self.client.get(changelist).status_code, 200)

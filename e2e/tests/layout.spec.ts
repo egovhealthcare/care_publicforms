@@ -19,11 +19,11 @@ async function checkLayout(page: Page, testInfo: TestInfo, name: string, { fits 
     };
     const describe = (el: Element) =>
       `${el.tagName.toLowerCase()}.${[...el.classList].join(".")} "${(el.textContent || "").trim().slice(0, 30)}"`;
-    const clipped = [...document.querySelectorAll(".btn, .opt, .chip-face, .rate, .row, .navbtn, .langbtn, .ynbtn, .key")]
+    const clipped = [...document.querySelectorAll(".btn, .opt, .chip-face, .rate, .row, .navbtn, .langbtn, .ynbtn, .key, .scroll-down")]
       .filter(visible)
       .filter((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
       .map(describe);
-    const small = [...document.querySelectorAll(".btn, .opt, .chip-face, .rate, .row, .navbtn, .langbtn, .ynbtn, .key")]
+    const small = [...document.querySelectorAll(".btn, .opt, .chip-face, .rate, .row, .navbtn, .langbtn, .ynbtn, .key, .scroll-down")]
       .filter(visible)
       .filter((el) => {
         const r = el.getBoundingClientRect();
