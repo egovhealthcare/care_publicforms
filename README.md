@@ -47,10 +47,12 @@ the design.
   are announced, and a TV remote's arrows and OK work.
 
 Without JavaScript the kiosk still works, with these differences: each step
-reloads the page; there is no QR camera or on-screen keypad (the UHID is
-typed, so the screen needs a keyboard or a keyboard-mode scanner); Home and
-Reset don't ask first; and since the page can't see touches, it starts over
-3 minutes after each page loads, counting down in the header.
+reloads the page (Home and Reset still ask first, on a reloaded page); there
+is no QR camera or on-screen keypad (the UHID is typed, so the screen needs a
+keyboard or a keyboard-mode scanner); since the page can't see touches, it
+starts over 3 minutes after each page loads, counting down in the header;
+and Back after it starts over shows the browser's "Confirm form
+resubmission" page rather than the previous answers.
 
 ## Installation
 

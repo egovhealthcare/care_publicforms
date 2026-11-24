@@ -71,6 +71,7 @@ test("an identified patient answers everything and gets a reference", async ({ p
   await reviewRow(page, "Registration wait").click();
   await expect(activeCard(page)).toHaveAttribute("data-question-key", "registration_wait");
   await expect(activeCard(page).getByRole("button", { name: "Back" })).toBeHidden();
+  await expect(activeCard(page).locator('[data-nav="next"]')).toHaveText("Review answers", shown);
   await rate(page, 2);
   await expectStep(page, "review");
   await expect(reviewRow(page, "Registration wait")).toContainText("10-30 mins");

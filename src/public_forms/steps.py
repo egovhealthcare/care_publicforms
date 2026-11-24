@@ -20,6 +20,11 @@ steps come before them.
                           patient was, via anything that now needs an answer
   next / back             the next / previous unit; ``next`` checks this one first
   edit:<key>              from the review, to that question, then back to the review
+  ask:home / ask:reset    Home / Reset in the header: the same place, with the card that asks
+                          first (as kiosk.js shows it); Reset with nothing to clear just resets
+  reset                   that card's "Yes" for Reset: clear what Reset clears (below) and go
+                          to the first rating; the UHID and the details before it stay
+  stay                    that card's "No, keep my answers": the same place
   lang:<code>             same step, in that language
   default                 Enter: continue from the UHID step, ``next`` on a question step
   submit                  save (handled by the view)
@@ -69,6 +74,7 @@ class Place:
     step: str = "identify"
     card: int = 0
     return_to: tuple[str, int] | None = None
+    asking: str = ""  # "home" or "reset": that card is open, asking first (without JavaScript)
 
     @property
     def unit(self) -> tuple[str, int]:
@@ -78,6 +84,21 @@ class Place:
     def returning(self) -> bool:
         """Changing an answer from the review: the step leads back there (and shows no Back)."""
         return self.return_to == REVIEW
+
+
+def reset_questions(spec: FormSpec) -> list:
+    """What Reset clears: the ratings and the screens after them (those that show Home / Reset)."""
+    return [q for screen in spec.screens if screen.is_ratings or screen.style == "open" for q in screen.questions]
+
+
+def entered(data, questions) -> bool:
+    """Any of these questions answered, or a "Why?" typed for one (blank space doesn't count)."""
+    return any(str(data.get(key) or "").strip() for q in questions for key in (q.key, comment_key(q)))
+
+
+def anything_entered(spec: FormSpec, data) -> bool:
+    """Something Home would drop: a UHID or any answer (as kiosk.js's anythingEntered)."""
+    return bool(str(data.get("uhid") or "").strip()) or entered(data, spec.questions)
 
 
 def unit_value(unit: tuple[str, int] | None) -> str:
@@ -215,8 +236,20 @@ def navigate(spec: FormSpec, data, nav: str, identified: bool, uhid_valid: bool)
         unit = flow_units(spec, identified)[0]
         return Place(unit[0], unit[1]), {}, identified
 
+    if nav == "ask:reset" and not entered(data, reset_questions(spec)):
+        nav = "reset"  # nothing to lose
+    if nav in ("ask:home", "ask:reset"):
+        return Place(here.step, here.card, here.return_to, asking=nav[len("ask:") :]), {}, identified
+
     units = flow_units(spec, identified)
     position = units.index(here.unit) if here.unit in units else -1
+
+    if nav == "reset":
+        for question in reset_questions(spec):
+            for key in (question.key, comment_key(question)):
+                data.pop(key, None)
+        unit = next((unit for unit in units if shows_home_reset(spec, unit[0])), REVIEW)
+        return Place(unit[0], unit[1]), {}, identified
 
     if nav == "next":
         if problems := unit_problems(spec, data, identified, here.unit):

@@ -197,7 +197,10 @@ button.langbtn{border:0;font-family:inherit;line-height:inherit;cursor:pointer;-
   border:1px solid var(--primary-100);
   transition:transform .24s var(--ease), background .2s;
 }
-.navbtn + .navbtn{margin-left:.5rem}
+/* Each is a link with JavaScript and a button without it (form.html): spaced on the right,
+   so the hidden one of each pair doesn't add space. */
+.navbtn{margin-right:.5rem}
+button.navbtn{font-family:inherit;line-height:inherit;cursor:pointer}
 .navbtn svg{width:1.1875rem;height:1.1875rem;margin-right:.5rem;flex:none;color:var(--primary-600)}
 .navbtn:active{transform:translateY(1px)}
 .navbtn--reset{background:var(--destructive-soft);color:var(--destructive-text);border-color:var(--destructive-border)}
@@ -663,5 +666,8 @@ button.row::after{
 /* Changing an answer from the review: the step offers only the way back to the
    review, not "Back" to the previous question, which would be confusing. */
 .is-editing [data-edit-hidden]{display:none !important}
+/* Changing an answer from the review: the main button goes back to it, and says so. */
+.when-editing,.is-editing .unless-editing{display:none}
+.is-editing .when-editing{display:inline}
 .js .no-js-only{display:none !important}
 .no-js .js-only{display:none !important}

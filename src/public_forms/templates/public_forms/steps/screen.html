@@ -72,11 +72,11 @@
   {% if screen.open %}
   <div class="area-nav navrow">
     <button type="submit" name="nav" value="back" class="btn btn--ghost btn--md btn-back" data-action="screen-back" data-edit-hidden>{% t "back" %}</button>
-    <button type="submit" name="nav" value="next" class="btn btn--primary btn--lg btn-cta btn-cta--grow" data-action="screen-next">{% t screen.next_label %}</button>
+    <button type="submit" name="nav" value="next" class="btn btn--primary btn--lg btn-cta btn-cta--grow" data-action="screen-next"><span class="when-editing">{% t "review_answers" %}</span><span class="unless-editing">{% t screen.next_label %}</span></button>
   </div>
   {% else %}
   <div class="area-nav stack stack--10">
-    <button type="submit" name="nav" value="next" class="btn btn--primary btn--lg btn-cta" data-action="screen-next">{% t screen.next_label %}</button>
+    <button type="submit" name="nav" value="next" class="btn btn--primary btn--lg btn-cta" data-action="screen-next"><span class="when-editing">{% t "review_answers" %}</span><span class="unless-editing">{% t screen.next_label %}</span></button>
     <button type="submit" name="nav" value="back" class="btn btn--ghost btn--md btn-quiet" data-action="screen-back" data-edit-hidden>{% t "back" %}</button>
   </div>
   {% endif %}

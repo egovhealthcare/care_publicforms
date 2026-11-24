@@ -191,8 +191,8 @@ sequenceDiagram
         V->>DB: INSERT care_publicforms_submission (retry on reference collision)
         V-->>K: 302 …/done/?lang=en&ref=OPD-20261119-4821&from=start&language=kn
         K->>V: GET done
-        V->>DB: reference exists for this facility + form?
-        V-->>K: done.html in Kannada; meta refresh to the chooser (English) after 20 s
+        V->>DB: reference for this facility + form, submitted in the last 20 s?
+        V-->>K: done.html in Kannada; back to the chooser (English) after 20 s
     end
 ```
 
@@ -224,11 +224,20 @@ The kiosk goes step by step without JavaScript too, still with no session:
   step and the answers. On the chooser and thank-you pages they are links.
 - **The review** is rendered by the server (`steps.review_rows()`); each row
   is a submit button `edit:<key>`. With JavaScript, `kiosk.js` rebuilds it.
+- **Home and Reset** are buttons that post the form (`ask:home`,
+  `ask:reset`); the server shows the same place with the card open
+  (`Place.asking`). Its "No, keep my answers" posts `stay`; its "Yes" is the
+  home link, or `reset`, which clears what Reset clears with JavaScript
+  (`steps.reset_questions()`) and goes to the first rating. With nothing to
+  lose, Home goes and Reset resets without asking.
 - **What needs JavaScript:** the camera, the on-screen keypad (a plain field
-  instead), auto-advance on ratings (tap an answer, then Next), Reset in place
-  (the link starts the form again) and the idle warning. An idle step still
-  starts over: a `<noscript>` meta refresh sends the page home after
-  `IDLE_TIMEOUT_SECONDS` once it holds a patient's choices.
+  instead), auto-advance on ratings (tap an answer, then Next) and the idle
+  warning. An idle step still starts over: a `<noscript>` meta refresh sends
+  the page home `NO_JS_IDLE_TIMEOUT_SECONDS` after it loads, once it holds a
+  patient's choices, counted down in the header.
+- **Back** after the page starts over (or after Home) reaches a posted page,
+  which the browser won't show from its cache (`no-store`): it shows its
+  "Confirm form resubmission" page, not the previous patient's answers.
 
 ```mermaid
 sequenceDiagram
@@ -300,8 +309,9 @@ stateDiagram-v2
   answers in place and returns to question 1, keeping the UHID and details.
   Both show from the first rating question on, and ask first (`askFirst()`,
   the `#confirmHome` / `#confirmReset` cards in form.html) once they would
-  clear something. The cards are in the page, under the idle warning, so the
-  idle reset still works while one is open.
+  clear something; without JavaScript the server opens the same cards
+  (§4.4). The cards are in the page, under the idle warning, so the idle
+  reset still works while one is open.
 - **Checks before moving on:** required answers, UHID length, dates not after
   `max` (today). The server checks everything again.
 - **Submit guard:** only from the review, once; Enter never submits.
@@ -793,7 +803,7 @@ and reloaded when Django's `setting_changed` fires (tests).
 | Output escaping | Django autoescaping in templates; kiosk.js escapes typed text before showing it on the review |
 | What is stored | UHID as entered (no lookup), language, answers, timestamps; no name, IP address or device id. Free-text answers may still contain personal information |
 | Leaving data on screen | Idle reset arms as soon as a page holds a patient's choices; the thank-you page returns to the start |
-| Back button | Pages are sent with `Cache-Control: no-store`; the thank-you page shows only for `DONE_TIMEOUT_SECONDS` + 10 s after its submission, and its *Start new* and timed return replace it in the history; kiosk.js starts over when Back restores a page from the back/forward cache |
+| Back button | Pages are sent with `Cache-Control: no-store`; the thank-you page shows only for `DONE_TIMEOUT_SECONDS` after its submission (its timed return comes later, so Back after it goes to the start, even without JavaScript, where the browser keeps the refresh in the history), and with JavaScript its *Start new* and timed return replace it in the history; kiosk.js starts over when Back restores a page from the back/forward cache |
 | Losing answers | Once anything is entered, kiosk.js asks before the page unloads (`beforeunload`), except when the kiosk leaves on purpose (submit, links, idle reset); `overscroll-behavior-y: none` stops pull-to-refresh in Chromium; `scroll-padding` keeps a focused field clear of the sticky header and pinned button |
 | CSV export | Formula injection guarded (§9.2) |
 | Retention | Not automated; set a policy and delete old rows if required |

@@ -26,7 +26,7 @@
 
     <div class="navrow">
       <button type="submit" name="nav" value="back" class="btn btn--ghost btn--md btn-back" data-nav="back" data-edit-hidden>{% t "back" %}</button>
-      <button type="submit" name="nav" value="next" class="btn btn--primary btn--md btn-next" data-nav="next">{% t "next" %}</button>
+      <button type="submit" name="nav" value="next" class="btn btn--primary btn--md btn-next" data-nav="next"><span class="when-editing">{% t "review_answers" %}</span><span class="unless-editing">{% t "next" %}</span></button>
     </div>
   </div>
   {% endfor %}

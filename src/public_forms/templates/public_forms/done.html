@@ -2,8 +2,9 @@
 {% load public_forms_tags %}
 
 {% block head_extra %}
-{# Back to the start for the next patient, without JavaScript too; the browser replaces this page in its history. #}
-<meta http-equiv="refresh" content="{{ done_timeout }};url={{ home_url }}">
+{# Back to the start for the next patient: kiosk.js does it (replacing this page in the history, #}
+{# data-return-after on <body>); without JavaScript, this refresh.                                #}
+<noscript><meta http-equiv="refresh" content="{{ done_timeout }};url={{ home_url }}"></noscript>
 {% endblock %}
 
 {% block screen %}

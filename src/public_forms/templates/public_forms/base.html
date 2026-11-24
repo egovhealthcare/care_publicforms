@@ -33,7 +33,7 @@ html[lang="{{ language.code }}"] .hero-title{font-size:clamp(1.625rem,7.2vw,2.12
 {% endif %}{% endfor %}</style>
 <script>document.documentElement.className = 'js';</script>
 </head>
-<body data-idle-timeout="{{ idle_timeout }}" data-idle-armed="{{ idle_armed|yesno:'1,0' }}" data-home-url="{{ home_url }}">
+<body data-idle-timeout="{{ idle_timeout }}" data-idle-armed="{{ idle_armed|yesno:'1,0' }}" data-home-url="{{ home_url }}"{% if done_timeout is not None %} data-return-after="{{ done_timeout }}"{% endif %}>
 {% if language_form %}
 {# Enter (a keyboard, a USB scanner) presses the form's first submit button. This is #}
 {# it ("go on from here"), placed before the header's language buttons, which also  #}

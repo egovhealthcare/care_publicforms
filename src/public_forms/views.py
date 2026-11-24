@@ -64,6 +64,7 @@ from public_forms.services import (
 from public_forms.settings import plugin_settings
 from public_forms.steps import (
     Place,
+    anything_entered,
     flow_units,
     is_flow_step,
     navigate,
@@ -102,9 +103,6 @@ def no_js_countdown(seconds: int) -> dict | None:
 
 
 SECONDS_PER_QUESTION = 12  # for "about N minutes"
-# The thank-you page shows for DONE_TIMEOUT_SECONDS after the submission, plus
-# this margin for a slow screen; later, its link goes back to the start.
-DONE_GRACE_SECONDS = 10
 
 
 # Never cached, so Back asks the server again instead of showing a stored copy.
@@ -278,6 +276,8 @@ class FormView(FeedbackPage):
         data = self.request.POST.copy()
         if nav.startswith("lang:") and nav[len("lang:") :] in languages():
             self.patient_language = data["language"] = nav[len("lang:") :]
+        if nav == "ask:home" and not anything_entered(spec, data):
+            return HttpResponseRedirect(self.home_url(came_from_chooser, **self.carry()))  # nothing to lose
         raw_uhid = digits_of(data.get("uhid"))
         uhid_valid = parse_uhid(raw_uhid) is not None if raw_uhid else False
         place, errors, _ = navigate(spec, data, nav, identified=uhid_valid, uhid_valid=uhid_valid)
@@ -391,6 +391,7 @@ class FormView(FeedbackPage):
             current_step=place.step,
             current_card=place.card,
             returning=place.returning,
+            asking=place.asking,  # without JavaScript: Home or Reset's card, asking first
             return_to=unit_value(place.return_to),  # the hidden "return" field
             identified=identified,
             rating_total=len(shown_ratings),
@@ -446,10 +447,13 @@ class DoneView(FeedbackPage):
         came_from_chooser = request.GET.get("from") == "start"
         home = self.home_url(came_from_chooser)
         reference = request.GET.get("ref", "")
-        # Only just after the submission: reached again later (Back, the
-        # browser's history), it goes to the start, so the next patient
-        # doesn't see the previous patient's reference number.
-        shown_until = timedelta(seconds=int(plugin_settings.DONE_TIMEOUT_SECONDS) + DONE_GRACE_SECONDS)
+        # Only for DONE_TIMEOUT_SECONDS after the submission. The page goes back
+        # to the start that long after it loads (always after the submission),
+        # so any later request is Back or the browser's history after the
+        # return: it goes to the start, and the next patient doesn't see the
+        # previous patient's reference number. Without JavaScript, Chromium
+        # keeps the page's timed refresh in the history, so this is what stops Back.
+        shown_until = timedelta(seconds=int(plugin_settings.DONE_TIMEOUT_SECONDS))
         recent = FeedbackSubmission.objects.filter(
             facility_external_id=self.facility.external_id,
             form=self.form,

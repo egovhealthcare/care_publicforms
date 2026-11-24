@@ -31,10 +31,10 @@ export default defineConfig({
     // Behaviour, on a 1080p kiosk TV
     {
       name: "kiosk",
-      testMatch: /(flows|language|idle|camera|guards)\.spec\.ts/,
+      testMatch: /(flows|language|idle|camera|guards|edges)\.spec\.ts/,
       use: { ...desktop, viewport: { width: 1920, height: 1080 } },
     },
-    // The same page without JavaScript: one long form
+    // The same pages without JavaScript: each step button posts the page
     {
       name: "no-js",
       testMatch: /nojs\.spec\.ts/,

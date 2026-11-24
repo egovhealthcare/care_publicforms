@@ -128,13 +128,13 @@ class PublicPageTests(PageTestBase):
         chosen = self.client.get(self.url("form", "opd", **{"from": "start"}))
         self.assertContains(chosen, '<nav class="hdr-nav" id="hdrNav" hidden>')
         # Picked on the chooser: Home → chooser, Reset → this form.
-        self.assertContains(chosen, f'class="navbtn navbtn--home" href="{self.url()}"')
+        self.assertContains(chosen, f'class="navbtn navbtn--home js-only" href="{self.url()}"')
         reset = self.url("form", "opd", **{"from": "start"})
-        self.assertContains(chosen, f'class="navbtn navbtn--reset" href="{reset}"')
+        self.assertContains(chosen, f'class="navbtn navbtn--reset js-only" href="{reset}"')
         # Pinned to the form: both start the form over.
         pinned = self.client.get(self.url("form", "opd"))
         self.assertContains(pinned, '<nav class="hdr-nav" id="hdrNav" hidden>')
-        self.assertContains(pinned, f'class="navbtn navbtn--home" href="{self.url("form", "opd")}"')
+        self.assertContains(pinned, f'class="navbtn navbtn--home js-only" href="{self.url("form", "opd")}"')
 
     def test_home_and_reset_ask_first(self):
         # kiosk.js opens these cards once Home or Reset would clear answers.
@@ -359,6 +359,11 @@ class DoneTests(PageTestBase):
         response, submission = self.done_page()
         self.assertContains(response, submission.reference_number)
         self.assertContains(response, f'content="20;url={self.url("form", "opd")}"')
+        # kiosk.js returns by itself, replacing the page in the history; the refresh is for screens without it.
+        self.assertContains(response, 'data-return-after="20"')
+        self.assertContains(
+            response, f'<noscript><meta http-equiv="refresh" content="20;url={self.url("form", "opd")}"></noscript>'
+        )
 
     def test_returns_to_the_chooser_when_started_there(self):
         response, _ = self.done_page(**{"from": "start"})
@@ -371,11 +376,14 @@ class DoneTests(PageTestBase):
         response, submission = self.done_page()
         self.assertIn("no-store", response["Cache-Control"])  # Back asks the server again
         self.assertContains(response, "data-replace")  # "Start new" replaces it in the history
-        FeedbackSubmission.objects.filter(pk=submission.pk).update(
-            submitted_at=timezone.now() - timedelta(seconds=20 + 10 + 1)
-        )
+        done = self.url("done", "opd", ref=submission.reference_number)
+        # Still shown while its 20 seconds last (another language, say).
+        FeedbackSubmission.objects.filter(pk=submission.pk).update(submitted_at=timezone.now() - timedelta(seconds=19))
+        self.assertContains(self.client.get(done), submission.reference_number)
+        # The page has gone back to the start by then: Back, without JavaScript too.
+        FeedbackSubmission.objects.filter(pk=submission.pk).update(submitted_at=timezone.now() - timedelta(seconds=21))
         self.assertRedirects(
-            self.client.get(self.url("done", "opd", ref=submission.reference_number)),
+            self.client.get(done),
             self.url("form", "opd"),
             fetch_redirect_response=False,
         )
@@ -614,6 +622,48 @@ class StepByStepWithoutJavaScriptTests(PageTestBase):
         details = {**left_at, "uhid": "", "age_group": "31_45", "sex": "female"}
         onward = self.press("next", step="screen-1", **details)
         self.assertEqual((self.place(onward), onward.context["return_to"]), (("questions", 4), ""))
+
+    def test_home_and_reset_ask_first_without_javascript(self):
+        # Without JavaScript, Home and Reset are buttons that post the page; the
+        # server opens the same card kiosk.js opens, every answer still in the page.
+        keys = list(self.ratings(self.opd))
+        answers = {"uhid": UHID, "clinic": "ent", **{key: "4" for key in keys[:3]}, "improvement": "More seats"}
+        here = {"step": "questions", "card": 3, **answers}
+        page = self.client.get(self.url("form", "opd"))
+        self.assertContains(page, 'name="nav" value="ask:home" class="navbtn navbtn--home no-js-only"')
+        self.assertContains(page, 'name="nav" value="ask:reset" class="navbtn navbtn--reset no-js-only"')
+
+        home = self.press("ask:home", **here)
+        self.assertEqual((self.place(home), home.context["asking"]), (("questions", 3), "home"))
+        self.assertContains(home, '<div class="idle confirm" id="confirmHome">')
+        self.assertContains(home, '<div class="idle confirm" id="confirmReset" hidden>')
+        self.assertContains(home, 'value="stay" class="btn btn--primary btn--lg btn-wide" data-confirm-keep autofocus')
+        self.assertContains(home, f'<a class="btn btn--danger btn--lg btn-wide" href="{self.url("form", "opd")}"')
+        self.assertContains(home, f'name="{keys[0]}" value="4" checked')
+        # "No, keep my answers": the same place, the card closed.
+        kept = self.press("stay", **here)
+        self.assertEqual((self.place(kept), kept.context["asking"]), (("questions", 3), ""))
+        self.assertContains(kept, '<div class="idle confirm" id="confirmHome" hidden>')
+        self.assertContains(kept, "More seats")
+
+        reset = self.press("ask:reset", **here)
+        self.assertEqual((self.place(reset), reset.context["asking"]), (("questions", 3), "reset"))
+        self.assertContains(reset, '<div class="idle confirm" id="confirmReset">')
+        # "Yes, clear them": as with JavaScript, the ratings and the open answers go,
+        # the UHID and the details stay, and it starts again at the first rating.
+        cleared = self.press("reset", **{**here, "return": "review"})
+        self.assertEqual((self.place(cleared), cleared.context["return_to"]), (("questions", 0), ""))
+        self.assertNotContains(cleared, 'value="4" checked')
+        self.assertNotContains(cleared, "More seats")
+        self.assertContains(cleared, 'name="clinic" value="ent" checked')
+        self.assertEqual(cleared.context["uhid"], UHID)
+
+        # Nothing to lose: Reset just resets, Home just goes.
+        nothing = self.press("ask:reset", step="screen-3", uhid=UHID, clinic="ent", improvement="  ")
+        self.assertEqual((self.place(nothing), nothing.context["asking"]), (("questions", 0), ""))
+        self.assertRedirects(
+            self.press("ask:home", step="questions", card=0), self.url("form", "opd"), fetch_redirect_response=False
+        )
 
     def test_back_walks_the_steps_in_reverse(self):
         answers = {"uhid": UHID, "clinic": "ent"}

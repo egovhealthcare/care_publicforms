@@ -116,14 +116,20 @@
     if (event.persisted && start) leaveTo(start);
   });
   // Links marked data-replace (the thank-you page's "Start new") replace
-  // the page in the history, so Back can't return to it. Its timed return
-  // (meta refresh) replaces the page too.
+  // the page in the history, so Back can't return to it.
   each(document.querySelectorAll('a[data-replace]'), function (link) {
     link.addEventListener('click', function (event) {
       event.preventDefault();
       leaveTo(link.href);
     });
   });
+  // The thank-you page's timed return replaces it in the history too. (Its
+  // meta refresh, for screens without JavaScript, adds a history entry in
+  // Chromium, so Back would come back to the reference number.)
+  var returnAfter = body.getAttribute('data-return-after');
+  if (returnAfter !== null) {
+    setTimeout(function () { leaveTo(body.getAttribute('data-home-url')); }, (parseInt(returnAfter, 10) || 0) * 1000);
+  }
 
   /* ── Idle reset ──────────────────────────────────────────────── */
   // Once someone has touched the screen, a quiet spell sends the kiosk
@@ -806,7 +812,8 @@
       var parts = date.value.split('-');
       return parts.length === 3 ? escapeHtml(parts[2] + '/' + parts[1] + '/' + parts[0]) : '';
     }
-    var text = question.querySelector('textarea');
+    // A text answer; a choice's "Why?" box is its note, not its answer.
+    var text = question.querySelector('textarea:not([data-comment])');
     return text ? escapeHtml(text.value.replace(/^\s+|\s+$/g, '')) : '';
   }
 
@@ -959,7 +966,7 @@
     return found;
   }
 
-  var homeLink = headerNav && headerNav.querySelector('.navbtn--home');
+  var homeLink = headerNav && headerNav.querySelector('a.navbtn--home');
   if (homeLink) {
     homeLink.addEventListener('click', function (event) {
       if (!anythingEntered()) return; // nothing to lose: just go
