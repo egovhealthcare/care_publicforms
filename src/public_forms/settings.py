@@ -11,6 +11,11 @@ from public_forms.apps import PLUGIN_NAME
 
 env = environ.Env()
 
+# Environment variables are shared by Care and every plugin, so this plugin's
+# carry its name: PUBLIC_FORMS_LANGUAGES, PUBLIC_FORMS_UHID_LENGTH, … In the
+# plug's configs={} (already the plugin's own), settings keep their plain names.
+ENV_PREFIX = f"{PLUGIN_NAME.upper()}_"
+
 
 class PluginSettings:  # pragma: no cover
     """
@@ -21,8 +26,9 @@ class PluginSettings:  # pragma: no cover
         print(plugin_settings.UHID_LENGTH)
 
     Values are resolved from (in order) the plug config in care's
-    ``plug_config.py`` (``PLUGIN_CONFIGS``), environment variables, and the
-    defaults below.
+    ``plug_config.py`` (``PLUGIN_CONFIGS``), environment variables named
+    ENV_PREFIX + the setting (``PUBLIC_FORMS_UHID_LENGTH``), and the defaults
+    below.
     """
 
     def __init__(
@@ -50,7 +56,7 @@ class PluginSettings:  # pragma: no cover
             val = self.user_settings[attr]
         except KeyError:
             try:
-                val = env(attr, cast=type(val))
+                val = env(f"{ENV_PREFIX}{attr}", cast=type(val))
             except environ.ImproperlyConfigured:
                 pass
 
@@ -72,7 +78,8 @@ class PluginSettings:  # pragma: no cover
             if not getattr(self, setting):
                 raise ImproperlyConfigured(
                     f'The "{setting}" setting is required. '
-                    f'Please set the "{setting}" in the environment or the {PLUGIN_NAME} plugin config.'
+                    f'Please set "{ENV_PREFIX}{setting}" in the environment, or "{setting}" in the {PLUGIN_NAME} '
+                    "plugin config."
                 )
 
     def reload(self) -> None:

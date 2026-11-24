@@ -143,7 +143,7 @@ Kiosk tips:
   a guest. The value must be
   in the kiosk's UHID format (`UHID_LENGTH` digits once other characters are
   removed).
-- Without internet access to Google Fonts, set `LOAD_WEB_FONTS=False` and
+- Without internet access to Google Fonts, set `LOAD_WEB_FONTS` to `False` and
   install DM Sans and each language's `font` on the device.
 
 ## The admin
@@ -364,11 +364,15 @@ language is in the `language` column.
 
 ## Settings
 
-Set in the plug's `configs={}`, or as environment variables:
+Set in the plug's `configs={}`, or as environment variables named
+`PUBLIC_FORMS_` + the setting (e.g. `PUBLIC_FORMS_UHID_LENGTH=12`), so they
+can't clash with Care's or another plugin's. `configs={}` wins over the
+environment. [docs/deployment.md](docs/deployment.md) lists them all.
+
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `LANGUAGES` | `["en", "kn"]` | Languages offered, in order (env: `LANGUAGES=en,kn`). Each needs a locale file; one language hides the toggle. The admin shows a text box for each on a form's title and description. |
+| `LANGUAGES` | `["en", "kn"]` | Languages offered, in order (env: `PUBLIC_FORMS_LANGUAGES=en,kn`). Each needs a locale file; one language hides the toggle. The admin shows a text box for each on a form's title and description. |
 | `DEFAULT_LANGUAGE` | `"en"` | Starting language; a screen can override it with `?lang=`. |
 | `LOCALE_DIRS` | `[]` | Extra folders of locale files, to add or correct a language without changing the plugin. Restart after editing them. |
 | `SCAN_MODE` | `"camera"` | `camera`, `scanner` or `off`; a screen can override it with `?scan=`. |

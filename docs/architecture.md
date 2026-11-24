@@ -842,8 +842,9 @@ superusers see submissions.
 ## 10. Settings
 
 `settings.PluginSettings` resolves each setting from Care's
-`PLUGIN_CONFIGS["public_forms"]` (the plug's `configs={}`), then an
-environment variable of the same name, then the default. Values are cached
+`PLUGIN_CONFIGS["public_forms"]` (the plug's `configs={}`), then the
+environment variable `PUBLIC_FORMS_<setting>` (`ENV_PREFIX`: environment
+variables are shared by Care and every plugin), then the default. Values are cached
 and reloaded when Django's `setting_changed` fires (tests).
 
 | Setting | Default | Used by |

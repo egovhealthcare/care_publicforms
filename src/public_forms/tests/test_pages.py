@@ -1,4 +1,5 @@
 import importlib
+import os
 import uuid
 from datetime import timedelta
 from unittest import mock
@@ -16,6 +17,7 @@ from public_forms.checks import check_languages
 from public_forms.models import Audience, FeedbackForm, FeedbackSubmission, QuestionType
 from public_forms.questionnaire import FormSpec, applies
 from public_forms.questions import page_errors
+from public_forms.settings import plugin_settings
 from public_forms.tests import (
     PLAIN_STATIC_STORAGES,
     TEST_LANGUAGE,
@@ -419,6 +421,22 @@ class DoneTests(PageTestBase):
 
 
 class ConfigurationTests(PageTestBase):
+    def test_environment_variables_carry_the_plugins_name(self):
+        # PUBLIC_FORMS_<setting>; a bare name (Care's, another plugin's) is ignored.
+        def read(name, **environment):
+            with mock.patch.dict(os.environ, environment):
+                plugin_settings.reload()
+                return getattr(plugin_settings, name)
+
+        try:
+            self.assertEqual(read("UHID_LENGTH", PUBLIC_FORMS_UHID_LENGTH="12", UHID_LENGTH="9"), 12)
+            self.assertEqual(read("UHID_LENGTH", UHID_LENGTH="9"), 11)
+            self.assertEqual(read("SUBMIT_RATE_LIMIT", PUBLIC_FORMS_SUBMIT_RATE_LIMIT=""), "")  # empty: off
+            # The plug's configs={} still wins (the tests set LANGUAGES there).
+            self.assertEqual(read("LANGUAGES", PUBLIC_FORMS_LANGUAGES="en"), ["en", TEST_LANGUAGE])
+        finally:
+            plugin_settings.reload()
+
     def test_switching_off_a_form_hides_it(self):
         self.opd.is_active = False
         self.opd.save()
