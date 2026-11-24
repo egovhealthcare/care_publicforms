@@ -14,6 +14,7 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 
+from public_forms.access import MANAGE_FORMS, VIEW_FEEDBACK, facility_ids
 from public_forms.admin_site import site
 from public_forms.i18n import BASE_LANGUAGE, admin_languages, localize
 from public_forms.models import FeedbackForm, FeedbackSubmission
@@ -222,11 +223,46 @@ class FeedbackFormAdmin(admin.ModelAdmin):
         )
 
     def get_form(self, request, obj=None, **kwargs):
-        return super().get_form(request, obj, **{"form": feedback_form_form(), **kwargs})
+        form = super().get_form(request, obj, **{"form": feedback_form_form(), **kwargs})
+        managed = facility_ids(request.user, MANAGE_FORMS)
+        if managed is None:
+            return form
+        allowed = set(managed)
+
+        class OwnFacilitiesForm(form):
+            def clean_facility_external_id(self):
+                value = self.cleaned_data.get("facility_external_id")
+                if value is not None and value not in allowed:
+                    raise forms.ValidationError(_("You can't set up forms for this facility."))
+                return value
+
+        return OwnFacilitiesForm
 
     def get_queryset(self, request):
+        # The facilities whose feedback the user sees or whose forms they set up (access.py).
+        queryset = super().get_queryset(request)
+        reachable = facility_ids(request.user, VIEW_FEEDBACK, MANAGE_FORMS)
+        if reachable is not None:
+            queryset = queryset.filter(facility_external_id__in=reachable)
         # No foreign key: the facility's name is looked up by its id.
-        return with_facility_name(super().get_queryset(request))
+        return with_facility_name(queryset)
+
+    def manages(self, request, obj) -> bool:
+        """Whether the user sets up forms for ``obj``'s facility; any form is shown read-only otherwise."""
+        if obj is None:
+            return True
+        managed = facility_ids(request.user, MANAGE_FORMS)
+        return managed is None or managed.filter(external_id=obj.facility_external_id).exists()
+
+    def has_add_permission(self, request):
+        managed = facility_ids(request.user, MANAGE_FORMS)
+        return super().has_add_permission(request) and (managed is None or managed.exists())
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and self.manages(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and self.manages(request, obj)
 
     def changeform_view(self, request, *args, **kwargs):
         token = _current_request.set(request)
@@ -307,7 +343,8 @@ def with_facility_name(queryset):
 @admin.register(FeedbackSubmission, site=site)
 class FeedbackSubmissionAdmin(admin.ModelAdmin):
     list_display = ("reference_number", "facility", "form_code", "patient_type", "uhid", "submitted_at")
-    list_filter = ("form__patient_type", "form", "language")
+    # Only the forms of the submissions the user can see, not every facility's.
+    list_filter = ("form__patient_type", ("form", admin.RelatedOnlyFieldListFilter), "language")
     search_fields = ("reference_number", "uhid")
     date_hierarchy = "submitted_at"
     actions = ("export_csv",)
@@ -324,7 +361,13 @@ class FeedbackSubmissionAdmin(admin.ModelAdmin):
     readonly_fields = fields
 
     def get_queryset(self, request):
-        return with_facility_name(super().get_queryset(request)).select_related("form")
+        # Only facilities whose feedback the user may see (access.py). The
+        # detail pages, history and CSV export all start from this.
+        queryset = super().get_queryset(request)
+        visible = facility_ids(request.user, VIEW_FEEDBACK)
+        if visible is not None:
+            queryset = queryset.filter(facility_external_id__in=visible)
+        return with_facility_name(queryset).select_related("form")
 
     @admin.display(description=_("Form"), ordering="form__code")
     def form_code(self, obj):

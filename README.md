@@ -138,13 +138,24 @@ only **Feedback forms** and **Feedback submissions**.
 - **Who can sign in:** Care superusers, and active users given any of this
   app's permissions, with their Care username and password. They don't need
   Django staff access, so the rest of Django's admin stays closed to them.
+- **Which facilities:** the permissions below say what a user may do; their
+  Care roles say where. Superusers see every facility. Anyone else sees only
+  the facilities where they hold a role with the Care permission below, in
+  the facility itself or in an area organization above it (a district admin
+  sees the district's facilities). Without such a role they see nothing,
+  even with the permissions below. Another facility's submission can't be
+  opened by its address or exported.
 - **Giving access:** in Django's admin, add the permissions to the user or
   their group (**User permissions**, the ones starting `public_forms |`):
 
-  | To | Permissions |
-  | --- | --- |
-  | View and export submissions | `Can view feedback submission` |
-  | Edit forms | `Can view feedback form`, `Can change feedback form` (and `Can add` / `Can delete` to create or remove forms) |
+  | To | Permissions (Django admin) | At facilities where their Care role has |
+  | --- | --- | --- |
+  | View and export submissions | `Can view feedback submission` | `can_view_resource_responses` (what the API checks) |
+  | View forms | `Can view feedback form` | `can_view_resource_responses` or `can_update_facility` |
+  | Edit forms | `Can change feedback form` (and `Can add` / `Can delete` to create or remove forms) | `can_update_facility` |
+
+  On Care 3.0, which has no `can_view_resource_responses`, only superusers
+  see submissions.
 
 - **Sign-in limit:** 5 attempts a minute per IP address and per username
   (`ADMIN_LOGIN_RATE_LIMIT`).

@@ -88,7 +88,9 @@ How it is wired in:
    page paths to the backend (README → *Putting a form on a screen*).
 
 The plugin reads one Care model, `facility.Facility` (by `external_id`), and
-calls one Care permission, `can_read_facility_questionnaire`. It has **no
+calls one Care permission, `can_read_facility_questionnaire`. The admin also
+reads Care's role tables to limit each user to their facilities
+(`access.py`). It has **no
 database relations** to Care: no foreign keys, and its migrations don't depend
 on Care's.
 
@@ -121,6 +123,7 @@ src/public_forms/
 │   └── kiosk.js         Step machine and kiosk behaviour (ES5, no dependencies)
 ├── admin.py             Admin for forms (per-language boxes, questions JSON) and submissions (read-only, CSV)
 ├── admin_site.py        The plugin's own admin site at ADMIN_URL: who can sign in, sign-in limit
+├── access.py            Which facilities an admin user reaches, by their Care roles
 ├── text_rules.py        Blocked characters and length limits for all typed text
 ├── api.py, urls.py      Staff API: responses list and per-form summary
 ├── settings.py          Plugin settings (PLUGIN_CONFIGS → env → defaults)
@@ -759,6 +762,26 @@ any of this app's permissions (`has_module_perms("public_forms")`), without
 `is_staff`; each screen then follows the model permissions. The sign-in form
 is rate-limited per IP and per username (`ADMIN_LOGIN_RATE_LIMIT`).
 
+**Facilities (`access.py`).** The model permissions say what a user may
+do; Care's roles say at which facilities. `facilities_with(user, *slugs)`
+mirrors Care's own facility checks as one query: facilities where the user
+holds a role with the permission in the facility's root
+`FacilityOrganization` (its staff), or in an `Organization` listed in the
+facility's `geo_organization_cache` (a district or state above it).
+Superusers reach every facility. Unlike Care, a facility without a
+geographic organization is reached only through its own staff roles.
+
+| Screen | Limited to facilities where the role has |
+| --- | --- |
+| Submissions: list, detail, history, CSV export, the form filter | `can_view_resource_responses` (as the API's `can_read_facility_questionnaire`) |
+| Forms: list and detail | `can_view_resource_responses` or `can_update_facility` |
+| Forms: add, change, delete; the facility id a form is saved with | `can_update_facility` (as `can_update_facility_obj`); other forms are read-only |
+
+Each screen's `get_queryset()` applies the filter, so a row outside it is
+"not found" by its address too, and admin actions only see what the list
+shows. Care 3.0 has no `can_view_resource_responses`, so there only
+superusers see submissions.
+
 - **Feedback forms**: code, patient type, title and description with a text
   box per language (English and each offered language; text in other
   languages is kept on save), facility, active, order, the page link, and
@@ -800,7 +823,7 @@ and reloaded when Django's `setting_changed` fires (tests).
 
 | Topic | Approach |
 | --- | --- |
-| Authentication | None on the pages by design (public kiosks). Staff data is only in the plugin's admin (Care sign-in, rate-limited, this app's permissions) and the API (Care's auth and permissions) |
+| Authentication | None on the pages by design (public kiosks). Staff data is only in the plugin's admin (Care sign-in, rate-limited, this app's permissions, limited to the user's facilities by their Care roles) and the API (Care's auth and permissions) |
 | CSRF | The form view is `csrf_exempt`: there is no session or cookie to protect, and every submission is anonymous and rate-limited |
 | Abuse | Per-IP rate limit (see README → *Behind a proxy*); answers are limited to the form's question keys and valid values. Typed text (`text_rules.py`), on the kiosk and in the admin, can't contain `<` `>` `{` `}` `` ` `` `\`: kiosk.js drops them as they're typed and the server refuses them (`"characters"` error); control characters are dropped. Limits: answers and "Why?" 2000 characters; titles 100, descriptions 300, question text and hint 300, short_text 60, option labels 100, option values 64 |
 | Output escaping | Django autoescaping in templates; kiosk.js escapes typed text before showing it on the review |
@@ -815,7 +838,7 @@ and reloaded when Django's `setting_changed` fires (tests).
 
 | Suite | Where | What |
 | --- | --- | --- |
-| Django | `src/public_forms/tests/` (run in Care: `python manage.py test public_forms`) | Pages (public access, URLs, POST validation, step navigation without JavaScript, audiences, configuration, languages, locale files), API (permissions, filters, summary), admin (forms, CSV). Runs with the plugin's default settings |
+| Django | `src/public_forms/tests/` (run in Care: `python manage.py test public_forms`) | Pages (public access, URLs, POST validation, step navigation without JavaScript, audiences, configuration, languages, locale files), API (permissions, filters, summary), admin (forms, CSV, facility limits). Runs with the plugin's default settings |
 | Browser | `e2e/` (Playwright, `PF_FACILITY_ID=… npx playwright test`) | Patient flows, the scan option with a stubbed camera, language carry-over, idle reset with a mocked clock, the step-by-step flow without JavaScript, layout and structure on five screen shapes |
 
 ## 13. Extending the plugin

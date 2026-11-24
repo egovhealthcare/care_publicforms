@@ -6,7 +6,9 @@ It is served on the API host at ADMIN_URL (default /public_forms/admin/).
 Care superusers can sign in, and so can any active user given one of this
 app's permissions (e.g. "Can view feedback submission"). Those users don't
 need Django staff access, so the rest of Django's admin stays closed to
-them. Sign-in attempts are rate-limited per IP address and per username.
+them. The permissions say what a user may do; Care's roles say at which
+facilities (access.py). Sign-in attempts are rate-limited per IP address
+and per username.
 """
 
 from django.conf import settings
