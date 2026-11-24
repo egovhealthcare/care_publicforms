@@ -148,6 +148,7 @@ class FormLanguageTests(PageTestBase):
 
     def test_a_questionnaire_migration_keeps_admin_edits(self):
         form = FeedbackForm.objects.create(
+            facility_external_id=self.facility.external_id,
             code="test",
             patient_type="op",
             title={"en": "Visit feedback"},
@@ -181,6 +182,7 @@ class FormLanguageTests(PageTestBase):
         migration = importlib.import_module("public_forms.migrations.0003_hyphens_in_range_labels")
         dash = "\u2013"
         form = FeedbackForm.objects.create(
+            facility_external_id=self.facility.external_id,
             code="old",
             patient_type="op",
             title={"en": "Old form"},
@@ -206,7 +208,7 @@ class FormLanguageTests(PageTestBase):
         # A default form deleted and re-created by the command gets the
         # languages of the questionnaire migrations, like a new install.
         self.ipd.delete()
-        call_command("seed_feedback_forms", stdout=io.StringIO())
-        ipd = FeedbackForm.objects.get(code="ipd", facility_external_id__isnull=True)
+        call_command("seed_feedback_forms", str(self.facility.external_id), stdout=io.StringIO())
+        ipd = FeedbackForm.objects.get(code="ipd", facility_external_id=self.facility.external_id)
         for code, translations in language_migrations():
             self.assertEqual(ipd.title.get(code), translations[ipd.title[BASE_LANGUAGE]], code)

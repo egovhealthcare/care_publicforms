@@ -17,7 +17,6 @@ The form's step titles can give any of them its own heading.
 from dataclasses import dataclass, field
 from datetime import date
 
-from django.db.models import Q
 from django.utils import timezone
 
 from public_forms.i18n import default_rating_labels
@@ -29,30 +28,16 @@ NO_COMMENT = 0  # the "No comments" rating; default rating labels are in the loc
 
 
 def forms_for_facility(facility) -> list[FeedbackForm]:
-    """
-    Active forms for a facility: the shared ones, each replaced by the
-    facility's own form with the same code. A facility form that is switched
-    off hides that code for the facility; the shared one does not come back.
-    """
-    candidates = FeedbackForm.objects.filter(
-        Q(facility_external_id__isnull=True) | Q(facility_external_id=facility.external_id)
-    )
-    by_code = {}
-    for form in candidates.order_by("order", "id"):
-        if form.code not in by_code or form.facility_external_id:
-            by_code[form.code] = form
-    return sorted((f for f in by_code.values() if f.is_active), key=lambda f: (f.order, f.id))
+    """The facility's active forms, in chooser order."""
+    return list(FeedbackForm.objects.filter(facility_external_id=facility.external_id, is_active=True))
 
 
 def question_order(facility_external_id, form_code) -> list[str]:
     """
-    Question keys in the order the form asks them now (the facility's own form,
-    else the shared one), for showing stored answers in a familiar order.
+    Question keys in the order the facility's form asks them now, for showing
+    stored answers in a familiar order.
     """
-    candidates = FeedbackForm.objects.filter(code=form_code).filter(
-        Q(facility_external_id=facility_external_id) | Q(facility_external_id__isnull=True)
-    )
-    form = max(candidates, key=lambda form: form.facility_external_id is not None, default=None)
+    form = FeedbackForm.objects.filter(facility_external_id=facility_external_id, code=form_code).first()
     return [question.key for question in parse_questions(form.questions)] if form else []
 
 

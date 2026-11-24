@@ -16,7 +16,13 @@ from public_forms.checks import check_languages
 from public_forms.models import Audience, FeedbackForm, FeedbackSubmission, QuestionType
 from public_forms.questionnaire import FormSpec, applies
 from public_forms.questions import question_errors, steps_errors, with_steps
-from public_forms.tests import PLAIN_STATIC_STORAGES, TEST_LANGUAGE, TEST_PLUGIN_CONFIGS, plugin_configs
+from public_forms.tests import (
+    PLAIN_STATIC_STORAGES,
+    TEST_LANGUAGE,
+    TEST_PLUGIN_CONFIGS,
+    default_forms,
+    plugin_configs,
+)
 from public_forms.views import no_js_countdown
 
 UHID = "12345678901"
@@ -27,9 +33,8 @@ class PageTestBase(CareAPITestBase):
     def setUp(self):
         super().setUp()
         self.facility = self.create_facility(user=self.create_user(), name="District Hospital, Mysuru")
-        # Seeded by the 0002 data migration
-        self.opd = FeedbackForm.objects.get(code="opd", facility_external_id__isnull=True)
-        self.ipd = FeedbackForm.objects.get(code="ipd", facility_external_id__isnull=True)
+        forms = default_forms(self.facility)
+        self.opd, self.ipd = forms["opd"], forms["ipd"]
 
     def url(self, name="start", form=None, facility=None, **query):
         kwargs = {"facility_id": (facility or self.facility).external_id}
@@ -307,6 +312,7 @@ class SubmitTests(PageTestBase):
 
     def test_long_form_code_still_fits_the_reference(self):
         long_form = FeedbackForm.objects.create(
+            facility_external_id=self.facility.external_id,
             code="general_medicine_ward_feedback",
             patient_type="ip",
             title={"en": "Ward"},
@@ -403,41 +409,31 @@ class DoneTests(PageTestBase):
 
 
 class ConfigurationTests(PageTestBase):
-    def test_switching_off_a_facility_form_hides_the_code(self):
-        FeedbackForm.objects.create(
-            facility_external_id=self.facility.external_id,
-            code="opd",
-            patient_type="op",
-            title={"en": "Our OPD"},
-            is_active=False,
-        )
+    def test_switching_off_a_form_hides_it(self):
+        self.opd.is_active = False
+        self.opd.save()
         self.assertRedirects(self.client.get(self.url()), self.url("form", "ipd"), fetch_redirect_response=False)
         self.assertRedirects(self.client.get(self.url("form", "opd")), self.url(), fetch_redirect_response=False)
 
-    def test_facility_form_replaces_the_shared_one(self):
-        own = FeedbackForm.objects.create(
-            facility_external_id=self.facility.external_id,
-            code="opd",
-            patient_type="op",
-            title={"en": "Our OPD"},
-            order=1,
-        )
-        self.add_question(own, "cleanliness", type=QuestionType.RATING)
-        page = self.client.get(self.url("form", "opd"))
-        self.assertContains(page, "data-card", count=1)
-        self.assertContains(page, "Our OPD")
-        self.submit(cleanliness="5")
-        self.assertEqual(
-            FeedbackSubmission.objects.get().answers,
-            {"cleanliness": {"question": "Cleanliness", "type": "rating", "value": 5, "answer": "Excellent"}},
-        )
-        # Other facilities keep the shared form.
+    def test_forms_belong_to_their_facility(self):
         elsewhere = self.create_facility(user=self.create_user())
+        # A facility without forms of its own has nothing to offer.
+        self.assertContains(
+            self.client.get(self.url(facility=elsewhere)), "No feedback forms are set up", status_code=404
+        )
+        self.assertEqual(default_forms(elsewhere).keys(), {"opd", "ipd"})
+        # Editing one facility's form leaves the other's alone.
+        self.add_question(self.opd, "cleanliness", type=QuestionType.RATING)
+        self.assertContains(
+            self.client.get(self.url("form", "opd")), "data-card", count=len(FormSpec(self.opd).ratings)
+        )
         self.assertContains(
             self.client.get(self.url("form", "opd", facility=elsewhere)),
             "data-card",
-            count=len(FormSpec(self.opd).ratings),
+            count=len(FormSpec(self.opd).ratings) - 1,
         )
+        self.submit(uhid=UHID, **self.answers(self.opd))
+        self.assertEqual(FeedbackSubmission.objects.get().answers["cleanliness"]["value"], 5)
 
     def test_inactive_and_new_questions(self):
         dropped = next(q for q in self.opd.questions if q["type"] == QuestionType.RATING)

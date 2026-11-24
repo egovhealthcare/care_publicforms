@@ -12,7 +12,6 @@ from django.forms.models import model_to_dict
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import escape
 
 from public_forms.admin import feedback_form_form, localized_form
 from public_forms.models import FeedbackForm, FeedbackSubmission
@@ -23,13 +22,14 @@ from public_forms.tests import (
     TEST_LANGUAGE,
     TEST_LANGUAGE_NAME,
     TEST_PLUGIN_CONFIGS,
+    default_forms,
     plugin_configs,
 )
 
 
 def make_submission(facility, reference, form_code, values, uhid="", **extra):
     """A submission as the kiosk stores it; ``values`` is {key: value}, plus "<key>__comment" for a Why."""
-    form = FeedbackForm.objects.get(code=form_code, facility_external_id__isnull=True)
+    form = default_forms(facility)[form_code]
     questions = {question.key: question for question in parse_questions(form.questions)}
     answers = {
         key: stored_answer(questions[key], value, values)
@@ -137,7 +137,7 @@ class FeedbackApiTests(CareAPITestBase):
         self.assertEqual(forms["ipd"]["lowest"], ["diet", "ward_cleanliness"])
 
     def test_summary_still_counts_a_removed_question(self):
-        opd = FeedbackForm.objects.get(code="opd", facility_external_id__isnull=True)
+        opd = FeedbackForm.objects.get(code="opd", facility_external_id=self.facility.external_id)
         opd.questions = [q for q in opd.questions if q["key"] != "registration_wait"]
         opd.save()
         self.client.force_authenticate(self.superuser)
@@ -161,7 +161,7 @@ class AdminTests(CareAPITestBase):
         super().setUp()
         self.superuser = self.create_super_user(is_staff=True)
         self.facility = self.create_facility(user=self.superuser, name="District Hospital, Mysuru")
-        self.opd = FeedbackForm.objects.get(code="opd", facility_external_id__isnull=True)
+        self.opd = default_forms(self.facility)["opd"]
         self.client.force_login(self.superuser)
 
     def test_form_page_shows_a_box_per_language_and_the_page_link(self):
@@ -179,29 +179,27 @@ class AdminTests(CareAPITestBase):
         self.assertNotContains(english_only, f"Title ({TEST_LANGUAGE_NAME})")
         self.assertContains(response, 'name="questions"')
         self.assertContains(response, "&quot;key&quot;: &quot;registration_wait&quot;")  # indented JSON
-        self.assertContains(response, escape("/facility/<facility-id>/public_forms/type/opd/form/"))
-
-    def test_facility_is_checked_and_shown_by_id(self):
-        base = {"code": "opd", "patient_type": "op", "title__en": "Ours", "order": 0}
-        unknown = feedback_form_form()(data={**base, "facility_external_id": "00000000-0000-0000-0000-000000000000"})
-        self.assertIn("facility_external_id", unknown.errors)  # no such facility
-        known = feedback_form_form()(data={**base, "facility_external_id": str(self.facility.external_id)})
-        self.assertTrue(known.is_valid(), known.errors)  # its own "opd", next to the shared one
-        own = known.save()
-        changelist = self.client.get(reverse("public_forms_admin:public_forms_feedbackform_changelist"))
-        self.assertContains(changelist, "District Hospital, Mysuru")
-        self.assertContains(changelist, "Every facility")
-        page = self.client.get(reverse("public_forms_admin:public_forms_feedbackform_change", args=[own.pk]))
-        self.assertContains(page, "District Hospital, Mysuru")
-
-    def test_facility_form_shows_its_full_link(self):
-        own = FeedbackForm.objects.create(
-            facility_external_id=self.facility.external_id, code="opd", patient_type="op", title={"en": "Ours"}
-        )
-        response = self.client.get(reverse("public_forms_admin:public_forms_feedbackform_change", args=[own.pk]))
         self.assertContains(
             response, f"http://testserver/facility/{self.facility.external_id}/public_forms/type/opd/form/"
         )
+
+    def test_facility_is_required_checked_and_shown_by_name(self):
+        base = {"code": "eye_opd", "patient_type": "op", "title__en": "Eye OPD", "order": 0}
+        missing = feedback_form_form()(data=base)
+        self.assertIn("facility_external_id", missing.errors)  # every form belongs to a facility
+        unknown = feedback_form_form()(data={**base, "facility_external_id": "00000000-0000-0000-0000-000000000000"})
+        self.assertIn("facility_external_id", unknown.errors)  # no such facility
+        taken = feedback_form_form()(
+            data={**base, "code": "opd", "facility_external_id": str(self.facility.external_id)}
+        )
+        self.assertIn("code", taken.errors)  # the facility has an "opd" form already
+        known = feedback_form_form()(data={**base, "facility_external_id": str(self.facility.external_id)})
+        self.assertTrue(known.is_valid(), known.errors)
+        own = known.save()
+        changelist = self.client.get(reverse("public_forms_admin:public_forms_feedbackform_changelist"))
+        self.assertContains(changelist, "District Hospital, Mysuru", count=3)  # opd, ipd and eye_opd
+        page = self.client.get(reverse("public_forms_admin:public_forms_feedbackform_change", args=[own.pk]))
+        self.assertContains(page, "District Hospital, Mysuru")
 
     def test_form_admin_saves_title_and_questions(self):
         questions = [
@@ -214,6 +212,7 @@ class AdminTests(CareAPITestBase):
         ]
         form = feedback_form_form()(
             data={
+                "facility_external_id": str(self.facility.external_id),
                 "code": "parking",
                 "patient_type": "op",
                 "title__en": "Parking",
@@ -255,7 +254,12 @@ class AdminTests(CareAPITestBase):
         self.assertEqual(self.opd.title, {"en": "OPD", TEST_LANGUAGE: "Test title"})
 
     def test_questions_json_problems_show_on_the_form(self):
-        base = {"patient_type": "op", "title__en": "X", "order": 0}
+        base = {
+            "patient_type": "op",
+            "title__en": "X",
+            "order": 0,
+            "facility_external_id": str(self.facility.external_id),
+        }
         bad = feedback_form_form()(
             data={**base, "code": "x", "questions": json.dumps([{"key": "a", "type": "choice", "text": {"en": "A"}}])}
         )

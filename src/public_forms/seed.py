@@ -2,9 +2,9 @@
 Default OPD and inpatient forms, from the NQAS patient satisfaction format
 (Appendix A: OPD patient feedback and inpatient feedback).
 
-They are created by a data migration on install and can be edited in the
-admin afterwards; ``manage.py seed_feedback_forms`` re-creates any that are
-missing. The OPD wording and Kannada come from the kiosk design. Kannada
+Every form belongs to a facility: ``manage.py seed_feedback_forms
+<facility-id>`` gives a facility the ones it is missing, which can be edited
+in the admin afterwards. The OPD wording and Kannada come from the kiosk design. Kannada
 marked ``# review`` (most of the inpatient form) is a draft that needs a
 native speaker's check.
 """
@@ -379,17 +379,18 @@ IPD_FORM = {
 DEFAULT_FORMS = [OPD_FORM, IPD_FORM]
 
 
-def create_default_forms(form_model) -> list[str]:
+def create_default_forms(form_model, facility_external_id) -> list[str]:
     """
-    Create the shared default forms that don't exist yet, with their questions
-    as JSON. Takes the model class so the data migration can pass its
-    historical model. Returns the codes created.
+    Give a facility the default forms it doesn't have yet (by code), with
+    their questions as JSON. Takes the model class so a data migration can
+    pass its historical model. Returns the codes created.
     """
     created = []
     for definition in DEFAULT_FORMS:
-        if form_model.objects.filter(code=definition["code"], facility_external_id__isnull=True).exists():
+        if form_model.objects.filter(code=definition["code"], facility_external_id=facility_external_id).exists():
             continue
         form_model.objects.create(
+            facility_external_id=facility_external_id,
             code=definition["code"],
             patient_type=definition["patient_type"],
             order=definition["order"],

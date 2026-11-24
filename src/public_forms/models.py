@@ -2,7 +2,6 @@ import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
 from public_forms.i18n import BASE_LANGUAGE, localize
@@ -40,21 +39,14 @@ class FeedbackForm(models.Model):
     A configurable questionnaire, e.g. the OPD or the inpatient form. Its
     questions are one JSON list (see questions.py), in the order asked.
 
-    Forms without a facility are offered everywhere. A facility can have its
-    own form with the same code (say, a different clinic list), which then
-    replaces the shared one for that facility. The facility is kept by its
-    id: there is no link into Care. A form that has submissions can't be
-    deleted, only switched off.
+    Every form belongs to one facility, and a facility has at most one form
+    per code. The facility is kept by its id: there is no link into Care. A
+    form that has submissions can't be deleted, only switched off.
     """
 
     facility_external_id = models.UUIDField(
-        null=True,
-        blank=True,
         verbose_name=_("facility id"),
-        help_text=_(
-            "The facility's id (the UUID in its Care URL) for a form of its own. "
-            "Leave empty to offer this form at every facility."
-        ),
+        help_text=_("The id of the facility that offers this form (the UUID in its Care URL)."),
     )
     code = models.SlugField(
         max_length=50,
@@ -87,13 +79,7 @@ class FeedbackForm(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["facility_external_id", "code"],
-                condition=Q(facility_external_id__isnull=False),
                 name="care_publicforms_form_code_per_facility",
-            ),
-            models.UniqueConstraint(
-                fields=["code"],
-                condition=Q(facility_external_id__isnull=True),
-                name="care_publicforms_shared_form_code",
             ),
         ]
 
@@ -111,9 +97,9 @@ class FeedbackForm(models.Model):
 
             if not Facility.objects.filter(external_id=self.facility_external_id).exists():
                 errors["facility_external_id"] = _("No facility has this id.")
-        same_code = FeedbackForm.objects.filter(code=self.code, facility_external_id=self.facility_external_id)
-        if same_code.exclude(pk=self.pk).exists():
-            errors["code"] = _("Another form already uses this code here.")
+            same_code = FeedbackForm.objects.filter(code=self.code, facility_external_id=self.facility_external_id)
+            if same_code.exclude(pk=self.pk).exists():
+                errors["code"] = _("This facility already has a form with this code.")
         from public_forms.questions import question_errors, steps_errors  # imports this module
 
         if problems := question_errors(self.questions):

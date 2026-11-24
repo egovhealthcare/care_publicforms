@@ -4,7 +4,8 @@ import { defineConfig, devices } from "@playwright/test";
  * End-to-end tests for the patient feedback pages, run in a real browser
  * against a Care backend with the plugin installed (see ../README.md).
  *
- *   PF_FACILITY_ID  external id (UUID) of a facility on that backend (required)
+ *   PF_FACILITY_ID  external id (UUID) of a facility on that backend that has
+ *                   the default forms: `manage.py seed_feedback_forms <id>` (required)
  *   PF_BASE_URL     the Care backend, default http://localhost:9000
  *
  * The tests submit feedback, so point them at a development database.

@@ -125,9 +125,9 @@ src/public_forms/
 ├── api.py, urls.py      Staff API: responses list and per-form summary
 ├── settings.py          Plugin settings (PLUGIN_CONFIGS → env → defaults)
 ├── checks.py            `manage.py check` warnings for LANGUAGES / DEFAULT_LANGUAGE
-├── seed.py              Default OPD and IPD forms (used by migration 0002 and a command)
+├── seed.py              Default OPD and IPD forms, given to a facility by a command
 ├── management/commands/seed_feedback_forms.py
-├── migrations/          0001 schema (two tables), 0002 seed, then one questionnaire migration per added language
+├── migrations/          0001 schema (two tables), 0002–0006 changes (below), then one per added language
 └── tests/               Django tests
 e2e/                     Playwright browser tests
 ```
@@ -405,12 +405,12 @@ tables**; facilities are referred to by their `external_id`.
 
 | Table | Holds | Rows |
 | --- | --- | --- |
-| `care_publicforms_form` | Configuration: a questionnaire, with its questions as one JSON list | A handful (the shared OPD and IPD forms, plus any facility's own) |
+| `care_publicforms_form` | Configuration: a questionnaire, with its questions as one JSON list | A few per facility (usually its OPD and IPD forms) |
 | `care_publicforms_submission` | Data: one submitted questionnaire, each answer with its question | One per patient response |
 
 ```mermaid
 erDiagram
-    facility_facility ||..o{ care_publicforms_form : "external_id (no FK, optional)"
+    facility_facility ||..o{ care_publicforms_form : "external_id (no FK)"
     facility_facility ||..o{ care_publicforms_submission : "external_id (no FK)"
     care_publicforms_form ||--o{ care_publicforms_submission : "form_id (FK, PROTECT)"
 
@@ -421,7 +421,7 @@ erDiagram
     }
     care_publicforms_form {
         bigint id PK
-        uuid facility_external_id "NULL = shared"
+        uuid facility_external_id
         varchar code "≤ 50"
         varchar patient_type "op | ip"
         jsonb title
@@ -451,22 +451,21 @@ The solid line is the one foreign key; dotted lines are links by value only
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
 | `id` | `bigint` identity | no | Primary key |
-| `facility_external_id` | `uuid` | **yes** | `facility_facility.external_id`, **not a foreign key**. `NULL`: shared by every facility. Set: this facility's own form, which replaces the shared form with the same `code` there. The admin checks the facility exists when saving |
+| `facility_external_id` | `uuid` | no | `facility_facility.external_id`, **not a foreign key**: the facility that offers the form. Every form belongs to one facility. The admin checks the facility exists when saving |
 | `code` | `varchar(50)` | no | Slug used in the URL and stored on each submission (`opd`, `ipd`) |
 | `patient_type` | `varchar(8)` | no | `op` or `ip` |
 | `title` | `jsonb` | no | Per-language text, e.g. `{"en": "OPD feedback", "kn": "…"}`; English required |
 | `description` | `jsonb` | no | Per-language text; `{}` when empty |
 | `questions` | `jsonb` | no | The questions, in the order asked (see 8.2); `[]` when empty |
 | `steps` | `jsonb` | no | Step titles: `{"<step>": {"title": {…}, "lead": {…}}}` per language, for steps of choice / date / text questions (`questions.steps_errors`); `{}` when none, and those steps get default headings |
-| `is_active` | `boolean` | no | Inactive forms are not offered. An inactive facility form hides that code for the facility |
+| `is_active` | `boolean` | no | Inactive forms are not offered |
 | `order` | `smallint` | no | Order on the chooser; `CHECK ("order" >= 0)` |
 
 Constraints and indexes:
 
 | Name | Definition | Purpose |
 | --- | --- | --- |
-| `care_publicforms_form_code_per_facility` | `UNIQUE (facility_external_id, code) WHERE facility_external_id IS NOT NULL` | One form per code per facility |
-| `care_publicforms_shared_form_code` | `UNIQUE (code) WHERE facility_external_id IS NULL` | One shared form per code |
+| `care_publicforms_form_code_per_facility` | `UNIQUE (facility_external_id, code)` | One form per code per facility; also the index for "this facility's forms" |
 | `care_publicforms_form_code_323ee451` (+ `_like`) | `btree (code)` | Slug field index (Django default) |
 
 #### `care_publicforms_submission`: one submitted questionnaire (data)
@@ -477,7 +476,7 @@ Constraints and indexes:
 | `external_id` | `uuid` | no | Public id (API `id`); `UNIQUE` |
 | `reference_number` | `varchar(32)` | no | Shown to the patient, e.g. `OPD-20261119-4821` |
 | `facility_external_id` | `uuid` | no | `facility_facility.external_id`, **not a foreign key** |
-| `form_id` | `bigint` | no | FK → `care_publicforms_form.id`: the form row answered (the facility's own or the shared one). Its `code` and `patient_type` are read from there. `PROTECT`: a form with submissions can't be deleted |
+| `form_id` | `bigint` | no | FK → `care_publicforms_form.id`: the form answered, one of the facility's own. Its `code` and `patient_type` are read from there. `PROTECT`: a form with submissions can't be deleted |
 | `language` | `varchar(8)` | no | Language the patient submitted in |
 | `uhid` | `varchar(64)` | no | Digits as entered; `''` for guests |
 | `answers` | `jsonb` | no | `{question_key: answer}`, each answer with its question (see 8.2) |
@@ -508,7 +507,7 @@ Constraints and indexes:
 - **What keeps the data consistent instead:** the admin checks that a
   form's facility id exists when the form is saved, and the pages only look
   up forms for the facility in the URL. A facility deleted later leaves its
-  own forms unused (shown as "Unknown facility" in the admin) and its
+  forms unused (shown as "Unknown facility" in the admin) and its
   submissions readable.
 - **Submissions are self-describing.** Every answer carries its question,
   type and label, so a submission reads the same after its form is edited,
@@ -609,19 +608,23 @@ removed questions last.
 | Migration | Contents |
 | --- | --- |
 | `0001_initial` | The two tables and their one foreign key (submission → form). No dependencies on Care's migrations |
-| `0002_seed_default_forms` | Creates the shared `opd` and `ipd` forms, with their questions JSON, using `seed.create_default_forms()` if they don't exist |
+| `0002_seed_default_forms` | Created the shared `opd` and `ipd` forms. Now does nothing: forms belong to a facility (0005) and are seeded per facility |
 | `0003_hyphens_in_range_labels` | Changes the default range labels ("10-30 mins", "18-30") from an en dash to a plain hyphen, in every language, on forms created before the change. Only the exact default labels change, so admin edits are kept. Reversing it is a no-op |
 | `0004_numbered_steps` | Adds `steps` (step titles, default `{}`) and writes each question's `step` as a number into the forms that exist: where it was already asked (details 1, ratings 2, open 3), so nothing moves. Old step names become their numbers. Reversing the data part is a no-op |
+| `0005_shared_forms_to_facilities` | Shared forms (no facility) become facility forms: each facility with feedback on one gets a copy (or keeps its own form with that code) and that feedback moves to it; then the shared forms are deleted. Facilities without feedback on them get nothing. Reversing it is a no-op |
+| `0006_form_facility_required` | Makes `facility_external_id` required and the code unique per facility. A separate migration, so 0005's changes are committed before the table is altered |
 
-Seeded questions (shared forms):
+The default forms' questions:
 
 | Form | Details (choice/date) | Ratings | Yes/no | Free text |
 | --- | --- | --- | --- | --- |
 | `opd` (OP) | `clinic`; guests only: `age_group`, `sex`; all required | 10 | `would_return` (+ Why?) | 3 |
 | `ipd` (IP) | `ward`, `date_of_admission`; guests only: `age_group`, `sex`; all required | 20 | `would_return` (+ Why?) | 3 |
 
-`python manage.py seed_feedback_forms` re-creates a missing default form; it
-never changes existing ones.
+`python manage.py seed_feedback_forms <facility-id> [<facility-id> …]` gives
+facilities the default forms they don't have (by code); it never changes
+existing ones. A new facility has no forms until then: its pages show "No
+feedback forms are set up" (404).
 
 ### 8.4 Size
 
@@ -676,7 +679,7 @@ WHERE facility_external_id = '00000000-0000-0000-0000-000000000000'
 SELECT q ->> 'key' AS key, q ->> 'type' AS type, q -> 'text' ->> 'en' AS question
 FROM care_publicforms_form f
 CROSS JOIN LATERAL jsonb_array_elements(f.questions) AS q
-WHERE f.code = 'opd' AND f.facility_external_id IS NULL;
+WHERE f.code = 'opd' AND f.facility_external_id = '00000000-0000-0000-0000-000000000000';
 ```
 
 For heavy reporting on answer keys, a GIN index on `answers`
@@ -829,7 +832,7 @@ migration, no other code changes.
 2. Copy the latest questionnaire migration (`LANGUAGE`, `TRANSLATIONS`,
    calling `seed.add_language_to_forms()`), set the code and translate the
    English texts. `seed_feedback_forms` finds these migrations
-   (`seed.language_migrations()`) and applies them to forms it re-creates.
+   (`seed.language_migrations()`) and applies them to the forms it creates.
 3. Add the code to the `LANGUAGES` setting and restart; `manage.py check`
    lists anything left untranslated or broken. The admin's text boxes follow
    `LANGUAGES`.

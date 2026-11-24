@@ -64,7 +64,8 @@ key.
 
 Add the plug to Care's [`plug_config.py`](https://github.com/ohcnetwork/care/blob/develop/plug_config.py),
 then rebuild the image and run migrations. Care's start scripts collect the
-plugin's CSS and JS.
+plugin's CSS and JS. Then give each facility its forms (see
+[Forms and questions](#forms-and-questions)).
 
 ```python
 public_forms_plug = Plug(
@@ -85,6 +86,8 @@ plugs = [public_forms_plug]
 3. In `plugs/manager.py`, install in editable mode
    (`[sys.executable, "-m", "pip", "install", "-e", *packages]`), then
    `make re-build`, `make up` and `make migrate`.
+4. Give a facility the default forms:
+   `docker compose exec backend python manage.py seed_feedback_forms <facility-id>`.
 
 > [!IMPORTANT]
 > Don't commit the `plug_config.py` / `plugs/manager.py` changes to Care.
@@ -156,15 +159,27 @@ In the admin, under **Feedback forms**, each form has:
   in reference numbers (`OPD-20261118-4821`, first 12 characters).
 - **Patient type** (OP or IP), **title** and **description** per language,
   **active** and **order**.
-- **Facility id:** empty offers the form everywhere. A facility can have its
-  own form with the same code, which replaces the shared one there.
+- **Facility id** (required): the facility that offers the form, the UUID
+  in its Care URL. Every facility has its own forms, and uses a code once.
 - **Questions:** one JSON list (below). The admin checks it on save and
   names the question in every error.
 - **Step titles** (optional): a heading per step, e.g.
   `{"1": {"title": {"en": "About your visit"}, "lead": {"en": "Two quick questions."}}}`.
 
 A form that has feedback can't be deleted; switch it off instead.
-`python manage.py seed_feedback_forms` re-creates a deleted default form.
+
+A new facility has no forms, and its screens say so. Give it the default
+OPD and inpatient forms, then edit them in the admin:
+
+```bash
+python manage.py seed_feedback_forms <facility-id> [<facility-id> …]
+```
+
+It only adds the default forms a facility doesn't have, so it also brings
+back a deleted one. Forms used to be shared when they had no facility id;
+upgrading to this version (migration `0005`) gives each facility that has
+feedback on a shared form its own copy, moves that feedback to it, and then
+removes the shared forms. Seed the other facilities afterwards.
 
 ### Writing a questionnaire
 
@@ -348,7 +363,7 @@ changed placeholders and unknown keys.
    `seed.py`) to the language:
 
    ```python
-   # src/public_forms/migrations/0005_hindi_default_forms.py
+   # src/public_forms/migrations/0007_hindi_default_forms.py
    from django.db import migrations
 
    from public_forms.seed import add_language_to_forms
@@ -362,7 +377,7 @@ changed placeholders and unknown keys.
 
 
    class Migration(migrations.Migration):
-       dependencies = [("public_forms", "0004_numbered_steps")]
+       dependencies = [("public_forms", "0006_form_facility_required")]
        operations = [migrations.RunPython(forwards, migrations.RunPython.noop)]
    ```
 
@@ -415,6 +430,8 @@ npx playwright install chromium   # once
 PF_FACILITY_ID=<facility external id> npx playwright test
 ```
 
+- `PF_FACILITY_ID` needs the default forms: run `seed_feedback_forms` for it
+  first.
 - `PF_BASE_URL` sets the backend (default `http://localhost:9000`).
 - The tests submit feedback, so use a development database.
 - They open pages with `?lang=en`, so any `LANGUAGES` works; the language

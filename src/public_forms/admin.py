@@ -246,7 +246,7 @@ class FeedbackFormAdmin(admin.ModelAdmin):
     @admin.display(description=_("Facility"))
     def facility(self, obj):
         if not obj or not obj.facility_external_id:
-            return _("Every facility")
+            return None  # a new form: the admin shows its empty value
         return getattr(obj, "facility_name", None) or _("Unknown facility")
 
     @admin.display(description=_("Active questions"))
@@ -257,16 +257,6 @@ class FeedbackFormAdmin(admin.ModelAdmin):
     def page_link(self, obj):
         if not obj or not obj.pk:
             return _("Save the form to see its link.")
-        if obj.facility_external_id is None:
-            path = reverse(
-                "public_forms:form",
-                kwargs={"facility_id": "00000000-0000-0000-0000-000000000000", "form": obj.code},
-            ).replace("00000000-0000-0000-0000-000000000000", "<facility-id>")
-            return format_html(
-                "<code>{}</code><br><small>{}</small>",
-                path,
-                _("Open it on a screen with a facility's id; the screen then stays on this form."),
-            )
         request = _current_request.get()
         path = reverse("public_forms:form", kwargs={"facility_id": obj.facility_external_id, "form": obj.code})
         url = request.build_absolute_uri(path) if request else path

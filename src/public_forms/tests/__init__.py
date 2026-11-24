@@ -48,3 +48,12 @@ def plugin_configs(**config) -> dict:
 
 
 TEST_PLUGIN_CONFIGS = plugin_configs()
+
+
+def default_forms(facility) -> dict:
+    """The facility's forms by code, after giving it the default OPD and inpatient forms it is missing."""
+    from public_forms.models import FeedbackForm
+    from public_forms.seed import create_default_forms
+
+    create_default_forms(FeedbackForm, facility.external_id)
+    return {form.code: form for form in FeedbackForm.objects.filter(facility_external_id=facility.external_id)}
