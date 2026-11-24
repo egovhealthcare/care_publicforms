@@ -70,7 +70,8 @@ from public_forms.steps import (
     is_flow_step,
     navigate,
     review_rows,
-    shows_home_reset,
+    shows_home,
+    shows_reset,
     unit_questions,
     unit_value,
 )
@@ -434,7 +435,8 @@ class FormView(FeedbackPage):
             identified=identified,
             rating_total=len(shown_ratings),
             progress=progress,
-            nav_shown=shows_home_reset(spec, place.step),
+            home_shown=shows_home(place.step),
+            reset_shown=shows_reset(spec, place.step),
             id_strip_shown=identified and in_flow,
             uhid_display=" ".join(
                 uhid[start:end] for start, end in zip([0, *sorted(gaps)], [*sorted(gaps), len(uhid)], strict=False)
@@ -476,7 +478,7 @@ class FormView(FeedbackPage):
             else "start_questions"
             if following.is_ratings and not any(earlier.is_ratings for earlier in spec.screens[:position])
             else "next",
-            "home_reset": screen.style == "open",
+            "resets": screen.style == "open",  # Reset shows here, and clears it
         }
 
 

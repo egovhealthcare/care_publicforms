@@ -32,8 +32,9 @@ the design.
   - **Idle reset:** after 90 s without a touch the screen starts over,
     with an "Are you still there?" warning for the last 15 s. An untouched
     screen never reloads.
-  - **Home and Reset** (from the first rating on) ask before clearing
-    answers. Reset keeps the UHID and the details before the ratings.
+  - **Home** (on every page after the first) and **Reset** (from the
+    first rating on) ask before clearing answers. Reset keeps the UHID and
+    the details before the ratings.
   - **Back** never shows the previous patient's page or reference number.
   - **Reloading or closing with answers** asks first (the browser's "Leave
     site?"; not on iPhone or iPad). Pull-to-refresh is off in Chromium.
@@ -278,8 +279,9 @@ Rules:
   of a form that ends with ratings says "Review answers".
 - **A screen with nothing for this patient is skipped,** e.g. guest-only
   questions for a patient who gave a UHID.
-- **Home and Reset appear from the first ratings on.** Reset clears the
-  ratings and the screens after them, and keeps the screens before them.
+- **Home appears on every page after the first; Reset from the first
+  ratings on.** Reset clears the ratings and the screens after them, and
+  keeps the screens before them.
 - **Every text is per language:** `"en"` is required, plus
   `"<code>": "…"` for each other language. Missing languages show the
   English.

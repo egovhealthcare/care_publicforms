@@ -187,10 +187,15 @@
     return name === 'questions' || name === 'review' || /^screen-/.test(name || '');
   }
 
-  // Home / Reset show from the first rating on: on the cards, the review and
-  // the screens after the ratings (data-home-reset).
-  function showsHomeReset(name) {
-    return name === 'questions' || name === 'review' || !!(steps[name] && steps[name].hasAttribute('data-home-reset'));
+  // Home shows on every step after the first page (identify). Reset shows
+  // from the first rating on: on the cards, the review and the screens after
+  // the ratings (data-resets), the ones it clears. As steps.py.
+  function showsHome(name) {
+    return name !== 'identify';
+  }
+
+  function showsReset(name) {
+    return name === 'questions' || name === 'review' || !!(steps[name] && steps[name].hasAttribute('data-resets'));
   }
 
   // The step buttons are submit buttons for the page without JavaScript;
@@ -428,7 +433,10 @@
     if (name === 'scan') startScan();
 
     var inFlow = name !== 'identify' && name !== 'scan' && name !== 'uhid';
-    if (headerNav) headerNav.hidden = !showsHomeReset(name);
+    if (headerNav) {
+      headerNav.hidden = !showsHome(name);
+      each(headerNav.querySelectorAll('.navbtn--reset'), function (button) { button.hidden = !showsReset(name); });
+    }
     if (idStrip) {
       idStrip.hidden = !(inFlow && identified);
       $('idStripValue').textContent = formatUhid(digitsOf(uhidInput.value));
@@ -953,11 +961,11 @@
   });
 
   // What Reset clears: the rating cards and the screens after the ratings
-  // (those that show Home / Reset). The UHID (or guest choice) and the
+  // (those that show Reset). The UHID (or guest choice) and the
   // screens before the ratings ("A few details") are kept.
   function resetSteps() {
     var out = [steps.questions];
-    each(screens, function (screen) { if (screen.hasAttribute('data-home-reset')) out.push(screen); });
+    each(screens, function (screen) { if (screen.hasAttribute('data-resets')) out.push(screen); });
     return out;
   }
 
@@ -979,7 +987,7 @@
     resumeAt = null;
     var units = flow();
     for (var i = 0; i < units.length; i++) {
-      if (showsHomeReset(units[i][0])) { goTo(units[i]); return; }
+      if (showsReset(units[i][0])) { goTo(units[i]); return; }
     }
   }
 

@@ -139,7 +139,7 @@ class PublicPageTests(PageTestBase):
         self.assertNotContains(response, "csrfmiddlewaretoken")
 
     def test_home_and_reset_links(self):
-        # kiosk.js shows them from the first rating question on, in every flow.
+        # Neither on the first page; kiosk.js shows Home after it, Reset from the first rating question on.
         chosen = self.client.get(self.url("form", "opd", **{"from": "start"}))
         self.assertContains(chosen, '<nav class="hdr-nav" id="hdrNav" hidden>')
         # Picked on the chooser: Home → chooser, Reset → this form.
@@ -539,6 +539,24 @@ class LanguageTests(PageTestBase):
 
 
 class StepByStepWithoutJavaScriptTests(PageTestBase):
+    def test_home_from_the_second_page_reset_from_the_ratings(self):
+        reset_hidden = 'class="navbtn navbtn--reset no-js-only" hidden>'
+        first = self.client.get(self.url("form", "opd"))
+        self.assertContains(first, '<nav class="hdr-nav" id="hdrNav" hidden>')
+        # The UHID step and the details: Home only.
+        for page in (self.press("go:uhid", step="identify"), self.press("uhid", step="uhid", uhid=UHID)):
+            self.assertContains(page, '<nav class="hdr-nav" id="hdrNav">')
+            self.assertContains(page, reset_hidden)
+        self.assertEqual(self.place(page), ("screen-1", 0))
+        # The ratings: Reset too.
+        ratings = self.press("next", step="screen-1", uhid=UHID, clinic="ent")
+        self.assertEqual(self.place(ratings), ("questions", 0))
+        self.assertContains(ratings, '<nav class="hdr-nav" id="hdrNav">')
+        self.assertNotContains(ratings, reset_hidden)
+        # Home from the details, with nothing entered there yet, simply goes.
+        home = self.press("ask:home", step="screen-1")
+        self.assertRedirects(home, self.url("form", "opd"), fetch_redirect_response=False)
+
     """Without JavaScript every step button posts the page; the server shows the step it leads to."""
 
     def press(self, nav, form="opd", **data):
@@ -844,11 +862,11 @@ class QuestionsJsonTests(PageTestBase):
         self.assertIn('<span class="ynbtn">', third)  # after the ratings: large Yes / No-style buttons
         self.assertIn(">Next<", third)  # more rating cards come next, but the ratings have started
         self.assertIn("Start the questions", section(page, "screen-1"))
-        self.assertTrue(third.startswith(' data-order="3" data-home-reset>'))  # Home / Reset show here
+        self.assertTrue(third.startswith(' data-order="3" data-resets>'))  # Reset shows here
         fifth = section(page, "screen-5")
         self.assertIn("In your own words", fifth)  # the default heading
         self.assertIn("Review answers", fifth)  # the review comes next
-        self.assertTrue(section(page, "screen-1").startswith(' data-order="1">'))  # before the ratings: no Home / Reset
+        self.assertTrue(section(page, "screen-1").startswith(' data-order="1">'))  # before the ratings: no Reset
 
     def test_a_page_can_name_its_main_button(self):
         # The page's own label replaces the default, in each language (English

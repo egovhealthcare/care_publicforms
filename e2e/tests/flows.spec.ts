@@ -37,7 +37,9 @@ test("an identified patient answers everything and gets a reference", async ({ p
   await expect(page.locator("#idStripValue")).toHaveText("123 4567 8901");
   // Age and sex are only asked of guests.
   await expect(activeStep(page).locator('[data-question-key="age_group"]')).toBeHidden();
-  await expect(headerNav(page)).toBeHidden();
+  // Home from the second page on; Reset only from the first rating.
+  await expect(headerNav(page).getByRole("link", { name: "Home" })).toBeVisible();
+  await expect(headerNav(page).getByRole("link", { name: "Reset" })).toBeHidden();
 
   // The clinic is required.
   await page.locator('[data-step="screen-1"] [data-action="screen-next"]').click();
@@ -48,9 +50,9 @@ test("an identified patient answers everything and gets a reference", async ({ p
   await expect(requiredError(page, "clinic")).toBeHidden();
   await page.locator('[data-step="screen-1"] [data-action="screen-next"]').click();
 
-  // Home and Reset from the first question on.
+  // Reset too from the first question on.
   await expect(counter(page)).toHaveText(counterText(1, 10), shown);
-  await expect(headerNav(page)).toBeVisible();
+  await expect(headerNav(page).getByRole("link", { name: "Reset" })).toBeVisible();
   expect(await rateAll(page, 4)).toBe(10);
 
   await expectStep(page, "screen-3");

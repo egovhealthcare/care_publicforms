@@ -66,9 +66,9 @@ flowchart LR
 5. **Thank you.** The patient sees a reference number. After 20 seconds the
    kiosk goes back to the start for the next patient.
 
-Two buttons, **Home** and **Reset**, appear at the top from the first rating
-on. Home leaves the form, and Reset clears the ratings and later answers.
-Both ask the patient first. If nobody touches the kiosk for 90 seconds, it
+Two buttons appear at the top. **Home**, on every page after the identify
+page, leaves the form. **Reset**, from the first rating on, clears the
+ratings and later answers. Both ask the patient first. If nobody touches the kiosk for 90 seconds, it
 asks whether anyone is still there, then starts over.
 
 ---
@@ -354,7 +354,7 @@ rating.**
 | Default heading | "A few quick details" | "In your own words", then "Last 3 questions. All optional." on the last page, or "A few more questions." on earlier ones |
 | Choices | Chips | 2–3 options: large buttons; 4 or more: chips |
 | Text boxes | Small | Large |
-| Home and Reset buttons | Hidden | Shown |
+| Reset button (Home shows on both) | Hidden | Shown |
 | Reset | Keeps these answers | Clears these answers |
 
 A form without ratings treats its first page as "details" and the rest as
@@ -406,7 +406,7 @@ give the patient these screens, after the identify page:
    chips and a date box. Button: "Start the questions".
 2. **Page 2:** a card for doctor, then a card for cleanliness ("Question 1
    of 3", "Question 2 of 3"). Button on each: "Next".
-3. **Page 3 (open):** Yes / No as large buttons. Home and Reset are shown.
+3. **Page 3 (open):** Yes / No as large buttons. Reset is shown.
    Button: "Next".
 4. **Page 4:** a card for pharmacy ("Question 3 of 3"). Button: "Next".
 5. **Page 5 (open):** a large box for suggestions. Button: "Check my

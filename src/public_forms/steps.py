@@ -55,8 +55,13 @@ def is_flow_step(name) -> bool:
     return name in ("questions", "review") or bool(SCREEN_NAME.fullmatch(str(name)))
 
 
-def shows_home_reset(spec: FormSpec, name) -> bool:
-    """Home and Reset show from the first rating on: on cards, the review and "open" screens."""
+def shows_home(name) -> bool:
+    """Home shows on every step after the first page (identify): scan, UHID, the questions and the review."""
+    return name != "identify"
+
+
+def shows_reset(spec: FormSpec, name) -> bool:
+    """Reset shows from the first rating on: on cards, the review and "open" screens (what it clears)."""
     if name in ("questions", "review"):
         return True
     screen = spec.group(name)
@@ -87,7 +92,7 @@ class Place:
 
 
 def reset_questions(spec: FormSpec) -> list:
-    """What Reset clears: the ratings and the screens after them (those that show Home / Reset)."""
+    """What Reset clears: the ratings and the screens after them (those that show Reset)."""
     return [q for screen in spec.screens if screen.is_ratings or screen.style == "open" for q in screen.questions]
 
 
@@ -248,7 +253,7 @@ def navigate(spec: FormSpec, data, nav: str, identified: bool, uhid_valid: bool)
         for question in reset_questions(spec):
             for key in (question.key, comment_key(question)):
                 data.pop(key, None)
-        unit = next((unit for unit in units if shows_home_reset(spec, unit[0])), REVIEW)
+        unit = next((unit for unit in units if shows_reset(spec, unit[0])), REVIEW)
         return Place(unit[0], unit[1]), {}, identified
 
     if nav == "next":

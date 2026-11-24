@@ -3,7 +3,7 @@
 {# style "details" (before the ratings): compact, small labels, chips.           #}
 {# style "open" (after them): larger labels and boxes, 2 or 3 options as buttons, #}
 {# and the main button pinned at the bottom (kiosk.css .screen--comments).       #}
-<section class="step screen {% if screen.open %}screen--comments{% else %}screen--details{% endif %}{% if current_step == screen.name %} is-active{% endif %}" data-step="{{ screen.name }}" data-order="{{ screen.number }}"{% if screen.home_reset %} data-home-reset{% endif %}>
+<section class="step screen {% if screen.open %}screen--comments{% else %}screen--details{% endif %}{% if current_step == screen.name %} is-active{% endif %}" data-step="{{ screen.name }}" data-order="{{ screen.number }}"{% if screen.resets %} data-resets{% endif %}>
   <div class="area-head stack stack--8">
     {% if screen.title %}
     <h2 class="h2">{% tr screen.title %}</h2>

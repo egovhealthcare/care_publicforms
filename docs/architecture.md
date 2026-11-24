@@ -317,7 +317,9 @@ stateDiagram-v2
   field carries the place (`"review"`, `"questions:4"`; `steps.toward`).
 - **Home** is a link (drops everything). **Reset** clears the ratings and open
   answers in place and returns to question 1, keeping the UHID and details.
-  Both show from the first rating question on, and ask first (`askFirst()`,
+  Home shows on every step after the first page (identify), Reset from the
+  first rating question on (`showsHome()` / `showsReset()`, as
+  `steps.shows_home()` / `shows_reset()`). Both ask first (`askFirst()`,
   the `#confirmHome` / `#confirmReset` cards in form.html) once they would
   clear something; without JavaScript the server opens the same cards
   (§4.4). The cards are in the page, under the idle warning, so the idle
