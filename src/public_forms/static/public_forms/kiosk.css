@@ -529,16 +529,16 @@ input:checked + .rate--v0 .rate-face{background:#737373}
 
 /* ── Down arrow ─────────────────────────────────────────────────── */
 /* A screen taller than the window: a tap scrolls to the bottom (kiosk.js).
-   It floats above the pinned main button, at the column's left edge, in
-   line with Back: the bar is as wide as the column and centred like it, and
-   lets taps through except on the arrow. */
+   It floats above the pinned main button, at the column's right edge, in
+   line with that button: the bar is as wide as the column and centred like
+   it, and lets taps through except on the arrow. */
 .scroll-down-bar{
   position:fixed;left:0;right:0;bottom:6.25rem;z-index:3;
   max-width:30rem;margin:0 auto;padding:0 1.125rem;
   pointer-events:none;
 }
 .scroll-down{
-  width:3.25rem;height:3.25rem;padding:0;pointer-events:auto;
+  width:3.25rem;height:3.25rem;margin-left:auto;padding:0;pointer-events:auto;
   display:flex;align-items:center;justify-content:center;
   border:1px solid var(--border);border-radius:var(--radius-pill);
   background:var(--background);color:var(--primary);cursor:pointer;
