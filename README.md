@@ -50,9 +50,10 @@ Without JavaScript the kiosk still works, with these differences: each step
 reloads the page (Home and Reset still ask first, on a reloaded page); there
 is no QR camera or on-screen keypad (the UHID is typed, so the screen needs a
 keyboard or a keyboard-mode scanner); since the page can't see touches, it
-starts over 3 minutes after each page loads, counting down in the header;
-and Back after it starts over shows the browser's "Confirm form
-resubmission" page rather than the previous answers.
+starts over 3 minutes after each page loads, with a countdown in the header
+for the last minute (not on the first page, which looks like the home screen,
+unless something is entered there); and Back after it starts over shows the
+browser's "Confirm form resubmission" page rather than the previous answers.
 
 ## Installation
 
@@ -327,7 +328,7 @@ Set in the plug's `configs={}`, or as environment variables:
 | `UHID_LENGTH` / `UHID_GROUPS` | `11` / `[3, 4, 4]` | UHID digits, and their grouping on screen (must add up to the length). |
 | `REFERENCE_PREFIX` | `""` | Start of reference numbers; empty uses the form's code. |
 | `IDLE_TIMEOUT_SECONDS` | `90` | Seconds without a touch before the screen warns, then starts over. |
-| `NO_JS_IDLE_TIMEOUT_SECONDS` | `180` | Without JavaScript: seconds after a page loads before it starts over (counted down in the header; `0` turns it off). |
+| `NO_JS_IDLE_TIMEOUT_SECONDS` | `180` | Without JavaScript: seconds after a page loads before it starts over (the header counts down the last minute; `0` turns it off). |
 | `DONE_TIMEOUT_SECONDS` | `20` | How long the thank-you page stays up. |
 | `SUBMIT_RATE_LIMIT` | `"60/m"` | Submissions per IP address (django-ratelimit rate; `""` turns it off). A kiosk is one IP, so keep it well above a busy hour. |
 | `ADMIN_URL` | `"public_forms/admin"` | Path of the admin; read when Care starts. |

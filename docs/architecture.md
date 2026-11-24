@@ -237,7 +237,12 @@ The kiosk goes step by step without JavaScript too, still with no session:
   instead), auto-advance on ratings (tap an answer, then Next) and the idle
   warning. An idle step still starts over: a `<noscript>` meta refresh sends
   the page home `NO_JS_IDLE_TIMEOUT_SECONDS` after it loads, once it holds a
-  patient's choices, counted down in the header.
+  patient's choices. The header counts down the last minute (m:ss, by CSS
+  alone: the timer takes no room until then, and turns red for the last 30
+  seconds; `views.no_js_countdown` sets the delays). The chooser and the
+  identify page show no countdown while nothing is entered there
+  (`idle_countdown`): they look like the home screen, and starting over only
+  returns them to the screen's own form and language.
 - **Back** after the page starts over (or after Home) reaches a posted page,
   which the browser won't show from its cache (`no-store`): it shows its
   "Confirm form resubmission" page, not the previous patient's answers.

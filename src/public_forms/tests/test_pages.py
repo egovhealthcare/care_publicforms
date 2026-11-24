@@ -965,16 +965,40 @@ class TypedTextTests(PageTestBase):
 
 
 class NoJavaScriptIdleTests(PageTestBase):
-    """Without JavaScript: start over 3 minutes after the page loaded, counting down in the header."""
+    """Without JavaScript: start over 3 minutes after the page loaded; the header counts down the last minute."""
 
     def test_three_minutes_with_a_countdown(self):
-        page = self.client.get(self.url("form", "opd", **{"from": "start"}))  # holds the patient's form choice
-        self.assertContains(page, f'<noscript><meta http-equiv="refresh" content="180;url={self.url()}"></noscript>')
-        self.assertContains(page, 'class="tick-timer" role="timer" style="animation-delay:150s"')
+        refresh = f'<noscript><meta http-equiv="refresh" content="180;url={self.url()}"></noscript>'
+        # A later page: the patient is under way.
+        page = self.client.post(
+            self.url("form", "opd"), {"nav": "stay", "step": "screen-1", "card": "0", "uhid": UHID, "from": "start"}
+        )
+        self.assertContains(page, refresh)
+        # Shown after 2 minutes (the last minute), red after 2.5 (the last 30 seconds).
+        self.assertContains(page, 'class="tick-timer" role="timer" style="animation-delay:120s,150s"')
         self.assertContains(page, "animation:tick 240s steps(4) -59s forwards")  # minutes 3 2 1 0
         self.assertContains(page, "animation:tick 60s steps(6) -59s infinite")  # tens of seconds
         self.assertContains(page, "animation:tick 10s steps(10) -9s infinite")  # seconds
         self.assertContains(page, 'data-idle-timeout="90"')  # with JavaScript: as before
+
+    def test_the_first_page_starts_over_without_a_countdown(self):
+        # It looks like the home screen: a patient's form or language choice
+        # there is still undone after 3 minutes, but no timer shows.
+        refresh = f'<noscript><meta http-equiv="refresh" content="180;url={self.url()}"></noscript>'
+        for page in (
+            self.client.get(self.url("form", "opd", **{"from": "start"})),  # the form picked on the chooser
+            self.client.get(self.url("form", "opd", language=TEST_LANGUAGE)),  # a language picked
+            self.client.get(self.url(language=TEST_LANGUAGE)),  # the chooser itself
+        ):
+            self.assertContains(page, 'meta http-equiv="refresh" content="180;')
+            self.assertNotContains(page, "tick-timer")
+        self.assertContains(self.client.get(self.url("form", "opd", **{"from": "start"})), refresh)
+        # Back on the first page with something entered, the countdown shows.
+        back = self.client.post(
+            self.url("form", "opd"), {"nav": "stay", "step": "identify", "card": "0", "uhid": "123"}
+        )
+        self.assertEqual(back.context["current_step"], "identify")
+        self.assertContains(back, "tick-timer")
 
     def test_not_on_an_untouched_screen_or_the_thank_you_page(self):
         fresh = self.client.get(self.url("form", "opd"))
@@ -1002,3 +1026,6 @@ class NoJavaScriptIdleTests(PageTestBase):
                 units = "9876543210"[(t + timing["units_delay"]) % 10]
                 left = seconds - t
                 self.assertEqual(f"{minute}:{tens}{units}", f"{left // 60}:{left % 60:02d}", (seconds, t))
+                # Shown for the last minute only, red for the last 30 seconds.
+                self.assertEqual(t >= timing["shown_delay"], left <= 60, (seconds, t))
+                self.assertEqual(t >= timing["urgent_delay"], left <= 30, (seconds, t))

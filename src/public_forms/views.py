@@ -78,14 +78,18 @@ from public_forms.text_rules import BLOCKED_CHARACTERS, MAX_ANSWER_LENGTH, space
 SCAN_MODES = ("camera", "scanner", "off")
 
 
+NO_JS_COUNTDOWN_SHOWN_FOR = 60  # seconds: the header shows the countdown only for the last minute
+
+
 def no_js_countdown(seconds: int) -> dict | None:
     """
     Without JavaScript the page starts over ``seconds`` after it loaded (a meta
-    refresh), and the header counts down to it as m:ss, drawn by CSS alone.
-    Each digit is a column of digits in a one-line window, moved up one place
-    per step (kiosk.css, .tick); these are each column's timing, with the delay
-    that lines it up so the countdown reads ``seconds`` at load and 0:00 at the
-    refresh. None when it is turned off (0).
+    refresh), and for the last minute the header counts down to it as m:ss,
+    drawn by CSS alone. Each digit is a column of digits in a one-line window,
+    moved up one place per step (kiosk.css, .tick); these are each column's
+    timing, with the delay that lines it up so the countdown reads ``seconds``
+    at load and 0:00 at the refresh, and the delays before the countdown
+    shows and turns red. None when it is turned off (0).
     """
     if seconds <= 0:
         return None
@@ -98,6 +102,7 @@ def no_js_countdown(seconds: int) -> dict | None:
         "minutes_delay": 59 - rest,
         "tens_delay": (59 - seconds) % 60,  # 5 4 3 2 1 0, ten seconds each
         "units_delay": (9 - seconds) % 10,  # 9 … 0, a second each
+        "shown_delay": max(seconds - NO_JS_COUNTDOWN_SHOWN_FOR, 0),  # hidden until the last minute
         "urgent_delay": max(seconds - 30, 0),  # red for the last 30 seconds
     }
 
@@ -234,7 +239,8 @@ class StartView(FeedbackPage):
             for form in self.forms
         ]
         context = self.base_context(None)
-        # A patient who switched language here and left: back to the screen's language.
+        # A patient who switched language here and left: back to the screen's
+        # language. It is the home screen, so without a countdown.
         context.update(options=options, home_url=self.chooser_url(), idle_armed=bool(self.patient_language))
         return render(request, "public_forms/choose.html", context)
 
@@ -364,12 +370,18 @@ class FormView(FeedbackPage):
         if in_flow and place.unit in units:
             progress = round((units.index(place.unit) + 1) / (len(units) + 1) * 100)
 
+        idle_armed = bool(data) or bool(self.patient_language) or came_from_chooser
         context = self.base_context(self.form.title)
         context.update(
             home_url=self.home_url(came_from_chooser),  # idle reset: the next patient
             # Start the idle timer at once when the page holds a patient's choices
             # (their answers after a failed submit, their language, their form).
-            idle_armed=bool(data) or bool(self.patient_language) or came_from_chooser,
+            idle_armed=idle_armed,
+            # Without JavaScript the header counts down its last minute, except on
+            # the first page while nothing is entered there: it looks like the
+            # home screen, and starting over only puts it back in its own form
+            # and language.
+            idle_countdown=idle_armed and (place.step != "identify" or anything_entered(spec, data)),
             nav_home_url=self.home_url(came_from_chooser, **self.carry()),
             reset_url=self.form_url(self.form, **({"from": "start"} if came_from_chooser else {}), **self.carry()),
             back_to_chooser=(self.chooser_url(**self.carry()) if came_from_chooser and len(self.forms) > 1 else None),

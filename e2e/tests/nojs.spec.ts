@@ -82,10 +82,12 @@ test("without JavaScript the kiosk still goes step by step", async ({ page }) =>
   await page.locator("#uhidInput").press("Enter"); // Enter continues, like the button
   await expectStep(page, "uhid");
   await expect(page.locator("#uhidErr")).toBeVisible();
-  // The page now holds an answer: it starts over 3 minutes after it loaded,
-  // counting down in the header (it can't see touches without JavaScript).
-  await expect(page.locator(".tick-timer")).toBeVisible();
+  // The page now holds an answer: it starts over 3 minutes after it loaded
+  // (it can't see touches without JavaScript). The countdown in the header
+  // shows only for the last minute.
   await expect(page.locator('meta[http-equiv="refresh"]')).toHaveAttribute("content", /^180;url=/);
+  await expect(page.locator(".tick-timer")).toHaveCount(1);
+  await expect(page.locator(".tick-timer")).toBeHidden();
   await page.locator("#uhidInput").fill("12345678901");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
 
@@ -268,6 +270,25 @@ test("without JavaScript Home and Reset ask first too", async ({ page }) => {
   await expectStep(page, "identify");
   await expect(page.locator("#uhidInput")).toHaveValue("");
   await expect(page.locator("#feedback input:checked")).toHaveCount(0);
+});
+
+test("without JavaScript the countdown shows only for the last minute, after the first page", async ({ page }) => {
+  // The first page looks like the home screen: it starts over, but shows no countdown.
+  await page.goto(formUrl("opd", "lang=en&from=start")); // holds the patient's choice of form
+  await expect(page.locator('meta[http-equiv="refresh"]')).toHaveAttribute("content", /^180;url=/);
+  const timer = page.locator(".tick-timer");
+  await expect(timer).toHaveCount(0);
+
+  await page.getByRole("button", { name: /Continue as guest/ }).click();
+  await expectStep(page, "screen-1");
+  await expect(timer).toHaveCount(1);
+  await expect(timer).toBeHidden(); // 3 minutes left: hidden, taking no room in the header
+  expect((await timer.boundingBox())?.width).toBe(0);
+  // Run the page's CSS clock 100 times faster: 2 minutes pass in about a second.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Animation.enable");
+  await cdp.send("Animation.setPlaybackRate", { playbackRate: 100 });
+  await expect(timer).toBeVisible();
 });
 
 test("without JavaScript the thank-you page returns by itself, and Back doesn't bring it back", async ({ page }) => {

@@ -10,7 +10,7 @@
 {% block head_extra %}{% endblock %}
 {% if no_js_idle and idle_armed %}
 {# Without JavaScript the page can't see touches: start over for the next patient #}
-{# NO_JS_IDLE_TIMEOUT_SECONDS after it loaded. The header counts down to it.        #}
+{# NO_JS_IDLE_TIMEOUT_SECONDS after it loaded. The header may count down to it.    #}
 <noscript><meta http-equiv="refresh" content="{{ no_js_idle.seconds }};url={{ home_url }}"></noscript>
 {% endif %}
 {% if load_web_fonts %}
@@ -53,12 +53,12 @@ html[lang="{{ language.code }}"] .hero-title{font-size:clamp(1.625rem,7.2vw,2.12
 
       {% block header_nav %}{% endblock %}
 
-      {% if no_js_idle and idle_armed %}
-      {# Without JavaScript only: m:ss left before the page starts over, by CSS alone. #}
-      {# Each digit is a column moved up a place per step; views.no_js_countdown     #}
-      {# sets each column's timing. With JavaScript, noscript isn't shown.             #}
+      {% if no_js_idle and idle_countdown %}
+      {# Without JavaScript only: m:ss left before the page starts over, by CSS alone, #}
+      {# shown for the last minute. Each digit is a column moved up a place per step;  #}
+      {# views.no_js_countdown sets the timings. With JavaScript, noscript isn't shown. #}
       <noscript>
-        <span class="tick-timer" role="timer" style="animation-delay:{{ no_js_idle.urgent_delay }}s" {% l10n_attr "aria-label" "idle_timer" %} {% l10n_attr "title" "idle_timer" %}>
+        <span class="tick-timer" role="timer" style="animation-delay:{{ no_js_idle.shown_delay }}s,{{ no_js_idle.urgent_delay }}s" {% l10n_attr "aria-label" "idle_timer" %} {% l10n_attr "title" "idle_timer" %}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/></svg>
           <span class="tick" aria-hidden="true"><span class="tick-strip" style="animation:tick {{ no_js_idle.minutes_duration }}s steps({{ no_js_idle.minutes_steps }}) -{{ no_js_idle.minutes_delay }}s forwards">{% for minute in no_js_idle.minutes %}<span>{{ minute }}</span>{% endfor %}</span></span><span aria-hidden="true">:</span><span class="tick" aria-hidden="true"><span class="tick-strip" style="animation:tick 60s steps(6) -{{ no_js_idle.tens_delay }}s infinite"><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span><span>0</span></span></span><span class="tick" aria-hidden="true"><span class="tick-strip" style="animation:tick 10s steps(10) -{{ no_js_idle.units_delay }}s infinite"><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span><span>0</span></span></span>
         </span>

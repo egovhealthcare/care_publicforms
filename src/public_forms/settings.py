@@ -115,7 +115,7 @@ DEFAULTS = {
     # Seconds without a touch before the screen warns, then starts over.
     "IDLE_TIMEOUT_SECONDS": 90,
     # Without JavaScript the page can't see touches: it starts over this many
-    # seconds after it loaded, counting down in the header. 0 turns it off.
+    # seconds after it loaded; the header counts down the last minute. 0 turns it off.
     "NO_JS_IDLE_TIMEOUT_SECONDS": 180,
     # Seconds the "Thank you" screen stays up before starting over.
     "DONE_TIMEOUT_SECONDS": 20,

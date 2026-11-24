@@ -208,19 +208,22 @@ button.navbtn{font-family:inherit;line-height:inherit;cursor:pointer}
 
 /* Without JavaScript: time left before the page starts over (base.html). m:ss by
    CSS alone: each digit is a column of digits in a one-line window, moved up one
-   place per step; the last 30 seconds turn red. */
+   place per step. It takes no room until the last minute, then shows; the last
+   30 seconds turn red. Both start after their inline delays (shown, urgent). */
 .tick-timer{
   display:inline-flex;align-items:center;flex:none;
-  min-height:2.75rem;padding:0 .875rem 0 .75rem;border-radius:var(--radius-pill);
-  border:1px solid var(--border);background:var(--soft-background);color:var(--soft-foreground);
+  min-height:2.75rem;border-radius:var(--radius-pill);
+  background:var(--soft-background);color:var(--soft-foreground);
   font-size:.9375rem;font-weight:600;font-feature-settings:'tnum';white-space:nowrap;
-  animation:tick-urgent 0s linear forwards;  /* starts after its inline delay */
+  visibility:hidden;max-width:0;overflow:hidden;padding:0;border:0 solid var(--border);
+  animation:tick-shown 0s linear forwards, tick-urgent 0s linear forwards;
 }
 .tick-timer svg{width:1.125rem;height:1.125rem;margin-right:.375rem;flex:none}
 .tick{display:inline-block;height:1.25em;line-height:1.25em;overflow:hidden}
 .tick-strip,.tick-strip > span{display:block}
 .tick-strip > span{height:1.25em;text-align:center}
 @keyframes tick{from{transform:translateY(0)}to{transform:translateY(-100%)}}
+@keyframes tick-shown{to{visibility:visible;max-width:20rem;padding:0 .875rem 0 .75rem;border-width:1px}}
 @keyframes tick-urgent{to{color:var(--destructive-text);border-color:var(--destructive-border);background:var(--destructive-soft)}}
 .no-js .hdr-row > noscript + .langtog{margin-left:.5rem}
 
