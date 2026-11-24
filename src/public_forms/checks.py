@@ -3,6 +3,7 @@
 from django.core.checks import Warning, register
 
 from public_forms.i18n import BASE_LANGUAGE, RATING_VALUES, catalog, languages, load_problems, placeholders
+from public_forms.patients import UHID_SCOPES
 from public_forms.settings import plugin_settings
 
 MAX_LISTED = 8  # keys named in one warning
@@ -79,3 +80,18 @@ def check_languages(app_configs, **kwargs):
                 )
             )
     return warnings
+
+
+@register()
+def check_uhid_lookup(app_configs, **kwargs):
+    scope = plugin_settings.UHID_IDENTIFIER_SCOPE
+    if scope in UHID_SCOPES:
+        return []
+    return [
+        Warning(
+            f"public_forms UHID_IDENTIFIER_SCOPE {scope!r} is not one of {', '.join(map(repr, UHID_SCOPES))}; "
+            "patient QR codes find no UHID.",
+            hint='"system": the UHID identifier config is system-wide; "facility": each facility has its own.',
+            id="public_forms.W007",
+        )
+    ]

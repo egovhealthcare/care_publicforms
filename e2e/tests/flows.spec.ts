@@ -182,6 +182,60 @@ test("a keyboard-mode QR scanner identifies the patient on the first screen", as
   await expect(page.locator("#idStripValue")).toHaveText("123 4567 8901");
 });
 
+// A QR that holds the patient's id in Care: the server looks up their UHID at
+// this facility (Django tests cover the lookup; here it is answered for them).
+const PATIENT_ID = "79e6f401-6e95-42b1-8ce6-01c71c031812";
+
+async function answerLookups(page: import("@playwright/test").Page, uhid: string | null): Promise<string[]> {
+  const asked: string[] = [];
+  await page.route("**/public_forms/patient/", async (route) => {
+    asked.push(`${route.request().method()} ${route.request().postData()}`);
+    await route.fulfill({ status: uhid ? 200 : 404, json: { uhid } });
+  });
+  return asked;
+}
+
+test("a QR with the patient's id identifies them by their UHID", async ({ page }) => {
+  const asked = await answerLookups(page, "98765432101");
+  await page.goto(formUrl("opd", "lang=en&scan=scanner"));
+  await expectStep(page, "identify");
+  await page.keyboard.type(PATIENT_ID, { delay: 5 });
+  await page.keyboard.press("Enter");
+  await expectStep(page, "screen-1");
+  await expect(page.locator("#idStripValue")).toHaveText("987 6543 2101");
+  expect(asked).toEqual([`POST patient=${PATIENT_ID}`]); // the id goes in the body, not the address
+});
+
+test("a patient's QR scanned on the UHID step fills in their UHID", async ({ page }) => {
+  await answerLookups(page, "98765432101");
+  await page.goto(formUrl("opd", "lang=en&scan=scanner"));
+  await page.getByRole("button", { name: /Enter UHID manually/ }).click();
+  await expectStep(page, "uhid");
+  await page.locator("#uhidWrap").click(); // the box has the focus, as a scanner finds it
+  await page.keyboard.type(PATIENT_ID, { delay: 5 });
+  await page.keyboard.press("Enter");
+  await expectStep(page, "screen-1");
+  await expect(page.locator("#idStripValue")).toHaveText("987 6543 2101");
+});
+
+test("a patient's QR with no UHID at this facility is refused", async ({ page }) => {
+  await answerLookups(page, null);
+  await page.goto(formUrl("opd", "lang=en&scan=scanner"));
+  await page.keyboard.type(PATIENT_ID, { delay: 5 });
+  await page.keyboard.press("Enter");
+  await expectStep(page, "scan");
+  await expect(page.locator("#scanError")).toBeVisible();
+  // On the UHID step, its own message, and the box is left empty.
+  await page.getByRole("button", { name: "Enter UHID instead" }).click();
+  await page.locator("#uhidWrap").click();
+  await page.keyboard.type(PATIENT_ID, { delay: 5 });
+  await page.keyboard.press("Enter");
+  await expectStep(page, "uhid");
+  await expect(page.locator("#uhidQrErr")).toBeVisible();
+  await expect(page.locator("#uhidErr")).toBeHidden();
+  await expect(page.locator("#uhidInput")).toHaveValue("");
+});
+
 test("a wrong UHID length is refused", async ({ page }) => {
   await page.goto(formUrl("opd"));
   await page.getByRole("button", { name: /Enter UHID manually/ }).click();

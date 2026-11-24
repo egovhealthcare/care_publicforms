@@ -21,7 +21,7 @@ from public_forms.settings import plugin_settings
 _NON_DIGITS = re.compile(r"\D")
 
 
-# ── UHID (format only; it is stored as entered, not looked up) ───────
+# ── UHID (format only; a typed UHID is stored as entered) ─────────────
 def uhid_length() -> int:
     return int(plugin_settings.UHID_LENGTH)
 

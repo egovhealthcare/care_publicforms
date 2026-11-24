@@ -32,7 +32,7 @@ from datetime import timedelta
 
 from care.facility.models import Facility
 from django.conf import settings
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
@@ -45,6 +45,7 @@ from django_ratelimit.core import is_ratelimited
 
 from public_forms.i18n import BASE_LANGUAGE, languages, localize, normalize_language
 from public_forms.models import FeedbackSubmission, QuestionType
+from public_forms.patients import patient_id_in, uhid_of_patient
 from public_forms.questionnaire import (
     FormSpec,
     applies,
@@ -260,13 +261,17 @@ class FormView(FeedbackPage):
         if self.rate_limited(request):
             return self.render_form(came_from_chooser, spec, data=request.POST, banner="too_many", status=429)
 
-        raw_uhid = digits_of(request.POST.get("uhid"))
+        data = request.POST.copy()
+        found = self.uhid_from_qr(data)
+        raw_uhid = digits_of(data.get("uhid"))
         uhid = parse_uhid(raw_uhid) if raw_uhid else ""
-        answers, missing = collect_answers(spec, request.POST, identified=bool(uhid))
+        answers, missing = collect_answers(spec, data, identified=bool(uhid))
         if uhid is None:
             missing["uhid"] = "length"
+        if not found:
+            missing["uhid"] = "qr"
         if missing:
-            return self.render_form(came_from_chooser, spec, data=request.POST, errors=missing, banner="error_summary")
+            return self.render_form(came_from_chooser, spec, data=data, errors=missing, banner="error_summary")
 
         language = normalize_language(request.POST.get("language"), self.default_language)
         submission = create_submission(self.facility, self.form, language, uhid or "", answers)
@@ -280,6 +285,7 @@ class FormView(FeedbackPage):
     def navigate(self, came_from_chooser, spec, nav):
         """Without JavaScript: a step button was pressed; show the step it leads to (nothing is saved)."""
         data = self.request.POST.copy()
+        found = self.uhid_from_qr(data)
         if nav.startswith("lang:") and nav[len("lang:") :] in languages():
             self.patient_language = data["language"] = nav[len("lang:") :]
         if nav == "ask:home" and not anything_entered(spec, data):
@@ -287,7 +293,22 @@ class FormView(FeedbackPage):
         raw_uhid = digits_of(data.get("uhid"))
         uhid_valid = parse_uhid(raw_uhid) is not None if raw_uhid else False
         place, errors, _ = navigate(spec, data, nav, identified=uhid_valid, uhid_valid=uhid_valid)
+        if not found and errors.get("uhid"):
+            errors["uhid"] = "qr"  # the code was read, but no UHID was found for it
         return self.render_form(came_from_chooser, spec, data=data, errors=errors, place=place)
+
+    def uhid_from_qr(self, data) -> bool:
+        """
+        A patient id in the UHID box, from a QR code (a keyboard-mode scanner
+        typed it there, without JavaScript): the box gets the patient's UHID
+        from Care instead. False when there was an id but no UHID for it, and
+        the box is emptied.
+        """
+        patient = patient_id_in(data.get("uhid"))
+        if patient is None:
+            return True
+        data["uhid"] = (None if qr_lookup_limited(self.request) else uhid_of_patient(self.facility, patient)) or ""
+        return bool(data["uhid"])
 
     @staticmethod
     def rate_limited(request) -> bool:
@@ -396,6 +417,8 @@ class FormView(FeedbackPage):
             minutes=max(1, math.ceil(len(spec.questions) * SECONDS_PER_QUESTION / 60)),
             uhid=uhid,
             uhid_length=uhid_length(),
+            # Where kiosk.js looks up the UHID of a patient whose QR holds their id.
+            patient_url=reverse("public_forms:patient", kwargs={"facility_id": self.facility.external_id}),
             uhid_cells=[{"digit": uhid[i] if i < len(uhid) else "", "gap": i in gaps} for i in range(uhid_length())],
             keypad=["1", "2", "3", "4", "5", "6", "7", "8", "9"],
             show_keypad=self.show_keypad,
@@ -455,6 +478,33 @@ class FormView(FeedbackPage):
             else "next",
             "home_reset": screen.style == "open",
         }
+
+
+# ── A patient's UHID from a QR ─────────────────────────────────────────
+def qr_lookup_limited(request) -> bool:
+    """Per IP address, like submitting; an empty QR_LOOKUP_RATE_LIMIT turns it off."""
+    rate = plugin_settings.QR_LOOKUP_RATE_LIMIT
+    if not rate or getattr(settings, "DISABLE_RATELIMIT", False):
+        return False
+    return is_ratelimited(request, group="public_forms.qr_lookup", key="ip", rate=rate, increment=True)
+
+
+@method_decorator(csrf_exempt, name="dispatch")  # public, with no session or cookies to protect
+class PatientLookupView(FeedbackPage):
+    """
+    POST ``patient`` (what the QR code held) → ``{"uhid": "…"}``, or 404 with
+    ``{"uhid": null}`` when this facility has no UHID for it (patients.py);
+    429 when one screen asks too often. kiosk.js asks this after a scan. A
+    POST keeps the patient's id out of addresses and server logs.
+    """
+
+    http_method_names = ["post"]
+
+    def post(self, request, **kwargs):
+        if qr_lookup_limited(request):
+            return JsonResponse({"uhid": None}, status=429)
+        uhid = uhid_of_patient(self.facility, patient_id_in(request.POST.get("patient")))
+        return JsonResponse({"uhid": uhid}, status=200 if uhid else 404)
 
 
 # ── Thank you ──────────────────────────────────────────────────────────

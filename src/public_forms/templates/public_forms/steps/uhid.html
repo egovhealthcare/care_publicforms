@@ -10,10 +10,12 @@
       {% for cell in uhid_cells %}<span class="uhid-cell{% if cell.gap %} uhid-cell--gap{% endif %}{% if cell.digit %} is-filled{% endif %}" aria-hidden="true">{{ cell.digit }}</span>{% endfor %}
       <input id="uhidInput" name="uhid" value="{{ uhid }}" class="uhid-input"
              inputmode="numeric" pattern="[0-9]*"{% if show_keypad %} data-keypad{% endif %}
-             maxlength="{{ uhid_length }}" autocomplete="off"
+             maxlength="64" autocomplete="off"
              {% l10n_attr "aria-label" "uhid_label" n=uhid_length %}>
     </div>
-    <p class="err" id="uhidErr" role="alert"{% if not errors.uhid %} hidden{% endif %}>{% t "uhid_error_length" n=uhid_length %}</p>
+    <p class="err" id="uhidErr" role="alert"{% if errors.uhid != "length" %} hidden{% endif %}>{% t "uhid_error_length" n=uhid_length %}</p>
+    {# A QR code that holds no UHID, or a patient id with no UHID at this facility. #}
+    <p class="err" id="uhidQrErr" role="alert"{% if errors.uhid != "qr" %} hidden{% endif %}>{% t "scan_unreadable" %}</p>
   </div>
 
   {% if show_keypad %}

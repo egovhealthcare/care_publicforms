@@ -35,7 +35,7 @@
 {# is-editing: an answer opened from the review; its step shows no Back (see kiosk.css). #}
 <form id="feedback" method="post" novalidate autocomplete="off"{% if returning %} class="is-editing"{% endif %}
       data-start-step="{{ current_step }}" data-start-card="{{ current_card }}"
-      data-uhid-length="{{ uhid_length }}" data-scan-mode="{{ scan_mode }}"
+      data-uhid-length="{{ uhid_length }}" data-scan-mode="{{ scan_mode }}" data-patient-url="{{ patient_url }}"
       data-blocked-characters="{{ blocked_characters }}">
   <input type="hidden" name="language" value="{{ lang }}" id="fLang">
   {% if came_from_chooser %}<input type="hidden" name="from" value="start">{% endif %}
@@ -70,9 +70,11 @@
 {# A screen taller than the window shows a down arrow while there is more below; #}
 {# a tap scrolls to the bottom, where the main button is. It needs JavaScript to #}
 {# know when the screen scrolls (kiosk.js), so without it it stays hidden.      #}
-<button type="button" class="scroll-down js-only" id="scrollDown" tabindex="-1" hidden {% l10n_attr "aria-label" "scroll_down" %}>
-  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-</button>
+<div class="scroll-down-bar js-only">
+  <button type="button" class="scroll-down" id="scrollDown" tabindex="-1" hidden {% l10n_attr "aria-label" "scroll_down" %}>
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+  </button>
+</div>
 
 {# Home and Reset ask first once they would clear something. Cards in the page, not #}
 {# browser pop-ups, so the idle reset can still clear the screen if the patient     #}

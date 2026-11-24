@@ -5,6 +5,7 @@ Kiosk pages (no login, kiosk key, session or cookies), mounted under
   /facility/<id>/public_forms/                    form chooser
   /facility/<id>/public_forms/type/<form>/form/   one form; POST saves it
   /facility/<id>/public_forms/type/<form>/done/   thank you + reference
+  /facility/<id>/public_forms/patient/            POST: a QR's patient id → their UHID (JSON)
 """
 
 from django.urls import path
@@ -17,4 +18,5 @@ urlpatterns = [
     path("", views.StartView.as_view(), name="start"),
     path("type/<slug:form>/form/", views.FormView.as_view(), name="form"),
     path("type/<slug:form>/done/", views.DoneView.as_view(), name="done"),
+    path("patient/", views.PatientLookupView.as_view(), name="patient"),
 ]

@@ -499,6 +499,7 @@
 
   function hideUhidError() {
     $('uhidErr').hidden = true;
+    $('uhidQrErr').hidden = true;
     uhidInput.removeAttribute('aria-invalid');
   }
 
@@ -514,6 +515,7 @@
 
   function submitUhid() {
     if (continueWithUhid(uhidInput.value)) return;
+    hideUhidError();
     $('uhidErr').hidden = false;
     uhidInput.setAttribute('aria-invalid', 'true');
   }
@@ -590,16 +592,65 @@
     } catch (e) { /* this browser can't report camera permission */ }
   }
 
+  // A QR code holds the UHID itself, or the patient's id in Care (a UUID,
+  // alone or in a link), whose UHID at this facility the server looks up.
+  var PATIENT_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  var patientUrl = form.getAttribute('data-patient-url');
+  var lookingUp = false;
+  var refusedCode = null;  // the last code that gave no UHID: the camera doesn't read it again
+
+  function isCode(raw) {
+    return PATIENT_ID.test(raw || '') || digitsOf(raw).length >= 6;
+  }
+
+  // POST, so the patient's id stays out of addresses and logs; ``done``
+  // gets the UHID, or null when there is none (or the server can't say).
+  function lookUpUhid(patientId, done) {
+    var request = new XMLHttpRequest();
+    request.open('POST', patientUrl);
+    request.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    request.timeout = 10000;
+    request.onload = function () {
+      var uhid = null;
+      if (request.status === 200) {
+        try { uhid = JSON.parse(request.responseText).uhid || null; } catch (e) { uhid = null; }
+      }
+      done(uhid);
+    };
+    request.onerror = request.ontimeout = function () { done(null); };
+    request.send('patient=' + encodeURIComponent(patientId));
+  }
+
   function scanned(raw) {
-    if (continueWithUhid(raw)) return;
-    // A keyboard scanner read something that isn't a UHID. Show the scan
-    // step's message, unless the camera can't be used: then the UHID step.
-    if (scanOption && scanOption.hidden) {
-      show('uhid');
-      $('uhidErr').hidden = false;
+    var patientId = String(raw || '').match(PATIENT_ID);
+    if (patientId) {
+      if (lookingUp) return;
+      lookingUp = true;
+      if (current === 'uhid') { uhidInput.value = ''; paintUhid(); } // a scanner typed it into the box
+      lookUpUhid(patientId[0], function (uhid) {
+        lookingUp = false;
+        // The patient may have moved on meanwhile; only identify them where they still are.
+        if (current !== 'identify' && current !== 'scan' && current !== 'uhid') return;
+        if (!uhid || !continueWithUhid(uhid)) notRead(raw);
+      });
+      return;
+    }
+    if (!continueWithUhid(raw)) notRead(raw);
+  }
+
+  // A code that gave no UHID. Show the scan step's message (and keep the
+  // camera reading), unless the camera can't be used: then the UHID step's.
+  function notRead(raw) {
+    refusedCode = raw;
+    if ((scanOption && scanOption.hidden) || current === 'uhid') {
+      if (current !== 'uhid') show('uhid');
+      hideUhidError();
+      $('uhidQrErr').hidden = false;
+      uhidInput.setAttribute('aria-invalid', 'true');
       return;
     }
     if (current !== 'scan') show('scan');
+    else startScan();
     var error = $('scanError');
     if (error) error.hidden = false;
   }
@@ -614,26 +665,34 @@
     flushTimer = null;
     var code = buffer;
     buffer = '';
-    if (digitsOf(code).length >= 6) scanned(code);
+    if (isCode(code)) scanned(code);
   }
+  // Heard first (capture), so a scanned code's Enter doesn't also reach the
+  // UHID box, which would take the code's digits for a UHID.
   document.addEventListener('keydown', function (event) {
-    if (current !== 'identify' && current !== 'scan') return;
+    if (current !== 'identify' && current !== 'scan' && current !== 'uhid') return;
+    // On the UHID step a scanner types into the UHID box; elsewhere into nothing.
     var target = event.target;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+    var typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+    if (current === 'uhid' ? typing && target !== uhidInput : typing) return;
     var now = Date.now();
     if (now - lastKeyAt > 80) buffer = '';
     lastKeyAt = now;
     if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
     var key = event.key;
     if (key === 'Enter' || key === 'Tab') {
-      if (digitsOf(buffer).length >= 6) { event.preventDefault(); flush(); }
+      if (isCode(buffer) && buffer.length > 1) {
+        event.preventDefault();
+        event.stopPropagation();
+        flush();
+      }
       buffer = '';
     } else if (key && key.length === 1) {
       buffer += key;
       // Scanners that send no terminator: take the code once typing stops.
-      if (digitsOf(buffer).length >= uhidLength) flushTimer = setTimeout(flush, 150);
+      if (PATIENT_ID.test(buffer) || digitsOf(buffer).length >= uhidLength) flushTimer = setTimeout(flush, 150);
     }
-  });
+  }, true);
 
   var video = $('camVideo');
   var stream = null;
@@ -686,9 +745,11 @@
           detector.detect(video).then(function (codes) {
             busy = false;
             for (var i = 0; i < codes.length; i++) {
-              if (digitsOf(codes[i].rawValue).length === uhidLength) {
+              var raw = codes[i].rawValue;
+              if (raw === refusedCode) continue; // still in front of the camera
+              if (PATIENT_ID.test(raw) || digitsOf(raw).length === uhidLength) {
                 stopCamera();
-                scanned(codes[i].rawValue);
+                scanned(raw);
                 return;
               }
             }
@@ -1074,10 +1135,12 @@
     var typing = !!document.activeElement && document.activeElement.tagName === 'TEXTAREA';
     scrollDown.hidden = typing || below < 2 * rem;
   }
+  // A timer, not an animation frame: frames pause while the page isn't
+  // drawn (a hidden window or webview), and the arrow would never update.
   function scheduleScrollHint() {
     if (hintPending) return;
     hintPending = true;
-    (window.requestAnimationFrame || function (fn) { setTimeout(fn, 16); })(updateScrollHint);
+    setTimeout(updateScrollHint, 16);
   }
   if (scrollDown) {
     // A tap doesn't take the focus: the arrow hides at the bottom, and the

@@ -103,12 +103,22 @@ DEFAULTS = {
     # Show an on-screen number pad for the UHID (screens without a system
     # keyboard). A screen can override it with ?keypad=0 or ?keypad=1.
     "SHOW_KEYPAD": True,
-    # Number of digits in a UHID (the number printed on the OP slip). Only
-    # the format is checked; the UHID is stored as entered.
+    # Number of digits in a UHID (the number printed on the OP slip). A
+    # typed UHID is only checked for its format and stored as entered.
     "UHID_LENGTH": 11,
     # How the UHID is grouped on screen, e.g. 3-4-4 → "123 4567 8901".
     # Must add up to UHID_LENGTH.
     "UHID_GROUPS": [3, 4, 4],
+    # A QR holding a patient's id (a UUID) is looked up in Care: the UHID is
+    # the patient's identifier from the active identifier config with this
+    # name (its display name or its "system", any letter case; patients.py).
+    "UHID_IDENTIFIER": "UHID",
+    # Where that identifier config is defined in Care: "system" (one config,
+    # system-wide, for every facility) or "facility" (each facility's own).
+    "UHID_IDENTIFIER_SCOPE": "system",
+    # How often one IP address can look up a patient's UHID from a QR
+    # (django-ratelimit rate; Care's DISABLE_RATELIMIT turns it off).
+    "QR_LOOKUP_RATE_LIMIT": "30/m",
     # Prefix of the reference number shown after submitting. Empty uses the
     # form's code, e.g. OPD-20261118-4821 / IPD-20261118-0932.
     "REFERENCE_PREFIX": "",

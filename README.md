@@ -20,7 +20,8 @@ the design.
   between the steps without reloading. Without JavaScript each step posts
   the page and the server shows the next one.
 - **Identify by QR, UHID or as a guest:** a QR read by the camera or a USB
-  scanner, an on-screen keypad, or no UHID at all.
+  scanner (holding the UHID, or the patient's id in Care, whose UHID at the
+  facility is looked up), an on-screen keypad, or no UHID at all.
 - **Questions on pages you lay out:** details, rating cards and open
   questions, page by page in any order, each page with its own heading and
   button label if you like (see [Writing a questionnaire](#writing-a-questionnaire)).
@@ -126,8 +127,21 @@ Kiosk tips:
   refused, the scan option is hidden.
 - Following NQAS guidance, take exit feedback: put the OPD kiosk near the
   pharmacy and the inpatient kiosk where patients are discharged.
-- A QR counts as a UHID when it holds exactly 11 digits once other characters
-  are removed (`UHID:123-4567-8901` works).
+- A QR can hold the UHID: it counts when it has exactly 11 digits once other
+  characters are removed (`UHID:123-4567-8901` works).
+- Or it can hold the **patient's id in Care** (a UUID, alone or inside a
+  link), as Care's patient QR codes do. The kiosk then looks up the patient's
+  UHID, and shows and stores only that. The UHID is the patient's identifier
+  from the active patient identifier config named **UHID** in Care (its
+  display name, or set `UHID_IDENTIFIER` to another name or to its
+  *system*). Set `UHID_IDENTIFIER_SCOPE` to say where that config is
+  defined: `system` (the default: one system-wide config for every
+  facility) or `facility` (each facility's own config, so each kiosk uses
+  its facility's UHIDs). A patient without that identifier gets "We
+  couldn't read a UHID from that code" and can type the UHID or continue as
+  a guest. The value must be
+  in the kiosk's UHID format (`UHID_LENGTH` digits once other characters are
+  removed).
 - Without internet access to Google Fonts, set `LOAD_WEB_FONTS=False` and
   install DM Sans and each language's `font` on the device.
 
@@ -358,6 +372,9 @@ Set in the plug's `configs={}`, or as environment variables:
 | `SCAN_MODE` | `"camera"` | `camera`, `scanner` or `off`; a screen can override it with `?scan=`. |
 | `SHOW_KEYPAD` | `True` | The on-screen UHID keypad; a screen can override it with `?keypad=`. |
 | `UHID_LENGTH` / `UHID_GROUPS` | `11` / `[3, 4, 4]` | UHID digits, and their grouping on screen (must add up to the length). |
+| `UHID_IDENTIFIER` | `"UHID"` | For QR codes that hold the patient's id: the patient identifier config in Care that holds the UHID, by its display name or its *system* (any letter case). |
+| `UHID_IDENTIFIER_SCOPE` | `"system"` | Where that config is defined in Care: `system` (one system-wide config) or `facility` (each facility's own). Anything else finds no UHID, and `manage.py check` warns. |
+| `QR_LOOKUP_RATE_LIMIT` | `"30/m"` | UHID lookups from patient QR codes per IP address (`""` turns it off). |
 | `REFERENCE_PREFIX` | `""` | Start of reference numbers; empty uses the form's code. |
 | `IDLE_TIMEOUT_SECONDS` | `90` | Seconds without a touch before the screen warns, then starts over. |
 | `NO_JS_IDLE_TIMEOUT_SECONDS` | `180` | Without JavaScript: seconds after a page loads before it starts over (the header counts down the last minute; `0` turns it off). |

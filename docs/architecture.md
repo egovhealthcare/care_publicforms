@@ -104,6 +104,7 @@ src/public_forms/
 ├── questions.py         The pages JSON: fields and defaults (PAGE_FIELDS, FIELDS), Page, Question, parse_pages(), page_errors()
 ├── questionnaire.py     Form lookup, FormSpec (screens from the pages), answer parsing, question_order()
 ├── services.py          UHID format, collect_answers() / stored_answer(), create_submission(), reference numbers
+├── patients.py          A patient's UHID from the patient id in a QR code (their "UHID" identifier)
 ├── steps.py             Step navigation on the server (no JavaScript); review rows
 ├── models.py            FeedbackForm (with pages JSON), FeedbackSubmission
 ├── i18n.py              Loads locale files (plugin's + LOCALE_DIRS): languages(), translate(), localize()
@@ -144,6 +145,7 @@ e2e/                     Playwright browser tests
 | `/facility/<facility_id>/public_forms/` | `StartView` | GET | Form chooser; redirects to the form when only one is active |
 | `/facility/<facility_id>/public_forms/type/<form>/form/` | `FormView` | GET, POST | The whole questionnaire; POST validates and saves |
 | `/facility/<facility_id>/public_forms/type/<form>/done/` | `DoneView` | GET | Thank you and reference number |
+| `/facility/<facility_id>/public_forms/patient/` | `PatientLookupView` | POST | `patient` (a QR's text) → `{"uhid": "…"}`; 404 `{"uhid": null}` when the facility has no UHID for it; 429 over `QR_LOOKUP_RATE_LIMIT` |
 | `/api/public_forms/health` | `health` | GET | `OK` |
 | `/api/public_forms/facility/<facility_id>/responses/` | `FacilityFeedbackListView` | GET | Submissions (staff) |
 | `/api/public_forms/facility/<facility_id>/summary/` | `FacilityFeedbackSummaryView` | GET | Per-form summary (staff) |
@@ -329,11 +331,12 @@ stateDiagram-v2
 | Behaviour | How |
 | --- | --- |
 | Idle reset | After `IDLE_TIMEOUT_SECONDS` (90) without input, `location.replace(home)`; warns in the last `min(15, timeout/3)` s. Armed on load when the page holds a patient's choices (`data-idle-armed`: their form, language, or answers after a failed submit), otherwise on the first touch. An untouched screen never reloads. |
-| Keyboard-mode QR scanners | On the identify and scan steps, keystrokes less than 80 ms apart are buffered; Enter/Tab with ≥ 6 digits, or a pause after `UHID_LENGTH` digits, counts as a scan. The UHID is the digits of the payload (`UHID:123-4567-8901` works). |
-| Camera QR | `BarcodeDetector` on a `getUserMedia` stream, polled every 350 ms; stopped when leaving the step or hiding the page. The scan option is hidden while scanning can't work: no `BarcodeDetector` (or no `qr_code` format), no camera (`enumerateDevices`, rechecked on `devicechange`), or camera permission `denied` (`permissions.query`, rechecked on change). If opening the camera fails, the option is hidden and the patient goes to the UHID step. |
+| Keyboard-mode QR scanners | On the identify, scan and UHID steps, keystrokes less than 80 ms apart are buffered (heard first, in the capture phase, so a scanned code's Enter doesn't also reach the UHID box); Enter/Tab with a patient id or ≥ 6 digits, or a pause after a patient id or `UHID_LENGTH` digits, counts as a scan. A code with a patient id (a UUID) is looked up (below); otherwise the UHID is the digits of the payload (`UHID:123-4567-8901` works). |
+| Patient QR codes | A code holding the patient's id in Care is POSTed to `…/public_forms/patient/` (`lookUpUhid()`); the UHID that comes back identifies the patient as if typed. No UHID (none recorded, in another format, a lookup refused or failed): "We couldn't read a UHID from that code" on the scan step, or on the UHID step when there is no camera, and the camera doesn't read that same code again. Without JavaScript a scanner types the id into the UHID box, and the server looks it up when the step is posted (`FormView.uhid_from_qr`). |
+| Camera QR | `BarcodeDetector` on a `getUserMedia` stream, polled every 350 ms; a code with a patient id or `UHID_LENGTH` digits counts; stopped when leaving the step or hiding the page. The scan option is hidden while scanning can't work: no `BarcodeDetector` (or no `qr_code` format), no camera (`enumerateDevices`, rechecked on `devicechange`), or camera permission `denied` (`permissions.query`, rechecked on change). If opening the camera fails, the option is hidden and the patient goes to the UHID step. |
 | Language | Sets `html[data-lang]`, swaps `data-l10n-*` attributes, updates the hidden `language` field and rewrites `a[data-carry-lang]` links with `?language=`. |
 | Layout | One centred column; the root font size follows the viewport (`1.66vh` on TVs, `3.125vw` on tall portrait screens, 16 px on phones), so the same layout scales instead of re-flowing. |
-| Down arrow | A screen taller than the window shows a round down arrow (`#scrollDown`) above the pinned main button while more than two lines' worth is below it; a tap scrolls to the bottom (smoothly, unless reduced motion is asked for). It hides while a text box has the focus, and without JavaScript (it can't know the screen scrolls). Rechecked on scroll, resize, step changes and after any click or input. |
+| Down arrow | A screen taller than the window shows a round down arrow (`#scrollDown`) above the pinned main button, at the column's left edge in line with Back, while more than two lines' worth is below it; a tap scrolls to the bottom (smoothly, unless reduced motion is asked for). It hides while a text box has the focus, and without JavaScript (it can't know the screen scrolls). Rechecked on scroll, resize, step changes and after any click or input. |
 | Text boxes | One line before the ratings and for a "Why?", two after them (`rows`); `fitTextBox()` grows a box with what is typed, up to eight lines, then it scrolls. Without JavaScript they keep their rows and scroll. |
 
 ## 6. Languages
@@ -376,8 +379,11 @@ stateDiagram-v2
 1. **Rate limit** (`django_ratelimit`, group `public_forms.submit`, key
    `ip`, rate `SUBMIT_RATE_LIMIT`; off when empty or `DISABLE_RATELIMIT`).
    Over the limit → the page again with status 429, opened on the review.
-2. **UHID:** digits only; empty means guest; any other length than
-   `UHID_LENGTH` is an error. It is **not** looked up in Care.
+2. **UHID:** a patient id (from a QR, typed in by a scanner) is first
+   replaced by that patient's UHID (`patients.py`; none
+   found → the `"qr"` error on the UHID step). Then digits only; empty means
+   guest; any other length than `UHID_LENGTH` is an error. A typed UHID is
+   **not** looked up in Care.
 3. **Answers** (`services.collect_answers`): for each active question that
    applies to the patient (by audience), `questionnaire.parse_answer` cleans
    the value. Missing answers to required questions (ratings are always
@@ -487,7 +493,7 @@ Constraints and indexes:
 | `facility_external_id` | `uuid` | no | `facility_facility.external_id`, **not a foreign key** |
 | `form_id` | `bigint` | no | FK → `care_publicforms_form.id`: the form answered, one of the facility's own. Its `code` and `patient_type` are read from there. `PROTECT`: a form with submissions can't be deleted |
 | `language` | `varchar(8)` | no | Language the patient submitted in |
-| `uhid` | `varchar(64)` | no | Digits as entered; `''` for guests |
+| `uhid` | `varchar(64)` | no | Digits as entered, or looked up from the patient's QR; `''` for guests |
 | `answers` | `jsonb` | no | `{question_key: answer}`, each answer with its question (see 8.2) |
 | `submitted_at` | `timestamptz` | no | Set on insert |
 
@@ -845,6 +851,8 @@ and reloaded when Django's `setting_changed` fires (tests).
 | `SCAN_MODE` | `"camera"` | views, kiosk.js |
 | `SHOW_KEYPAD` | `True` | views |
 | `UHID_LENGTH` / `UHID_GROUPS` | `11` / `[3, 4, 4]` | services, templates, kiosk.js |
+| `UHID_IDENTIFIER` / `UHID_IDENTIFIER_SCOPE` | `"UHID"` / `"system"` | patients, checks |
+| `QR_LOOKUP_RATE_LIMIT` | `"30/m"` | views |
 | `REFERENCE_PREFIX` | `""` | services |
 | `IDLE_TIMEOUT_SECONDS` | `90` | templates, kiosk.js |
 | `NO_JS_IDLE_TIMEOUT_SECONDS` | `180` | base.html (noscript refresh and CSS countdown), views.no_js_countdown |
@@ -859,10 +867,11 @@ and reloaded when Django's `setting_changed` fires (tests).
 | Topic | Approach |
 | --- | --- |
 | Authentication | None on the pages by design (public kiosks). Staff data is only in the plugin's admin (Care sign-in, rate-limited, this app's permissions, limited to the user's facilities by their Care roles) and the API (Care's auth and permissions) |
-| CSRF | The form view is `csrf_exempt`: there is no session or cookie to protect, and every submission is anonymous and rate-limited |
+| CSRF | The form view and the patient lookup are `csrf_exempt`: there is no session or cookie to protect, and every request is anonymous and rate-limited |
+| Patient lookup | Public by design, like the pages: the kiosk turns a patient's QR into their UHID. It answers only with the UHID (from the system-wide UHID config, or the facility's own, by `UHID_IDENTIFIER_SCOPE`), only for a patient id (random UUIDs can't be guessed), by POST (the id stays out of addresses and logs), and rate-limited per IP (`QR_LOOKUP_RATE_LIMIT`). Anyone holding the patient's slip already sees the UHID printed on it |
 | Abuse | Per-IP rate limit (see README → *Behind a proxy*); answers are limited to the form's question keys and valid values. Typed text (`text_rules.py`), on the kiosk and in the admin, can't contain `<` `>` `{` `}` `` ` `` `\`: kiosk.js drops them as they're typed and the server refuses them (`"characters"` error); control characters are dropped. Limits: answers and "Why?" 2000 characters; titles 100, descriptions 300, question text and hint 300, short_text 60, option labels 100, option values 64 |
 | Output escaping | Django autoescaping in templates; kiosk.js escapes typed text before showing it on the review |
-| What is stored | UHID as entered (no lookup), language, answers, timestamps; no name, IP address or device id. Free-text answers may still contain personal information |
+| What is stored | UHID as entered, or looked up from the patient's QR (never the patient's id), language, answers, timestamps; no name, IP address or device id. Free-text answers may still contain personal information |
 | Leaving data on screen | Idle reset arms as soon as a page holds a patient's choices; the thank-you page returns to the start |
 | Back button | Pages are sent with `Cache-Control: no-store`; the thank-you page shows only for `DONE_TIMEOUT_SECONDS` after its submission (its timed return comes later, so Back after it goes to the start, even without JavaScript, where the browser keeps the refresh in the history), and with JavaScript its *Start new* and timed return replace it in the history; kiosk.js starts over when Back restores a page from the back/forward cache |
 | Losing answers | Once anything is entered, kiosk.js asks before the page unloads (`beforeunload`), except when the kiosk leaves on purpose (submit, links, idle reset); `overscroll-behavior-y: none` stops pull-to-refresh in Chromium; `scroll-padding` keeps a focused field clear of the sticky header and pinned button |
@@ -919,8 +928,8 @@ For one deployment only, put the locale file in a folder listed in
 - Languages are set per deployment, not per facility or form.
 - The rate limit is per IP address; behind a proxy it needs
   `RATELIMIT_IP_META_KEY` (README → *Behind a proxy*).
-- The UHID is not checked against Care, so mistyped UHIDs are stored as
-  typed.
+- A typed UHID is not checked against Care, so mistyped UHIDs are stored as
+  typed. Only a patient QR's UHID comes from Care.
 - Reference numbers are unique per facility, not globally; quote them with
   the facility.
 - Submissions are never deleted automatically.
