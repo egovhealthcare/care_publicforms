@@ -8,9 +8,9 @@ server shows the step that button leads to. This module is that navigation;
 it follows kiosk.js, so both behave the same.
 
 A *unit* is a place in the questionnaire after identification:
-``("screen-<n>", 0)`` for the screen of step n's questions, ``("questions", i)``
+``("screen-<n>", 0)`` for the screen of page n's questions, ``("questions", i)``
 for rating card i (its place in ``FormSpec.ratings``) and ``("review", 0)``.
-They come in step order (questionnaire.py). The identify, scan and UHID
+They come in page order (questionnaire.py). The identify, scan and UHID
 steps come before them.
 
 ``nav`` values (the ``value`` of the button pressed):
@@ -45,7 +45,7 @@ from public_forms.questionnaire import (
 )
 from public_forms.services import collect_answers
 
-STEPS = ("identify", "scan", "uhid", "questions", "review")  # plus "screen-<n>" for each step's screen
+STEPS = ("identify", "scan", "uhid", "questions", "review")  # plus "screen-<n>" for each page's screen
 SCREEN_NAME = re.compile(r"screen-([1-9][0-9]?)")
 REVIEW = ("review", 0)
 
@@ -124,10 +124,10 @@ def parse_unit(value, spec: FormSpec) -> tuple[str, int] | None:
 
 
 def _rank(spec: FormSpec, unit: tuple[str, int]) -> tuple[int, int]:
-    """A unit's position in the full questionnaire, whoever the patient is: (step, place in the step)."""
+    """A unit's position in the full questionnaire, whoever the patient is: (page, place in the page)."""
     name, index = unit
     if name == "questions" and 0 <= index < len(spec.ratings):
-        return (spec.ratings[index].step, 1 + index)
+        return (spec.ratings[index].page, 1 + index)
     if screen := spec.group(name):
         return (screen.number, 0)
     return (10**6, 0)  # the review, last

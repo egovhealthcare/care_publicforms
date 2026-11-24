@@ -315,7 +315,7 @@ class FormView(FeedbackPage):
             item = {
                 "key": question.key,
                 "type": question.type,
-                "step": question.step,
+                "page": question.page,
                 "text": question.text,
                 "hint": question.hint,
                 "label": question.short_text or question.text,
@@ -330,6 +330,7 @@ class FormView(FeedbackPage):
                 item.update(
                     index=index,
                     number=shown_ratings.index(question) + 1 if question in shown_ratings else index + 1,
+                    next_label="next",
                     options=[{"value": str(v), "label": label} for v, label in rating_labels(question).items()],
                 )
             elif question.type == QuestionType.CHOICE:
@@ -346,6 +347,8 @@ class FormView(FeedbackPage):
             return item
 
         ratings = [field(q, i) for i, q in enumerate(spec.ratings)]
+        if ratings and spec.screens[-1].is_ratings:
+            ratings[-1]["next_label"] = "review_answers"  # the last card leads to the review
         screens = [
             self.screen_context(spec, screen, [field(q, style=screen.style) for q in screen.questions])
             for screen in spec.groups
@@ -424,14 +427,12 @@ class FormView(FeedbackPage):
 
     def screen_context(self, spec, screen, fields) -> dict:
         """
-        A screen of one step's questions (steps/screen.html): its fields, its
-        heading (the form's step title, else the default for its style and
-        place) and where its main button leads.
+        A screen of one page's questions (steps/screen.html): its fields, its
+        heading (the page's title, else the default for its style and place)
+        and its main button (the page's label, else where it leads).
         """
         position = spec.screens.index(screen)
         following = spec.screens[position + 1] if position + 1 < len(spec.screens) else None
-        titles = self.form.steps if isinstance(self.form.steps, dict) else {}
-        own = titles.get(str(screen.number)) if isinstance(titles.get(str(screen.number)), dict) else {}
         return {
             "name": screen.name,
             "number": screen.number,
@@ -439,11 +440,14 @@ class FormView(FeedbackPage):
             "open": screen.style == "open",
             "fields": fields,
             "required": any(f["required"] for f in fields),
-            "title": own.get("title") or None,
-            "lead": own.get("lead") or None,
+            "title": screen.title or None,
+            "description": screen.description or None,
             "last": following is None,  # the review comes next
-            # The main button: "Review answers" before the review, "Start the
-            # questions" before the first rating cards, otherwise "Next".
+            # The main button: the page's own label, else "Review answers" before
+            # the review, "Start the questions" before the first rating cards,
+            # otherwise "Next". Changing an answer from the review, it always
+            # says "Review answers" (screen.html).
+            "primary_button": screen.primary_button or None,
             "next_label": "review_answers"
             if following is None
             else "start_questions"

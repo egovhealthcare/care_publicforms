@@ -1,5 +1,5 @@
 {% load public_forms_tags %}
-{# One step's questions (choice, date, text) on one screen; views.screen_context. #}
+{# One page's questions (choice, date, text) on one screen; views.screen_context. #}
 {# style "details" (before the ratings): compact, small labels, chips.           #}
 {# style "open" (after them): larger labels and boxes, 2 or 3 options as buttons, #}
 {# and the main button pinned at the bottom (kiosk.css .screen--comments).       #}
@@ -7,15 +7,15 @@
   <div class="area-head stack stack--8">
     {% if screen.title %}
     <h2 class="h2">{% tr screen.title %}</h2>
-    {% if screen.lead %}<p class="lead-sm">{% tr screen.lead %}</p>{% endif %}
+    {% if screen.description %}<p class="lead-sm">{% tr screen.description %}</p>{% endif %}
     {% elif screen.open %}
     <span class="kicker">{% t "open_kicker" %}</span>
     <h2 class="h2">{% if not screen.last %}{% t "more_heading" %}{% elif screen.fields|length == 1 %}{% if screen.required %}{% t "open_heading_one_required" %}{% else %}{% t "open_heading_one" %}{% endif %}{% elif screen.required %}{% t "open_heading_required" n=screen.fields|length %}{% else %}{% t "open_heading" n=screen.fields|length %}{% endif %}</h2>
-    {% if screen.lead %}<p class="lead-sm">{% tr screen.lead %}</p>{% endif %}
+    {% if screen.description %}<p class="lead-sm">{% tr screen.description %}</p>{% endif %}
     {% else %}
     <h2 class="h2">{% t "details_heading" %}</h2>
-    {% if screen.lead %}
-    <p class="lead-sm">{% tr screen.lead %}</p>
+    {% if screen.description %}
+    <p class="lead-sm">{% tr screen.description %}</p>
     {% else %}
     <p class="lead-sm" data-audience="guest"{% if identified %} hidden{% endif %}>{% t "details_lead_guest" %}</p>
     <p class="lead-sm" data-audience="identified"{% if not identified %} hidden{% endif %}>{% t "details_lead" %}</p>
@@ -72,11 +72,11 @@
   {% if screen.open %}
   <div class="area-nav navrow">
     <button type="submit" name="nav" value="back" class="btn btn--ghost btn--md btn-back" data-action="screen-back" data-edit-hidden>{% t "back" %}</button>
-    <button type="submit" name="nav" value="next" class="btn btn--primary btn--lg btn-cta btn-cta--grow" data-action="screen-next"><span class="when-editing">{% t "review_answers" %}</span><span class="unless-editing">{% t screen.next_label %}</span></button>
+    <button type="submit" name="nav" value="next" class="btn btn--primary btn--lg btn-cta btn-cta--grow" data-action="screen-next"><span class="when-editing">{% t "review_answers" %}</span><span class="unless-editing">{% if screen.primary_button %}{% tr screen.primary_button %}{% else %}{% t screen.next_label %}{% endif %}</span></button>
   </div>
   {% else %}
   <div class="area-nav stack stack--10">
-    <button type="submit" name="nav" value="next" class="btn btn--primary btn--lg btn-cta" data-action="screen-next"><span class="when-editing">{% t "review_answers" %}</span><span class="unless-editing">{% t screen.next_label %}</span></button>
+    <button type="submit" name="nav" value="next" class="btn btn--primary btn--lg btn-cta" data-action="screen-next"><span class="when-editing">{% t "review_answers" %}</span><span class="unless-editing">{% if screen.primary_button %}{% tr screen.primary_button %}{% else %}{% t screen.next_label %}{% endif %}</span></button>
     <button type="submit" name="nav" value="back" class="btn btn--ghost btn--md btn-quiet" data-action="screen-back" data-edit-hidden>{% t "back" %}</button>
   </div>
   {% endif %}

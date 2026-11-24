@@ -59,8 +59,8 @@
   {% include "public_forms/steps/identify.html" %}
   {% if scan_mode != "off" %}{% include "public_forms/steps/scan.html" %}{% endif %}
   {% include "public_forms/steps/uhid.html" %}
-  {# One screen per step of choice / date / text questions, and the rating cards  #}
-  {# (one section, a card each). kiosk.js and steps.py go through them in step    #}
+  {# One screen per page of choice / date / text questions, and the rating cards  #}
+  {# (one section, a card each). kiosk.js and steps.py go through them in page    #}
   {# order (data-order), whatever their order here.                                #}
   {% for screen in screens %}{% include "public_forms/steps/screen.html" %}{% endfor %}
   {% include "public_forms/steps/ratings.html" %}

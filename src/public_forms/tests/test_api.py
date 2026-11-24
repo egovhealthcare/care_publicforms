@@ -24,13 +24,14 @@ from public_forms.tests import (
     TEST_PLUGIN_CONFIGS,
     default_forms,
     plugin_configs,
+    questions_of,
 )
 
 
 def make_submission(facility, reference, form_code, values, uhid="", **extra):
     """A submission as the kiosk stores it; ``values`` is {key: value}, plus "<key>__comment" for a Why."""
     form = default_forms(facility)[form_code]
-    questions = {question.key: question for question in parse_questions(form.questions)}
+    questions = {question.key: question for question in parse_questions(form.pages)}
     answers = {
         key: stored_answer(questions[key], value, values)
         for key, value in values.items()
@@ -138,7 +139,8 @@ class FeedbackApiTests(CareAPITestBase):
 
     def test_summary_still_counts_a_removed_question(self):
         opd = FeedbackForm.objects.get(code="opd", facility_external_id=self.facility.external_id)
-        opd.questions = [q for q in opd.questions if q["key"] != "registration_wait"]
+        for page in opd.pages:
+            page["questions"] = [q for q in page["questions"] if q["key"] != "registration_wait"]
         opd.save()
         self.client.force_authenticate(self.superuser)
         data = self.client.get(self.url("facility-summary"), {"form": "opd"}).data
@@ -177,7 +179,7 @@ class AdminTests(CareAPITestBase):
             english_only = self.client.get(url)
         self.assertContains(english_only, "Title (English)")
         self.assertNotContains(english_only, f"Title ({TEST_LANGUAGE_NAME})")
-        self.assertContains(response, 'name="questions"')
+        self.assertContains(response, 'name="pages"')
         self.assertContains(response, "&quot;key&quot;: &quot;registration_wait&quot;")  # indented JSON
         self.assertContains(
             response, f"http://testserver/facility/{self.facility.external_id}/public_forms/type/opd/form/"
@@ -201,14 +203,21 @@ class AdminTests(CareAPITestBase):
         page = self.client.get(reverse("public_forms_admin:public_forms_feedbackform_change", args=[own.pk]))
         self.assertContains(page, "District Hospital, Mysuru")
 
-    def test_form_admin_saves_title_and_questions(self):
-        questions = [
+    def test_form_admin_saves_title_and_pages(self):
+        pages = [
             {
-                "key": "where",
-                "type": "choice",
-                "text": {"en": "Where did you park?"},
-                "options": [{"value": "inside", "en": "Inside the campus"}],
-            }
+                "title": {"en": "Parking"},
+                "primary_button": {"en": "Rate us"},
+                "questions": [
+                    {
+                        "key": "where",
+                        "type": "choice",
+                        "text": {"en": "Where did you park?"},
+                        "options": [{"value": "inside", "en": "Inside the campus"}],
+                    }
+                ],
+            },
+            {"questions": [{"key": "space", "type": "rating", "text": {"en": "Was there space?"}}]},
         ]
         form = feedback_form_form()(
             data={
@@ -219,15 +228,19 @@ class AdminTests(CareAPITestBase):
                 f"title__{TEST_LANGUAGE}": "",
                 "order": 3,
                 "is_active": True,
-                "questions": json.dumps(questions),
+                "pages": json.dumps(pages),
             }
         )
         self.assertTrue(form.is_valid(), form.errors)
         saved = form.save()
-        # Saved with the step written in, right after the type: the JSON says where each is asked.
         self.assertEqual(saved.title, {"en": "Parking"})
-        self.assertEqual(saved.questions, [{"key": "where", "type": "choice", "step": 1, **questions[0]}])
-        self.assertEqual(list(saved.questions[0])[:3], ["key", "type", "step"])
+        self.assertEqual(saved.pages, pages)
+        # The old format, a list of questions, says what changed.
+        old = feedback_form_form()(
+            data={**form.data, "code": "parking_old", "pages": json.dumps(pages[0]["questions"])}
+        )
+        self.assertFalse(old.is_valid())
+        self.assertTrue(old.errors["pages"][0].startswith("Page 1: looks like a question."), old.errors)
 
     def test_title_and_description_follow_the_text_rules(self):
         base = {"code": "x", "patient_type": "op", "order": 0}
@@ -253,20 +266,19 @@ class AdminTests(CareAPITestBase):
         self.opd.refresh_from_db()
         self.assertEqual(self.opd.title, {"en": "OPD", TEST_LANGUAGE: "Test title"})
 
-    def test_questions_json_problems_show_on_the_form(self):
+    def test_pages_json_problems_show_on_the_form(self):
         base = {
             "patient_type": "op",
             "title__en": "X",
             "order": 0,
             "facility_external_id": str(self.facility.external_id),
         }
-        bad = feedback_form_form()(
-            data={**base, "code": "x", "questions": json.dumps([{"key": "a", "type": "choice", "text": {"en": "A"}}])}
-        )
+        page = {"questions": [{"key": "a", "type": "choice", "text": {"en": "A"}}]}
+        bad = feedback_form_form()(data={**base, "code": "x", "pages": json.dumps([page])})
         self.assertFalse(bad.is_valid())
-        self.assertTrue(any(e.startswith("“a”: a choice needs options") for e in bad.errors["questions"]))
-        broken = feedback_form_form()(data={**base, "code": "y", "questions": "[{"})
-        self.assertIn("questions", broken.errors)  # not JSON
+        self.assertTrue(any(e.startswith("“a”: a choice needs options") for e in bad.errors["pages"]))
+        broken = feedback_form_form()(data={**base, "code": "y", "pages": "[{"})
+        self.assertIn("pages", broken.errors)  # not JSON
         no_english = feedback_form_form()(data={**base, "code": "z", "title__en": ""})
         self.assertIn("title__en", no_english.errors)
         taken = feedback_form_form()(data={**base, "code": "opd"})
@@ -280,7 +292,7 @@ class AdminTests(CareAPITestBase):
             {"clinic": "ent", "information_signage": 4, "would_return": "yes", "would_return__comment": "Kind staff"},
         )
         # Rewording the question later doesn't change what was answered.
-        for question in self.opd.questions:
+        for question in questions_of(self.opd):
             if question["key"] == "clinic":
                 question["text"] = {"en": "Which clinic did you visit?"}
         self.opd.save()

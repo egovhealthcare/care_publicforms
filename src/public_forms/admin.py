@@ -18,8 +18,9 @@ from public_forms.access import MANAGE_FORMS, VIEW_FEEDBACK, facility_ids
 from public_forms.admin_site import site
 from public_forms.i18n import BASE_LANGUAGE, admin_languages, localize
 from public_forms.models import FeedbackForm, FeedbackSubmission
-from public_forms.questions import FIELDS, parse_questions, with_steps
+from public_forms.questions import FIELDS, PAGE_FIELDS, parse_questions
 from public_forms.text_rules import (
+    MAX_BUTTON_LENGTH,
     MAX_DESCRIPTION_LENGTH,
     MAX_OPTION_LENGTH,
     MAX_OPTION_VALUE_LENGTH,
@@ -104,42 +105,51 @@ def language_fields(*names):
     return tuple(f"{name}__{code}" for name in names for code in admin_languages())
 
 
-class QuestionsJSONField(forms.JSONField):
-    """The questions (or step titles) as indented JSON in a large box."""
-
-    def __init__(self, *args, empty=None, **kwargs):
-        self.empty = [] if empty is None else empty
-        super().__init__(*args, **kwargs)
+class PagesJSONField(forms.JSONField):
+    """The pages and their questions as indented JSON in a large box."""
 
     def prepare_value(self, value):
         if isinstance(value, InvalidJSONInput):
             return value
-        return json.dumps(value if value is not None else self.empty, indent=2, ensure_ascii=False)
+        return json.dumps(value if value is not None else [], indent=2, ensure_ascii=False)
 
 
-QUESTIONS_HELP = format_html(
-    "{}<br><code>{}</code><ul>{}</ul>{}",
-    _(
-        "A list of questions in the order they are asked. Fields with their default can be left out. "
-        "Submissions keep their own copy of each question, so editing, reordering or removing a question "
-        "doesn't change feedback already given; but give a question with a new meaning a new key."
-    ),
-    '[{"key": "clinic", "type": "choice", "required": true, "text": {"en": "Clinic visited"}, '
-    '"options": [{"value": "ent", "en": "ENT"}]}, …]',
-    format_html_join(
+def _field_list(fields: dict):
+    return format_html_join(
         "",
         "<li><code>{}</code>{}: {}</li>",
         (
-            (name, f" (default {json.dumps(default)})" if default is not None else "", text)
-            for name, (default, text) in FIELDS.items()
+            (name, f" (default {json.dumps(default)})" if default not in (None, {}) else "", text)
+            for name, (default, text) in fields.items()
         ),
-    ),
+    )
+
+
+PAGES_HELP = format_html(
+    "{}<br><code>{}</code><p>{}</p><ul>{}</ul><p>{}</p><ul>{}</ul>{}",
     _(
-        "No text can contain %(characters)s. Limits per language: text and hint %(question)s characters, "
+        "A list of pages in the order they are shown, each with its questions in the order asked. A page holds "
+        "either ratings (a card each) or other questions (choice, date, text: together on one page), not both. "
+        "Submissions keep their own copy of each question, so editing, reordering or removing a question "
+        "doesn't change feedback already given; but give a question with a new meaning a new key."
+    ),
+    '[{"title": {"en": "About your visit"}, "questions": [{"key": "clinic", "type": "choice", "required": true, '
+    '"text": {"en": "Clinic visited"}, "options": [{"value": "ent", "en": "ENT"}]}]}, '
+    '{"questions": [{"key": "doctor", "type": "rating", "text": {"en": "…"}}]}, …]',
+    _("A page's fields (a page of ratings takes only questions: each card shows its own question):"),
+    _field_list(PAGE_FIELDS),
+    _("A question's fields; those with their default can be left out:"),
+    _field_list(FIELDS),
+    _(
+        "No text can contain %(characters)s. Limits per language: a page's title %(title)s characters, "
+        "description %(description)s, primary_button %(button)s; a question's text and hint %(question)s, "
         "short_text %(short)s, each option's label %(option)s; an option's value %(value)s."
     )
     % {
         "characters": spaced(),
+        "title": MAX_TITLE_LENGTH,
+        "description": MAX_DESCRIPTION_LENGTH,
+        "button": MAX_BUTTON_LENGTH,
         "question": MAX_QUESTION_LENGTH,
         "short": MAX_SHORT_TEXT_LENGTH,
         "option": MAX_OPTION_LENGTH,
@@ -147,23 +157,12 @@ QUESTIONS_HELP = format_html(
     },
 )
 
-
-STEPS_HELP = format_html(
-    "{}<br><code>{}</code>",
-    _(
-        "Optional: a heading for a step of choice, date or text questions, by its number, per language. "
-        "A step without one gets a default (“A few quick details” before the ratings, “In your own words” "
-        "after them). Rating steps take none: each card shows its question."
-    ),
-    '{"1": {"title": {"en": "About your visit"}, "lead": {"en": "Two quick questions."}}}',
-)
-
 TEXT_FIELDS = {"title": (_("Title"), 1), "description": (_("Description"), 1)}
 TEXT_LIMITS = {"title": MAX_TITLE_LENGTH, "description": MAX_DESCRIPTION_LENGTH}
 
 
 def feedback_form_form() -> type:
-    """The form admin's form: a box per admin language for the title and description, and the questions JSON."""
+    """The form admin's form: a box per admin language for the title and description, and the pages JSON."""
     return _feedback_form_form(tuple(admin_languages()))
 
 
@@ -174,9 +173,9 @@ def _feedback_form_form(codes: tuple) -> type:
         "FeedbackFormForm",
         (localized_form(FeedbackForm, TEXT_FIELDS, required=("title",)),),
         {
-            "questions": QuestionsJSONField(
+            "pages": PagesJSONField(
                 required=False,
-                help_text=QUESTIONS_HELP,
+                help_text=PAGES_HELP,
                 widget=forms.Textarea(
                     attrs={
                         "rows": 32,
@@ -186,23 +185,7 @@ def _feedback_form_form(codes: tuple) -> type:
                     }
                 ),
             ),
-            "steps": QuestionsJSONField(
-                required=False,
-                empty={},
-                label=_("Step titles"),
-                help_text=STEPS_HELP,
-                widget=forms.Textarea(
-                    attrs={
-                        "rows": 8,
-                        "cols": 110,
-                        "spellcheck": "false",
-                        "style": "font-family:ui-monospace,Menlo,monospace;font-size:12px",
-                    }
-                ),
-            ),
-            # Every question is saved with its step as a number, so the JSON says where each is asked.
-            "clean_questions": lambda self: with_steps(self.cleaned_data.get("questions") or []),
-            "clean_steps": lambda self: self.cleaned_data.get("steps") or {},
+            "clean_pages": lambda self: self.cleaned_data.get("pages") or [],
         },
     )
 
@@ -218,7 +201,7 @@ class FeedbackFormAdmin(admin.ModelAdmin):
     def get_fieldsets(self, request, obj=None):
         return (
             (None, {"fields": ("code", "patient_type", *language_fields(*TEXT_FIELDS))}),
-            (_("Questions"), {"fields": ("questions", "steps")}),
+            (_("Pages and questions"), {"fields": ("pages",)}),
             (_("Where"), {"fields": ("facility_external_id", "facility", "is_active", "order", "page_link")}),
         )
 
@@ -287,7 +270,7 @@ class FeedbackFormAdmin(admin.ModelAdmin):
 
     @admin.display(description=_("Active questions"))
     def question_count(self, obj):
-        return sum(1 for question in parse_questions(obj.questions) if question.active)
+        return sum(1 for question in parse_questions(obj.pages) if question.active)
 
     @admin.display(description=_("Page"))
     def page_link(self, obj):
@@ -395,7 +378,7 @@ class FeedbackSubmissionAdmin(admin.ModelAdmin):
         # Each answer carries its question as asked; its form's current order is used for display.
         answers = obj.answers or {}
         rows = []
-        order = [question.key for question in parse_questions(obj.form.questions)]
+        order = [question.key for question in parse_questions(obj.form.pages)]
         for key in ordered_keys(answers, order):
             entry = answers[key] if isinstance(answers[key], dict) else {"value": answers[key]}
             shown = entry.get("answer", entry.get("value"))
@@ -426,8 +409,8 @@ class FeedbackSubmissionAdmin(admin.ModelAdmin):
                     found.add(f"{key}__comment")
         order = []
         forms = FeedbackForm.objects.filter(pk__in=queryset.values("form")).order_by("order", "id")
-        for questions in forms.values_list("questions", flat=True):
-            order += [question.key for question in parse_questions(questions)]
+        for pages in forms.values_list("pages", flat=True):
+            order += [question.key for question in parse_questions(pages)]
         keys = ordered_keys(found, list(dict.fromkeys(order)))
 
         def rows():

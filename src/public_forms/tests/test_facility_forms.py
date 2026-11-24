@@ -1,5 +1,6 @@
 import importlib
 import io
+from unittest import mock
 
 from care.utils.tests.base import CareAPITestBase
 from django.core.management import CommandError, call_command
@@ -24,14 +25,12 @@ class FacilityFormsTests(CareAPITestBase):
             cursor.execute("ALTER TABLE care_publicforms_form ALTER COLUMN facility_external_id DROP NOT NULL")
         user = self.create_user()
         mysuru, hassan, unused = (self.create_facility(user=user, name=name) for name in ("Mysuru", "Hassan", "Unused"))
-        questions = [{"key": "care", "type": "rating", "step": 1, "text": {"en": "Care"}}]
         shared_opd = FeedbackForm.objects.create(
             code="opd",
             patient_type="op",
             title={"en": "OPD", "kn": "ಒಪಿಡಿ"},
             description={"en": "About your visit"},
-            questions=questions,
-            steps={"1": {"title": {"en": "Your visit"}}},
+            pages=[{"questions": [{"key": "care", "type": "rating", "text": {"en": "Care"}}]}],
             order=3,
         )
         FeedbackForm.objects.create(code="ipd", patient_type="ip", title={"en": "IPD"})  # no feedback anywhere
@@ -46,13 +45,15 @@ class FacilityFormsTests(CareAPITestBase):
         ):
             self.submission(facility, form, reference)
 
-        shared_forms_migration.give_shared_forms_to_facilities(FeedbackForm, FeedbackSubmission)
+        # 0005 copies the fields of its time; today's model has the pages instead (0007).
+        copied = tuple(
+            "pages" if name == "questions" else name for name in shared_forms_migration.COPIED_FIELDS if name != "steps"
+        )
+        with mock.patch.object(shared_forms_migration, "COPIED_FIELDS", copied):
+            shared_forms_migration.give_shared_forms_to_facilities(FeedbackForm, FeedbackSubmission)
 
         mysuru_opd = FeedbackForm.objects.get(facility_external_id=mysuru.external_id)
-        self.assertEqual(
-            [getattr(mysuru_opd, name) for name in shared_forms_migration.COPIED_FIELDS],
-            [getattr(shared_opd, name) for name in shared_forms_migration.COPIED_FIELDS],
-        )
+        self.assertEqual([getattr(mysuru_opd, name) for name in copied], [getattr(shared_opd, name) for name in copied])
         forms = dict(FeedbackSubmission.objects.values_list("reference_number", "form"))
         self.assertEqual(
             forms, {"OPD-1": mysuru_opd.pk, "OPD-2": mysuru_opd.pk, "OPD-3": hassan_opd.pk, "OPD-4": hassan_opd.pk}

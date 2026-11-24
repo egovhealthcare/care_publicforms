@@ -21,8 +21,9 @@ the design.
   the page and the server shows the next one.
 - **Identify by QR, UHID or as a guest:** a QR read by the camera or a USB
   scanner, an on-screen keypad, or no UHID at all.
-- **Questions in numbered steps:** details, rating cards and open questions,
-  in any order you set (see [Writing a questionnaire](#writing-a-questionnaire)).
+- **Questions on pages you lay out:** details, rating cards and open
+  questions, page by page in any order, each page with its own heading and
+  button label if you like (see [Writing a questionnaire](#writing-a-questionnaire)).
 - **Several languages:** a header toggle, each text per language, English as
   the fallback. The language a patient picks stays with them until the
   thank-you page; the next patient starts in the screen's language.
@@ -173,10 +174,8 @@ In the admin, under **Feedback forms**, each form has:
   **active** and **order**.
 - **Facility id** (required): the facility that offers the form, the UUID
   in its Care URL. Every facility has its own forms, and uses a code once.
-- **Questions:** one JSON list (below). The admin checks it on save and
-  names the question in every error.
-- **Step titles** (optional): a heading per step, e.g.
-  `{"1": {"title": {"en": "About your visit"}, "lead": {"en": "Two quick questions."}}}`.
+- **Pages:** one JSON list of pages, each with its questions (below). The
+  admin checks it on save and names the page or question in every error.
 
 A form that has feedback can't be deleted; switch it off instead.
 
@@ -193,6 +192,11 @@ upgrading to this version (migration `0005`) gives each facility that has
 feedback on a shared form its own copy, moves that feedback to it, and then
 removes the shared forms. Seed the other facilities afterwards.
 
+Forms used to list their questions with a `step` number each, plus optional
+step titles. Migrations `0007` and `0008` turn every form's steps into
+pages, in the same order, each step's title and lead becoming its page's
+`title` and `description`, so nothing moves on screen.
+
 ### Writing a questionnaire
 
 For a step-by-step guide written for non-developers, with every question
@@ -203,46 +207,61 @@ A small but complete questionnaire:
 
 ```json
 [
-  {"key": "clinic", "type": "choice", "step": 1, "required": true,
-   "text": {"en": "Which clinic did you visit?"},
-   "options": [{"value": "general", "en": "General Medicine"},
-               {"value": "eye", "en": "Eye"}]},
-  {"key": "visit_date", "type": "date", "step": 1,
-   "text": {"en": "Date of your visit"}},
+  {"title": {"en": "About your visit"},
+   "questions": [
+     {"key": "clinic", "type": "choice", "required": true,
+      "text": {"en": "Which clinic did you visit?"},
+      "options": [{"value": "general", "en": "General Medicine"},
+                  {"value": "eye", "en": "Eye"}]},
+     {"key": "visit_date", "type": "date",
+      "text": {"en": "Date of your visit"}}
+   ]},
 
-  {"key": "doctor", "type": "rating", "step": 2,
-   "text": {"en": "How well did the doctor explain things?"},
-   "short_text": {"en": "Doctor"}},
-  {"key": "cleanliness", "type": "rating", "step": 2,
-   "text": {"en": "How clean was the hospital?"},
-   "short_text": {"en": "Cleanliness"}},
+  {"questions": [
+     {"key": "doctor", "type": "rating",
+      "text": {"en": "How well did the doctor explain things?"},
+      "short_text": {"en": "Doctor"}},
+     {"key": "cleanliness", "type": "rating",
+      "text": {"en": "How clean was the hospital?"},
+      "short_text": {"en": "Cleanliness"}}
+   ]},
 
-  {"key": "come_back", "type": "choice", "step": 3, "allow_comment": true,
-   "text": {"en": "Would you come back to this hospital?"},
-   "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]},
-  {"key": "suggestions", "type": "text", "step": 3,
-   "text": {"en": "Any other suggestions?"}}
+  {"primary_button": {"en": "Check my answers"},
+   "questions": [
+     {"key": "come_back", "type": "choice", "allow_comment": true,
+      "text": {"en": "Would you come back to this hospital?"},
+      "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]},
+     {"key": "suggestions", "type": "text",
+      "text": {"en": "Any other suggestions?"}}
+   ]}
 ]
 ```
 
 After the patient identifies, this shows:
 
-1. **Step 1:** one screen with the clinic and the date.
-2. **Step 2:** one card per rating.
-3. **Step 3:** one screen with *Yes* / *No* buttons, a "Why?" box and a text
-   box.
+1. **Page 1:** one screen headed "About your visit", with the clinic and the
+   date. Its button says "Start the questions".
+2. **Page 2:** one card per rating.
+3. **Page 3:** one screen with *Yes* / *No* buttons, a "Why?" box and a text
+   box. Its button says "Check my answers".
 4. **The review**, then Submit and a reference number.
 
 Rules:
 
-- **Screens follow the `step` numbers** (gaps are fine, up to 99). Within a
-  step, questions keep their order in the list.
-- **A step holds either ratings (a card each) or other questions (one
+- **Pages come in list order** (up to 99). On a page, questions keep their
+  order in its list. A question is asked on the page it's listed in.
+- **A page holds either ratings (a card each) or other questions (one
   screen), not both.**
 - **A screen's look depends on its place.** Before the first ratings it is
   compact ("A few quick details"). After them it is larger ("In your own
-  words"), and a choice of 2 or 3 options shows as large buttons. A step
-  title replaces the default heading.
+  words"), and a choice of 2 or 3 options shows as large buttons. A page's
+  `title` (and `description`) replaces the default heading.
+- **The main button says where it leads:** "Start the questions" before the
+  first ratings, "Review answers" before the review, otherwise "Next". A
+  page's `primary_button` replaces it, except when the patient came from the
+  review to change an answer: then it always says "Review answers". Rating
+  pages take no `title`, `description` or `primary_button`; the last card
+  of a form that ends with ratings says "Review answers".
 - **A screen with nothing for this patient is skipped,** e.g. guest-only
   questions for a patient who gave a UHID.
 - **Home and Reset appear from the first ratings on.** Reset clears the
@@ -253,15 +272,26 @@ Rules:
 - **`key` is where answers are stored.** Keep it once feedback has come in;
   a question with a new meaning needs a new key. Each answer is saved with
   its question's wording, so later edits don't change past feedback.
-- **Limits per language:** `text` and `hint` 300 characters, `short_text`
+- **Limits per language:** a page's `title` 100 characters, `description`
+  300, `primary_button` 40; a question's `text` and `hint` 300, `short_text`
   60, option labels 100; option `value` 64. Answers hold up to 2000
   characters.
+
+A page:
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `questions` | required | The page's questions, in the order asked; at least one |
+| `title` | `{}` | The page's heading; empty → the default heading |
+| `description` | `{}` | A line under the heading |
+| `primary_button` | `{}` | The main button's label; empty → "Start the questions", "Next" or "Review answers" |
+
+A question:
 
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `key` | required | Lowercase letters, digits and `_`; unique in the form |
 | `type` | required | `choice`, `date`, `rating` or `text` |
-| `step` | by type | The screen, a number. Left out: `choice` and `date` 1, `rating` 2, `text` 3 (saving writes it in) |
 | `text` | required | The question; English required |
 | `short_text` | `{}` | Shorter label on the review |
 | `hint` | `{}` | Hint under the question |

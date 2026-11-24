@@ -15,17 +15,25 @@ from django.utils.http import urlencode
 from public_forms.checks import check_languages
 from public_forms.models import Audience, FeedbackForm, FeedbackSubmission, QuestionType
 from public_forms.questionnaire import FormSpec, applies
-from public_forms.questions import question_errors, steps_errors, with_steps
+from public_forms.questions import page_errors
 from public_forms.tests import (
     PLAIN_STATIC_STORAGES,
     TEST_LANGUAGE,
     TEST_PLUGIN_CONFIGS,
     default_forms,
     plugin_configs,
+    questions_of,
 )
 from public_forms.views import no_js_countdown
 
 UHID = "12345678901"
+# The default forms' pages: details, then the ratings, then the open questions.
+DEFAULT_PAGES = {QuestionType.CHOICE: 0, QuestionType.DATE: 0, QuestionType.RATING: 1, QuestionType.TEXT: 2}
+
+
+def section(page: str, step: str) -> str:
+    """One step's <section> of the feedback page's HTML."""
+    return page.split(f'data-step="{step}"')[1].split("</section>")[0]
 
 
 @override_settings(STORAGES=PLAIN_STATIC_STORAGES, PLUGIN_CONFIGS=TEST_PLUGIN_CONFIGS)
@@ -54,11 +62,13 @@ class PageTestBase(CareAPITestBase):
             "age_group": "31_45",
             "sex": "female",
         }
-        first = FormSpec(form).group("screen-1")  # the default forms' step 1, before the ratings
+        first = FormSpec(form).group("screen-1")  # the default forms' page 1, before the ratings
         return {q.key: values[q.key] for q in first.questions if q.required and applies(q, identified)}
 
-    def add_question(self, form, key, **fields):
-        form.questions = [*form.questions, {"key": key, "text": {"en": key.replace("_", " ").capitalize()}, **fields}]
+    def add_question(self, form, key, page=None, **fields):
+        """A question at the end of a page (by default, of the default forms' page for its type)."""
+        page = DEFAULT_PAGES[fields["type"]] if page is None else page
+        form.pages[page]["questions"].append({"key": key, "text": {"en": key.replace("_", " ").capitalize()}, **fields})
         form.save()
 
     @staticmethod
@@ -316,7 +326,7 @@ class SubmitTests(PageTestBase):
             code="general_medicine_ward_feedback",
             patient_type="ip",
             title={"en": "Ward"},
-            questions=[{"key": "care", "type": "rating", "text": {"en": "Care"}}],
+            pages=[{"questions": [{"key": "care", "type": "rating", "text": {"en": "Care"}}]}],
         )
         self.assertEqual(self.submit(long_form.code, care="4").status_code, 302)
         reference = FeedbackSubmission.objects.get().reference_number
@@ -436,7 +446,7 @@ class ConfigurationTests(PageTestBase):
         self.assertEqual(FeedbackSubmission.objects.get().answers["cleanliness"]["value"], 5)
 
     def test_inactive_and_new_questions(self):
-        dropped = next(q for q in self.opd.questions if q["type"] == QuestionType.RATING)
+        dropped = next(q for q in questions_of(self.opd) if q["type"] == QuestionType.RATING)
         dropped["active"] = False
         self.opd.save()
         dropped = mock.Mock(key=dropped["key"])
@@ -704,15 +714,25 @@ class StepByStepWithoutJavaScriptTests(PageTestBase):
 
 class QuestionsJsonTests(PageTestBase):
     def test_text_rules_apply_to_every_text(self):
-        problems = question_errors(
+        problems = page_errors(
             [
                 {
-                    "key": "clinic",
-                    "type": "choice",
-                    "text": {"en": "Clinic <b>visited</b>"},
-                    "short_text": {"en": "x" * 61},
-                    "hint": {TEST_LANGUAGE: "Pick {one}"},
-                    "options": [{"value": "a<b", "en": "ENT"}, {"value": "dental", "en": "Dental `x`" + "y" * 100}],
+                    "title": {"en": "About <you>"},
+                    "description": {"en": "x" * 301},
+                    "primary_button": {"en": "Go on", TEST_LANGUAGE: "y" * 41},
+                    "questions": [
+                        {
+                            "key": "clinic",
+                            "type": "choice",
+                            "text": {"en": "Clinic <b>visited</b>"},
+                            "short_text": {"en": "x" * 61},
+                            "hint": {TEST_LANGUAGE: "Pick {one}"},
+                            "options": [
+                                {"value": "a<b", "en": "ENT"},
+                                {"value": "dental", "en": "Dental `x`" + "y" * 100},
+                            ],
+                        }
+                    ],
                 }
             ]
         )
@@ -725,41 +745,80 @@ class QuestionsJsonTests(PageTestBase):
                 "“clinic”: option 1's value can't contain <.",
                 "“clinic”: option 2 (en) can't contain `.",
                 "“clinic”: option 2 (en) is longer than 100 characters.",
+                "Page 1: title (en) can't contain < >.",
+                "Page 1: description (en) is longer than 300 characters.",
+                f"Page 1: primary_button ({TEST_LANGUAGE}) is longer than 40 characters.",
             ],
         )
 
-    def test_every_question_says_its_step(self):
-        # The default forms (1 details, 2 ratings, 3 open), and forms saved before
-        # steps were numbered (0004): written in, or turned from a name into its number.
-        for form in (self.opd, self.ipd):
-            self.assertTrue(all(isinstance(question.get("step"), int) for question in form.questions), form.code)
-        migration = importlib.import_module("public_forms.migrations.0004_numbered_steps")
-        old = [
-            {"key": "a", "type": "choice", "text": {"en": "A"}, "options": [{"value": "x", "en": "X"}]},
-            {"key": "b", "type": "rating", "text": {"en": "B"}},
-            {"key": "c", "type": "text", "text": {"en": "C"}},
-            {"key": "d", "type": "date", "text": {"en": "D"}},
-            {"key": "e", "type": "choice", "step": "open", "text": {"en": "E"}, "options": [{"value": "y", "en": "Y"}]},
-            {"key": "f", "type": "text", "step": 7, "text": {"en": "F"}},
+    def test_steps_become_pages(self):
+        # Forms saved before pages (0007): each step a page, in step order, its
+        # title and lead the page's title and description; and back again.
+        migration = importlib.import_module("public_forms.migrations.0007_pages")
+        choice = {"type": "choice", "text": {"en": "A"}, "options": [{"value": "x", "en": "X"}]}
+        questions = [
+            {"key": "late", "type": "rating", "step": 7, "text": {"en": "Late"}},
+            {"key": "a", "step": 1, **choice},
+            {"key": "b", "type": "rating", "step": 2, "text": {"en": "B"}},
+            {"key": "c", "type": "text", "step": 3, "text": {"en": "C"}},
+            {"key": "d", "type": "date", "step": 1, "text": {"en": "D"}},
+            {"key": "e", "type": "rating", "step": 2, "text": {"en": "E"}},
         ]
-        new = migration.numbered(old)
-        self.assertEqual([q["step"] for q in new], [1, 2, 3, 1, 3, 7])
-        self.assertEqual(list(new[0])[:3], ["key", "type", "step"])  # written right after the type
-        self.assertEqual(new, with_steps(old))  # the admin writes the same on save
+        titles = {
+            "1": {"title": {"en": "About you"}, "lead": {"en": "Two questions."}},
+            "3": {"lead": {"en": "The last one."}},
+        }
+        pages = migration.pages_from(questions, titles)
+        self.assertEqual(
+            [[q["key"] for q in page["questions"]] for page in pages], [["a", "d"], ["b", "e"], ["c"], ["late"]]
+        )
+        self.assertEqual(pages[0]["title"], {"en": "About you"})
+        self.assertEqual(pages[0]["description"], {"en": "Two questions."})
+        self.assertEqual(list(pages[2]), ["description", "questions"])
+        self.assertEqual(pages[0]["questions"][0], {"key": "a", **choice})  # no step any more
+        self.assertEqual(page_errors(pages), [])
 
-    def test_step_numbers_order_the_screens(self):
-        # Any number of screens, in step order, whatever the order of the list:
-        # 1 details, 2 two ratings, 3 a yes/no, 4 one more rating, 5 a text box.
-        choice = {"type": "choice", "required": True, "options": [{"value": "a", "en": "A"}, {"value": "b", "en": "B"}]}
-        self.opd.questions = [
-            {"key": "late_rating", "type": "rating", "step": 4, "text": {"en": "Late rating"}},
-            {"key": "comment", "type": "text", "step": 5, "text": {"en": "Comment"}},
-            {"key": "clinic", "step": 1, "text": {"en": "Clinic"}, **choice},
-            {"key": "first_rating", "type": "rating", "step": 2, "text": {"en": "First rating"}},
-            {"key": "second_rating", "type": "rating", "step": 2, "text": {"en": "Second rating"}},
-            {"key": "come_back", "step": 3, "text": {"en": "Come back?"}, **choice},
+        # Back: each question numbered by its page (step 7 is page 4), right after its type.
+        back, back_titles = migration.questions_from(pages)
+        self.assertEqual(
+            [(q["key"], q["step"]) for q in back], [("a", 1), ("d", 1), ("b", 2), ("e", 2), ("c", 3), ("late", 4)]
+        )
+        self.assertEqual(list(back[0])[:3], ["key", "type", "step"])
+        self.assertEqual(back_titles, titles)
+
+        # A step that held both ratings and other questions: two pages, the others first.
+        mixed = [
+            {"key": "r", "type": "rating", "step": 1, "text": {"en": "R"}},
+            {"key": "t", "type": "text", "step": 1, "text": {"en": "T"}},
         ]
-        self.opd.steps = {"3": {"title": {"en": "About coming back"}, "lead": {"en": "One question."}}}
+        self.assertEqual(
+            migration.pages_from(mixed, {"1": {"title": {"en": "Mixed"}}}),
+            [
+                {"title": {"en": "Mixed"}, "questions": [{"key": "t", "type": "text", "text": {"en": "T"}}]},
+                {"questions": [{"key": "r", "type": "rating", "text": {"en": "R"}}]},
+            ],
+        )
+
+    def test_pages_order_the_screens(self):
+        # Any number of pages, in list order: 1 details, 2 two ratings, 3 a yes/no,
+        # 4 one more rating, 5 a text box.
+        choice = {"type": "choice", "required": True, "options": [{"value": "a", "en": "A"}, {"value": "b", "en": "B"}]}
+        self.opd.pages = [
+            {"questions": [{"key": "clinic", "text": {"en": "Clinic"}, **choice}]},
+            {
+                "questions": [
+                    {"key": "first_rating", "type": "rating", "text": {"en": "First rating"}},
+                    {"key": "second_rating", "type": "rating", "text": {"en": "Second rating"}},
+                ]
+            },
+            {
+                "title": {"en": "About coming back"},
+                "description": {"en": "One question."},
+                "questions": [{"key": "come_back", "text": {"en": "Come back?"}, **choice}],
+            },
+            {"questions": [{"key": "late_rating", "type": "rating", "text": {"en": "Late rating"}}]},
+            {"questions": [{"key": "comment", "type": "text", "text": {"en": "Comment"}}]},
+        ]
         self.opd.full_clean()
         self.opd.save()
         spec = FormSpec(self.opd)
@@ -779,115 +838,175 @@ class QuestionsJsonTests(PageTestBase):
         self.assertEqual(walk, [*expected, ("screen-5", 0)])
 
         page = self.client.get(self.url("form", "opd")).content.decode()
-        third = page.split('data-step="screen-3"')[1].split("</section>")[0]
+        third = section(page, "screen-3")
         self.assertIn("About coming back", third)  # its own title
+        self.assertIn("One question.", third)  # and description
         self.assertIn('<span class="ynbtn">', third)  # after the ratings: large Yes / No-style buttons
         self.assertIn(">Next<", third)  # more rating cards come next, but the ratings have started
-        self.assertIn("Start the questions", page.split('data-step="screen-1"')[1].split("</section>")[0])
+        self.assertIn("Start the questions", section(page, "screen-1"))
         self.assertTrue(third.startswith(' data-order="3" data-home-reset>'))  # Home / Reset show here
-        fifth = page.split('data-step="screen-5"')[1].split("</section>")[0]
+        fifth = section(page, "screen-5")
         self.assertIn("In your own words", fifth)  # the default heading
         self.assertIn("Review answers", fifth)  # the review comes next
-        first = page.split('data-step="screen-1"')[1].split("</section>")[0]
-        self.assertTrue(first.startswith(' data-order="1">'))  # before the ratings: no Home / Reset
+        self.assertTrue(section(page, "screen-1").startswith(' data-order="1">'))  # before the ratings: no Home / Reset
+
+    def test_a_page_can_name_its_main_button(self):
+        # The page's own label replaces the default, in each language (English
+        # where it has none); changing an answer from the review, the button
+        # still says "Review answers".
+        self.opd.pages[0]["primary_button"] = {"en": "Rate our services", TEST_LANGUAGE: "Rate (test)"}
+        self.opd.pages[2]["primary_button"] = {"en": "Check my answers"}
+        self.opd.full_clean()
+        self.opd.save()
+        page = self.client.get(self.url("form", "opd")).content.decode()
+        first = section(page, "screen-1")
+        self.assertIn(
+            '<span class="unless-editing"><span class="l10n l10n--en" lang="en">Rate our services</span>'
+            f'<span class="l10n l10n--{TEST_LANGUAGE}" lang="{TEST_LANGUAGE}">Rate (test)</span></span>',
+            first,
+        )
+        self.assertNotIn("Start the questions", first)
+        last = section(page, "screen-3")
+        self.assertIn(f'lang="{TEST_LANGUAGE}">Check my answers</span></span>', last)  # English stands in
+        self.assertIn('<span class="when-editing"><span class="l10n l10n--en" lang="en">Review answers', last)
+
+        # Without JavaScript too: opened from the review, the page is marked for editing.
+        answers = self.answers(self.opd)
+        edit = self.client.post(self.url("form", "opd"), {"nav": "edit:improvement", "step": "review", **answers})
+        self.assertEqual(edit.context["current_step"], "screen-3")
+        self.assertContains(edit, 'class="is-editing"')
+
+    def test_the_last_rating_card_leads_to_the_review(self):
+        # The default forms ask open questions after the ratings: every card says Next.
+        cards = self.client.get(self.url("form", "opd")).content.decode().split('<div class="qcard')[1:]
+        self.assertTrue(
+            all('<span class="unless-editing"><span class="l10n l10n--en" lang="en">Next<' in c for c in cards)
+        )
+        # A form that ends with its ratings: the last card says "Review answers".
+        self.opd.pages = self.opd.pages[:2]
+        self.opd.save()
+        cards = self.client.get(self.url("form", "opd")).content.decode().split('<div class="qcard')[1:]
+        self.assertIn('<span class="unless-editing"><span class="l10n l10n--en" lang="en">Review answers<', cards[-1])
+        self.assertTrue(all(">Next<" in card for card in cards[:-1]))
 
     def test_a_text_question_can_go_on_the_first_screen(self):
         # Its place there follows the list.
-        self.opd.questions = [
-            *self.opd.questions,
-            {"key": "doctor_name", "type": "text", "step": 1, "required": True, "text": {"en": "Doctor"}},
-        ]
-        self.opd.save()
+        self.add_question(self.opd, "doctor_name", page=0, type=QuestionType.TEXT, required=True)
         spec = FormSpec(self.opd)
         self.assertEqual(spec.group("screen-1").questions[-1].key, "doctor_name")
         page = self.client.get(self.url("form", "opd"))
-        first = page.content.decode().split('data-step="screen-1"')[1].split("</section>")[0]
-        self.assertIn('<textarea name="doctor_name"', first)
+        self.assertIn('<textarea name="doctor_name"', section(page.content.decode(), "screen-1"))
         # It is required there like any question on that screen (without JavaScript, too).
         step = self.client.post(
             self.url("form", "opd"), {"nav": "next", "step": "screen-1", "uhid": UHID, "clinic": "ent"}
         )
         self.assertEqual(step.context["errors"], {"doctor_name": "required"})
 
-    def test_step_titles_are_checked(self):
-        questions = [
-            {"key": "a", "type": "choice", "step": 1, "text": {"en": "A"}, "options": [{"value": "x", "en": "X"}]},
-            {"key": "b", "type": "rating", "step": 2, "text": {"en": "B"}},
-        ]
-        self.assertEqual(steps_errors({"1": {"title": {"en": "About you"}}}, questions), [])
-        titles = {
-            "2": {"title": {"en": "Ratings"}},
-            "9": {"title": {"en": "X"}},
-            "one": {},
-            "1": {"title": {"en": "<b>"}},
-        }
-        problems = steps_errors(titles, questions)
-        expected = [
-            "Step 2: has ratings, whose cards show each question",
-            "Step 9: no question has this step",
-            "Step one: the key must be a step number",
-            "Step 1: title (en) can't contain < >",
-        ]
-        for start in expected:
-            self.assertTrue(any(p.startswith(start) for p in problems), (start, problems))
+    def test_page_problems_name_the_page(self):
+        rating = {"key": "wait", "type": "rating", "text": {"en": "Wait"}}
+        choice = {"key": "clinic", "type": "choice", "text": {"en": "Clinic"}, "options": [{"value": "a", "en": "A"}]}
+        problems = page_errors(
+            [
+                {"heading": {"en": "X"}, "questions": [choice]},
+                {"title": {"en": "Ratings"}, "primary_button": {"en": "Go"}, "questions": [rating]},
+                {
+                    "questions": [
+                        {"key": "stay", "type": "text", "text": {"en": "Stay"}},
+                        {"key": "card", "type": "rating", "text": {"en": "Card"}},
+                    ]
+                },
+                {"questions": []},
+                {
+                    "title": {TEST_LANGUAGE: "Only one"},
+                    "questions": [{"key": "note", "type": "text", "text": {"en": "N"}}],
+                },
+                {"key": "loose", "type": "text", "text": {"en": "Loose"}},
+                "page",
+                {"questions": ["question"]},
+            ]
+        )
+        self.assertEqual(
+            problems,
+            [
+                "Page 1: unknown field(s) heading (allowed: questions, title, description, primary_button).",
+                "Page 2: has ratings, whose cards show each question; it takes no title or primary_button.",
+                "Page 3: has ratings, which get a card each; move its text questions to a page of their own.",
+                "Page 4: questions must be a list of at least one question: [ {…}, {…} ].",
+                'Page 5: title needs English text, e.g. {"en": "…"}.',
+                "Page 6: looks like a question. Questions go inside pages: "
+                '[ {"questions": [ {…}, {…} ]}, {"questions": [ … ]} ].',
+                'Page 7: must be an object, e.g. {"questions": [ … ]}.',
+                "Page 8, question 1: must be an object {…}.",
+            ],
+        )
+        self.assertEqual(
+            page_errors({"questions": [rating]}),
+            ['The pages must be a list: [ {"questions": [ … ]}, {"questions": [ … ]} ].'],
+        )
+        self.assertEqual(page_errors([{"questions": [rating]}] * 100), ["A form can have at most 99 pages."])
 
     def test_default_forms_are_valid(self):
         for form in (self.opd, self.ipd):
-            self.assertEqual(question_errors(form.questions), [])
+            self.assertEqual(page_errors(form.pages), [])
             form.full_clean()
 
     def test_problems_name_the_question(self):
-        problems = question_errors(
+        problems = page_errors(
             [
-                {"key": "clinic", "type": "choice", "text": {"en": "Clinic"}, "options": []},
-                {"key": "clinic", "type": "text", "text": {"en": "Again"}},
-                {"key": "Bad Key", "type": "text", "text": {"en": "Q"}},
-                {"key": "wait", "type": "rating", "text": {"en": "Wait"}, "options": [{"en": "a"}]},
-                {"key": "visit", "type": "date", "text": {TEST_LANGUAGE: "Date"}, "requried": True},
-                {"key": "mood", "type": "smiley", "text": {"en": "Mood"}},
                 {
-                    "key": "why",
-                    "type": "choice",
-                    "text": {"en": "Why"},
-                    "required": "yes",
-                    "options": [{"value": "a", "en": "A"}],
+                    "questions": [
+                        {"key": "clinic", "type": "choice", "text": {"en": "Clinic"}, "options": []},
+                        {"key": "visit", "type": "date", "text": {TEST_LANGUAGE: "Date"}, "requried": True},
+                        {
+                            "key": "why",
+                            "type": "choice",
+                            "text": {"en": "Why"},
+                            "required": "yes",
+                            "options": [{"value": "a", "en": "A"}],
+                        },
+                        {"key": "stay", "type": "text", "text": {"en": "Stay"}, "allow_comment": True},
+                        {"key": "old", "type": "text", "step": 3, "text": {"en": "Old"}},
+                    ]
                 },
-                {"key": "stay", "type": "text", "text": {"en": "Stay"}, "step": 1, "allow_comment": True},
-                {"key": "card", "type": "rating", "text": {"en": "Card"}, "step": 1},
-                {"key": "zero", "type": "text", "text": {"en": "Zero"}, "step": 0},
                 {
-                    "key": "back",
-                    "type": "choice",
-                    "text": {"en": "Back?"},
-                    "step": "later",
-                    "options": [{"value": "y", "en": "Y"}],
+                    "questions": [
+                        {"key": "wait", "type": "rating", "text": {"en": "Wait"}, "options": [{"en": "a"}]},
+                        {"key": "mood", "type": "smiley", "text": {"en": "Mood"}},
+                    ]
+                },
+                {
+                    "questions": [
+                        {"key": "clinic", "type": "text", "text": {"en": "Again"}},  # on another page, still taken
+                        {"key": "Bad Key", "type": "text", "text": {"en": "Q"}},
+                        {"type": "text", "text": {"en": "No key"}},
+                    ]
                 },
             ]
         )
         expected = [
             "“clinic”: a choice needs options",
-            "“clinic”: another question already uses this key",
-            "“Bad Key”: key must be lowercase",
-            "“wait”: give exactly five labels",
             "“visit”: unknown field(s) requried",
             "“visit”: text needs the English question",
-            "“mood”: type must be one of",
             "“why”: required must be true or false",
             "“stay”: allow_comment (“Why?”) is for choices only",
-            "“stay”: step 1 has ratings, which get a card each",  # “card” is a rating on step 1
-            "“zero”: step must be a whole number from 1 to 99",
-            "“back”: step must be a whole number from 1 to 99",
+            "“old”: step isn't used any more: a question is asked on the page it's listed in",
+            "“wait”: give exactly five labels",
+            "“mood”: type must be one of",
+            "“clinic”: another question already uses this key",
+            "“Bad Key”: key must be lowercase",
+            "Page 3, question 3: key must be lowercase",
         ]
         for start in expected:
             self.assertTrue(any(p.startswith(start) for p in problems), (start, problems))
-        self.assertEqual(question_errors({"key": "x"}), ["The questions must be a list: [ {…}, {…} ]."])
+        self.assertEqual(len(problems), len(expected))
 
     def test_old_answers_keep_their_wording_when_the_form_changes(self):
         self.submit(uhid=UHID, **self.answers(self.opd, 4))
-        for question in self.opd.questions:
+        for question in questions_of(self.opd):
             if question["key"] == "registration_wait":
                 question["text"] = {"en": "How long did you wait to register?"}
-        self.opd.questions = [q for q in self.opd.questions if q["key"] != "staff_behaviour"]
+        for page in self.opd.pages:
+            page["questions"] = [q for q in page["questions"] if q["key"] != "staff_behaviour"]
         self.opd.save()
         answers = FeedbackSubmission.objects.get().answers
         self.assertEqual(answers["registration_wait"]["question"], "Waiting time at the registration counter")

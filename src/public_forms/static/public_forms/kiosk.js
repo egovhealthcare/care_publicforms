@@ -5,7 +5,7 @@
    every language, with the current step marked by the server. Without
    this file every step button posts the form and the server shows the
    next step (steps.py). With it:
-     · the same steps (identify → the form's steps in number order, a
+     · the same steps (identify → the form's pages in order, a
        screen of questions or a card per rating → review), switched in the
        page without reloading; the form controls are the only state and
        the page is posted once, from the review
@@ -179,7 +179,7 @@
   var progressFill = $('progressFill');
   var headerNav = $('hdrNav');
   var idStrip = $('idStrip');
-  // The screens of the form's steps (steps/screen.html): "screen-<step>".
+  // The screens of the form's pages (steps/screen.html): "screen-<page>".
   var screens = form.querySelectorAll('[data-step^="screen-"]');
 
   // A step after identification: a screen of questions, a rating card or the review.
@@ -308,7 +308,7 @@
   }
 
   // A place's position in the whole questionnaire, whoever the patient is:
-  // its step (data-order), then its card. Mirrors steps._rank.
+  // its page (data-order), then its card. Mirrors steps._rank.
   function rank(unit) {
     if (unit[0] === 'review') return 1e9;
     if (unit[0] === 'questions') {

@@ -101,11 +101,11 @@ src/public_forms/
 ├── apps.py              App config: mounts the page URLs, registers checks
 ├── pages.py             Page URLs (under /facility/<id>/)
 ├── views.py             FeedbackPage base + StartView, FormView, DoneView
-├── questions.py         The questions JSON: fields and defaults (FIELDS), Question, parse_questions(), question_errors()
-├── questionnaire.py     Form lookup, FormSpec (questions by step), answer parsing, question_order()
+├── questions.py         The pages JSON: fields and defaults (PAGE_FIELDS, FIELDS), Page, Question, parse_pages(), page_errors()
+├── questionnaire.py     Form lookup, FormSpec (screens from the pages), answer parsing, question_order()
 ├── services.py          UHID format, collect_answers() / stored_answer(), create_submission(), reference numbers
 ├── steps.py             Step navigation on the server (no JavaScript); review rows
-├── models.py            FeedbackForm (with questions JSON), FeedbackSubmission
+├── models.py            FeedbackForm (with pages JSON), FeedbackSubmission
 ├── i18n.py              Loads locale files (plugin's + LOCALE_DIRS): languages(), translate(), localize()
 ├── locale/              Screen text, one JSON file per language: <code>.json
 ├── templatetags/
@@ -114,14 +114,14 @@ src/public_forms/
 │   ├── base.html        Page shell: header, language toggle, progress, footer, idle overlay
 │   ├── choose.html      Form chooser
 │   ├── form.html        The questionnaire form; includes steps/*
-│   ├── steps/           identify, scan, uhid, screen (one per step of questions), ratings (the cards), review
+│   ├── steps/           identify, scan, uhid, screen (one per page of questions), ratings (the cards), review
 │   ├── done.html        Thank you + reference number
 │   ├── empty.html       Unknown facility / no active forms (404)
 │   └── _face.html       Rating face icons
 ├── static/public_forms/
 │   ├── kiosk.css        The OPD feedback design in Care's colours (DM Sans), single column scaled by rem
 │   └── kiosk.js         Step machine and kiosk behaviour (ES5, no dependencies)
-├── admin.py             Admin for forms (per-language boxes, questions JSON) and submissions (read-only, CSV)
+├── admin.py             Admin for forms (per-language boxes, pages JSON) and submissions (read-only, CSV)
 ├── admin_site.py        The plugin's own admin site at ADMIN_URL: who can sign in, sign-in limit
 ├── access.py            Which facilities an admin user reaches, by their Care roles
 ├── text_rules.py        Blocked characters and length limits for all typed text
@@ -279,10 +279,10 @@ stateDiagram-v2
     scan --> steps: QR read
     uhid --> steps: Continue (11 digits) / Guest
     state steps {
-        [*] --> step1
-        step1 --> step2: all required answered
-        step2 --> stepN: …in step number order
-        note right of step2: a step of ratings is a card per rating\n(tap a face: auto-advance 300 ms);\nany other step is one screen
+        [*] --> page1
+        page1 --> page2: all required answered
+        page2 --> pageN: …in the pages' order
+        note right of page2: a page of ratings is a card per rating\n(tap a face: auto-advance 300 ms);\nany other page is one screen
     }
     steps --> review
     review --> steps: tap a row (then back to review)
@@ -290,11 +290,11 @@ stateDiagram-v2
     review --> [*]: Submit (POST)
 ```
 
-- **Units.** After identification the path is a list of *units* in step
-  order: `screen-<n>` for each step of choice / date / text questions with a
+- **Units.** After identification the path is a list of *units* in page
+  order: `screen-<n>` for page n of choice / date / text questions with a
   visible question, one unit per visible rating card (`questions`, by its
   index in `FormSpec.ratings`), then `review`. `flow()` sorts them by
-  `data-order` (the step), so their order in the page doesn't matter. Back,
+  `data-order` (the page's number), so their order in the HTML doesn't matter. Back,
   Next and the progress bar walk this list (`flow()`, `position()`);
   `steps.flow_units` is the same list on the server.
 - **Audience.** Questions are marked `data-audience="all|guest|identified"`.
@@ -464,8 +464,7 @@ The solid line is the one foreign key; dotted lines are links by value only
 | `patient_type` | `varchar(8)` | no | `op` or `ip` |
 | `title` | `jsonb` | no | Per-language text, e.g. `{"en": "OPD feedback", "kn": "…"}`; English required |
 | `description` | `jsonb` | no | Per-language text; `{}` when empty |
-| `questions` | `jsonb` | no | The questions, in the order asked (see 8.2); `[]` when empty |
-| `steps` | `jsonb` | no | Step titles: `{"<step>": {"title": {…}, "lead": {…}}}` per language, for steps of choice / date / text questions (`questions.steps_errors`); `{}` when none, and those steps get default headings |
+| `pages` | `jsonb` | no | The pages in the order shown, each with its questions in the order asked (see 8.2); `[]` when empty |
 | `is_active` | `boolean` | no | Inactive forms are not offered |
 | `order` | `smallint` | no | Order on the chooser; `CHECK ("order" >= 0)` |
 
@@ -532,34 +531,60 @@ field is required; missing languages fall back to English.
 {"en": "Waiting time at the registration counter", "kn": "ನೋಂದಣಿ ಕೌಂಟರ್‌ನಲ್ಲಿ ಕಾಯುವ ಸಮಯ"}
 ```
 
-**`care_publicforms_form.questions`**: a list of question objects in the order
-they are asked. Fields left out take their default (`questions.FIELDS`), and
-`questions.question_errors()` checks the list when the form is saved
-(unknown fields, duplicate or malformed keys, missing English, bad options),
-naming the question in each error.
+**`care_publicforms_form.pages`**: a list of pages in the order they are
+shown, each with its questions in the order asked. Fields left out take
+their default (`questions.PAGE_FIELDS`, `questions.FIELDS`), and
+`questions.page_errors()` checks the list when the form is saved (unknown
+fields, empty pages, ratings mixed with other questions, duplicate or
+malformed keys, missing English, bad options), naming the page or question
+in each error.
 
 ```json
 [
-  {"key": "clinic", "type": "choice", "step": 1, "required": true,
-   "text": {"en": "Clinic visited", "kn": "ಭೇಟಿ ನೀಡಿದ ಚಿಕಿತ್ಸಾಲಯ"},
-   "options": [{"value": "ent", "en": "ENT", "kn": "ಕಿವಿ ಮೂಗು ಗಂಟಲು"}]},
-  {"key": "registration_wait", "type": "rating", "step": 2,
-   "text": {"en": "Waiting time at the registration counter"},
-   "short_text": {"en": "Registration wait"},
-   "options": [{"en": "More than 30 mins"}, {"en": "10-30 mins"}, {"en": "5-10 mins"},
-               {"en": "Within 5 mins"}, {"en": "Immediate"}]},
-  {"key": "would_return", "type": "choice", "step": 3, "allow_comment": true,
-   "text": {"en": "Would you come back to this hospital for treatment?"},
-   "options": [{"value": "yes", "en": "Yes", "kn": "ಹೌದು"}, {"value": "no", "en": "No", "kn": "ಇಲ್ಲ"}]},
-  {"key": "suggestions", "type": "text", "step": 3, "text": {"en": "Any other suggestions?"}}
+  {"title": {"en": "About your visit"},
+   "questions": [
+     {"key": "clinic", "type": "choice", "required": true,
+      "text": {"en": "Clinic visited", "kn": "ಭೇಟಿ ನೀಡಿದ ಚಿಕಿತ್ಸಾಲಯ"},
+      "options": [{"value": "ent", "en": "ENT", "kn": "ಕಿವಿ ಮೂಗು ಗಂಟಲು"}]}
+   ]},
+  {"questions": [
+     {"key": "registration_wait", "type": "rating",
+      "text": {"en": "Waiting time at the registration counter"},
+      "short_text": {"en": "Registration wait"},
+      "options": [{"en": "More than 30 mins"}, {"en": "10-30 mins"}, {"en": "5-10 mins"},
+                  {"en": "Within 5 mins"}, {"en": "Immediate"}]}
+   ]},
+  {"primary_button": {"en": "Check my answers"},
+   "questions": [
+     {"key": "would_return", "type": "choice", "allow_comment": true,
+      "text": {"en": "Would you come back to this hospital for treatment?"},
+      "options": [{"value": "yes", "en": "Yes", "kn": "ಹೌದು"}, {"value": "no", "en": "No", "kn": "ಇಲ್ಲ"}]},
+     {"key": "suggestions", "type": "text", "text": {"en": "Any other suggestions?"}}
+   ]}
 ]
 ```
 
-| Field | Default | Meaning |
+A page holds either ratings (a card each) or other questions (one screen),
+not both, and a form has at most 99 pages (a screen is named `screen-<n>`).
+`FormSpec.screens` follows the pages; questions on a page keep their list
+order. A screen before the first ratings has the compact "details" look,
+after them the "open" look (`Screen.style`).
+
+| Page field | Default | Meaning |
+| --- | --- | --- |
+| `questions` | required | The page's questions (below), at least one |
+| `title` | `{}` | Per-language heading; empty → the default for its look ("A few quick details", "In your own words") |
+| `description` | `{}` | Per-language line under the heading |
+| `primary_button` | `{}` | Per-language label of the main button; empty → `views.screen_context()` picks "Start the questions" (the first rating card comes next), "Review answers" (the review) or "Next". Changing an answer from the review, the button says "Review answers" whatever the page sets (`is-editing`) |
+
+Rating pages take only `questions`: each card shows its own question, and
+says "Next", or "Review answers" on the last card when the form ends with
+ratings.
+
+| Question field | Default | Meaning |
 | --- | --- | --- |
 | `key` | required | Stable id the answer is stored under: `[a-z][a-z0-9_]{0,63}`, unique in the form |
 | `type` | required | `rating`, `choice`, `date`, `text`. A yes/no question is a `choice` with options `yes` and `no` |
-| `step` | by type | The screen that asks it, a number 1–99; screens follow the numbers. A step holds ratings (a card each) or other questions (one screen), not both. Left out: `choice`, `date` 1; `rating` 2; `text` 3 (`questions.DEFAULT_STEPS`); the admin writes it in on save. `FormSpec.screens` groups by step; questions in a step keep their list order. A screen before the first ratings has the compact "details" look, after them the "open" look (`Screen.style`) |
 | `text` | required | Per-language question; English required |
 | `short_text` | `{}` | Per-language label on the review; empty → `text` |
 | `hint` | `{}` | Per-language hint under the question |
@@ -621,8 +646,10 @@ removed questions last.
 | `0004_numbered_steps` | Adds `steps` (step titles, default `{}`) and writes each question's `step` as a number into the forms that exist: where it was already asked (details 1, ratings 2, open 3), so nothing moves. Old step names become their numbers. Reversing the data part is a no-op |
 | `0005_shared_forms_to_facilities` | Shared forms (no facility) become facility forms: each facility with feedback on one gets a copy (or keeps its own form with that code) and that feedback moves to it; then the shared forms are deleted. Facilities without feedback on them get nothing. Reversing it is a no-op |
 | `0006_form_facility_required` | Makes `facility_external_id` required and the code unique per facility. A separate migration, so 0005's changes are committed before the table is altered |
+| `0007_pages` | Adds `pages` and fills it from `questions` and `steps`: each step becomes a page, in step order, without the questions' `step`; a step's `title` and `lead` become its page's `title` and `description`. A step that held both ratings and other questions becomes two pages, the other questions first, as the kiosk showed it. Reversing it numbers the questions by page and moves the titles back; `primary_button` is dropped |
+| `0008_remove_questions_and_steps` | Drops `questions` and `steps`, in a migration of its own after 0007's data change |
 
-The default forms' questions:
+The default forms' pages: the details, then the ratings, then the open questions:
 
 | Form | Details (choice/date) | Ratings | Yes/no | Free text |
 | --- | --- | --- | --- | --- |
@@ -684,9 +711,10 @@ WHERE facility_external_id = '00000000-0000-0000-0000-000000000000'
   AND reference_number = 'OPD-20261119-4821';
 
 -- A form's questions, in order
-SELECT q ->> 'key' AS key, q ->> 'type' AS type, q -> 'text' ->> 'en' AS question
+SELECT p.number AS page, q ->> 'key' AS key, q ->> 'type' AS type, q -> 'text' ->> 'en' AS question
 FROM care_publicforms_form f
-CROSS JOIN LATERAL jsonb_array_elements(f.questions) AS q
+CROSS JOIN LATERAL jsonb_array_elements(f.pages) WITH ORDINALITY AS p(page, number)
+CROSS JOIN LATERAL jsonb_array_elements(p.page -> 'questions') AS q
 WHERE f.code = 'opd' AND f.facility_external_id = '00000000-0000-0000-0000-000000000000';
 ```
 
@@ -849,7 +877,8 @@ and reloaded when Django's `setting_changed` fires (tests).
 ## 13. Extending the plugin
 
 **Add a form or question:** in the admin (a question is one more object in
-the form's questions JSON); no code. Use a new `key` for a question with a
+a page's `questions`, a page one more object in the form's pages JSON); no
+code. Use a new `key` for a question with a
 new meaning.
 
 **Add a language** (code `<code>`): a locale file and a questionnaire
@@ -870,8 +899,8 @@ For one deployment only, put the locale file in a folder listed in
 
 **Add a question type:**
 
-1. `models.QuestionType`, and its options rules in `questions.question_errors()`.
-2. `questionnaire`: which step it belongs to (`DETAIL_TYPES` / `OPEN_TYPES`) and `parse_answer()`.
+1. `models.QuestionType`, and its options rules in `questions._question_errors()`.
+2. `questionnaire.parse_answer()`.
 3. `services.stored_answer()`: an `answer` label, if the value needs one.
 4. `views.FormView.render_form()` and `steps.answer_label()`: fields for the template and the review.
 5. The step template under `templates/public_forms/steps/`.
@@ -882,7 +911,7 @@ For one deployment only, put the locale file in a folder listed in
 ## 14. Known limitations
 
 - Questions are edited as JSON in the admin; there is no visual form
-  builder yet. Errors are checked on save, per question.
+  builder yet. Errors are checked on save, per page and question.
 - Saved question text and labels are in English only; the patient's
   language is recorded alongside.
 - Languages are set per deployment, not per facility or form.

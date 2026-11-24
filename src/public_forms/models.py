@@ -13,12 +13,11 @@ class PatientType(models.TextChoices):
 
 
 class QuestionType(models.TextChoices):
-    # Where a question is asked is its "step" (questions.TYPE_STEPS):
-    #   choice  → details ("A few details") or open ("In your own words")
-    #   date    → details
-    #   rating  → ratings (one card at a time)
-    #   text    → open or details
-    # A yes/no question is a choice with the options yes and no.
+    # A question is asked on the page it's listed in (questions.py). Ratings
+    # get a card each, on pages of their own; choice, date and text questions
+    # share a page, which looks "details" before the first ratings and "open"
+    # after them (questionnaire.py). A yes/no question is a choice with the
+    # options yes and no.
     RATING = "rating", _("Rating: Poor → Excellent")
     CHOICE = "choice", _("Single choice")
     DATE = "date", _("Date (details)")
@@ -37,7 +36,8 @@ I18N_HELP = _('Text per language, e.g. {"en": "...", "kn": "..."}.')
 class FeedbackForm(models.Model):
     """
     A configurable questionnaire, e.g. the OPD or the inpatient form. Its
-    questions are one JSON list (see questions.py), in the order asked.
+    pages are one JSON list (see questions.py), in the order shown, each with
+    its questions.
 
     Every form belongs to one facility, and a facility has at most one form
     per code. The facility is kept by its id: there is no link into Care. A
@@ -58,16 +58,10 @@ class FeedbackForm(models.Model):
     patient_type = models.CharField(max_length=8, choices=PatientType.choices)
     title = models.JSONField(help_text=I18N_HELP)
     description = models.JSONField(default=dict, blank=True, help_text=I18N_HELP)
-    questions = models.JSONField(default=list, blank=True, help_text=_("The questions, in order (see below)."))
-    steps = models.JSONField(
-        default=dict,
+    pages = models.JSONField(
+        default=list,
         blank=True,
-        verbose_name=_("step titles"),
-        help_text=_(
-            'Optional heading for a step, by its number, per language: {"1": {"title": {"en": "About you"}, '
-            '"lead": {"en": "…"}}}. Steps without one get a default heading. Rating steps take none: each card '
-            "shows its question."
-        ),
+        help_text=_("The pages, in the order shown, each with its questions (see below)."),
     )
     is_active = models.BooleanField(default=True)
     order = models.PositiveSmallIntegerField(default=0, help_text=_("Order on the form chooser."))
@@ -87,8 +81,8 @@ class FeedbackForm(models.Model):
         return f"{localize(self.title, BASE_LANGUAGE)} ({self.code})"
 
     def clean(self):
-        if self.steps is None:  # an empty JSON box in a form: no step titles
-            self.steps = {}
+        if self.pages is None:  # an empty JSON box in a form: no pages yet
+            self.pages = []
         errors = {}
         if not isinstance(self.title, dict) or not self.title.get(BASE_LANGUAGE):
             errors["title"] = _("An English title is required.")
@@ -100,12 +94,10 @@ class FeedbackForm(models.Model):
             same_code = FeedbackForm.objects.filter(code=self.code, facility_external_id=self.facility_external_id)
             if same_code.exclude(pk=self.pk).exists():
                 errors["code"] = _("This facility already has a form with this code.")
-        from public_forms.questions import question_errors, steps_errors  # imports this module
+        from public_forms.questions import page_errors  # imports this module
 
-        if problems := question_errors(self.questions):
-            errors["questions"] = problems
-        elif problems := steps_errors(self.steps, self.questions):
-            errors["steps"] = problems
+        if problems := page_errors(self.pages):
+            errors["pages"] = problems
         if errors:
             raise ValidationError(errors)
 

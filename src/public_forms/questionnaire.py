@@ -1,17 +1,17 @@
 """
 Turns a configured FeedbackForm into what the feedback page needs.
 
-Each question's "step" (questions.py) is a number: the screen that asks it.
-Screens come in the order of their numbers. A step of ratings is shown one
-card per rating; a step of other questions is one screen with all of them.
-Within a step, questions keep their order in the form.
+A form is a list of pages (questions.py), shown in order. A page of ratings
+is shown one card per rating; a page of other questions is one screen with
+all of them. Within a page, questions keep their order.
 
 A screen of other questions looks one of two ways, by where it is:
   "details"  before the first ratings (or, with no ratings, the first one):
              compact, headed "A few quick details";
   "open"     after the ratings: larger, headed "In your own words", with a
              choice of 2 or 3 options shown as large buttons (a yes/no).
-The form's step titles can give any of them its own heading.
+A page's own title replaces the heading, and its own button label the
+default one.
 """
 
 from dataclasses import dataclass, field
@@ -21,7 +21,7 @@ from django.utils import timezone
 
 from public_forms.i18n import default_rating_labels
 from public_forms.models import Audience, FeedbackForm, QuestionType
-from public_forms.questions import parse_questions
+from public_forms.questions import parse_pages, parse_questions
 from public_forms.text_rules import MAX_ANSWER_LENGTH, blocked_in, without_control_characters
 
 NO_COMMENT = 0  # the "No comments" rating; default rating labels are in the locale files
@@ -38,7 +38,7 @@ def question_order(facility_external_id, form_code) -> list[str]:
     stored answers in a familiar order.
     """
     form = FeedbackForm.objects.filter(facility_external_id=facility_external_id, code=form_code).first()
-    return [question.key for question in parse_questions(form.questions)] if form else []
+    return [question.key for question in parse_questions(form.pages)] if form else []
 
 
 def comment_key(question) -> str:
@@ -56,12 +56,16 @@ def applies(question, identified: bool) -> bool:
 
 @dataclass
 class Screen:
-    """The questions of one step: rating cards, or one screen of other questions."""
+    """The questions of one page: rating cards, or one screen of other questions."""
 
-    number: int
+    number: int  # the page's number
     questions: list = field(default_factory=list)
     is_ratings: bool = False
     style: str = "details"  # screens of other questions: "details" or "open" (see the module docstring)
+    # The page's own text, per language (screens of other questions only; empty: the default).
+    title: dict = field(default_factory=dict)
+    description: dict = field(default_factory=dict)
+    primary_button: dict = field(default_factory=dict)
 
     @property
     def name(self) -> str:
@@ -74,18 +78,27 @@ class FormSpec:
 
     def __init__(self, form: FeedbackForm):
         self.form = form
-        self.questions = [question for question in parse_questions(form.questions) if question.active]
+        self.questions = []
         self.screens = []
-        for number in sorted({question.step for question in self.questions}):
-            here = [question for question in self.questions if question.step == number]
-            # A step holds ratings or other questions (questions.py checks it); were
+        for page in parse_pages(form.pages):
+            here = [question for question in page.questions if question.active]
+            self.questions += here
+            # A page holds ratings or other questions (questions.py checks it); were
             # both ever saved, the other questions come first, then the cards.
             others = [question for question in here if question.type != QuestionType.RATING]
             ratings = [question for question in here if question.type == QuestionType.RATING]
             if others:
-                self.screens.append(Screen(number, others))
+                self.screens.append(
+                    Screen(
+                        page.number,
+                        others,
+                        title=page.title,
+                        description=page.description,
+                        primary_button=page.primary_button,
+                    )
+                )
             if ratings:
-                self.screens.append(Screen(number, ratings, is_ratings=True))
+                self.screens.append(Screen(page.number, ratings, is_ratings=True))
         first_ratings = next((i for i, screen in enumerate(self.screens) if screen.is_ratings), None)
         groups = [i for i, screen in enumerate(self.screens) if not screen.is_ratings]
         for i in groups:

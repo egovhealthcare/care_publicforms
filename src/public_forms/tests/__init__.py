@@ -57,3 +57,8 @@ def default_forms(facility) -> dict:
 
     create_default_forms(FeedbackForm, facility.external_id)
     return {form.code: form for form in FeedbackForm.objects.filter(facility_external_id=facility.external_id)}
+
+
+def questions_of(form) -> list[dict]:
+    """Every question of a form, page by page: the JSON itself, so a change sticks when the form is saved."""
+    return [question for page in form.pages for question in page["questions"]]

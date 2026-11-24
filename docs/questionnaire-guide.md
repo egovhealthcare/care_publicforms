@@ -11,9 +11,9 @@ learn how the questions are written.
 2. [What the patient sees, start to finish](#2-what-the-patient-sees-start-to-finish)
 3. [Where you edit a questionnaire](#3-where-you-edit-a-questionnaire)
 4. [JSON in five minutes](#4-json-in-five-minutes)
-5. [One question, field by field](#5-one-question-field-by-field)
+5. [Pages and questions, field by field](#5-pages-and-questions-field-by-field)
 6. [The four question types](#6-the-four-question-types)
-7. [Pages: how questions are grouped and ordered](#7-pages-how-questions-are-grouped-and-ordered)
+7. [Pages: how they look and behave](#7-pages-how-they-look-and-behave)
 8. [Recipes: common changes](#8-recipes-common-changes)
 9. [Languages](#9-languages)
 10. [Limits and blocked characters](#10-limits-and-blocked-characters)
@@ -33,12 +33,12 @@ learn how the questions are written.
 | **Facility id** | The facility's long code, like `2f6c1e8a-4b7d-4c1e-9a3f-5d2e8b7c6a10`. It is the part after `/facility/` in the address bar when you open the facility in Care. |
 | **Form** | One questionnaire, such as "OPD feedback" or "Inpatient feedback". |
 | **Code** | A form's short name, such as `opd`. It appears in the kiosk's web address and in the reference number patients get (`OPD-20261124-4821`). |
+| **Page** | One part of a form, with its questions. A page of choice, date or text questions is one screen. A page of ratings shows one card per rating. Pages come in the order you list them. |
 | **Question** | One thing you ask. It has a type: rating, choice, date or text. |
-| **Step** | A number on each question saying which page asks it. Step 1 comes first, then 2, and so on. |
-| **Page** | One screen the patient sees. Each rating gets a page of its own (a "card"); other questions in the same step share one page. |
+| **Main button** | The big button at the bottom of a page that moves the patient on, such as "Next". |
 | **UHID** | The patient's hospital id, 11 digits, printed on the OP slip. |
 | **Guest** | A patient who continues without a UHID. |
-| **JSON** | The text format the questions are written in (explained in [section 4](#4-json-in-five-minutes)). |
+| **JSON** | The text format the pages are written in (explained in [section 4](#4-json-in-five-minutes)). |
 
 ---
 
@@ -47,7 +47,7 @@ learn how the questions are written.
 ```mermaid
 flowchart LR
     A["Choose a form<br/>(if the facility has more than one)"] --> B["Identify:<br/>scan QR, type UHID,<br/>or continue as guest"]
-    B --> C["Your pages,<br/>in step order"]
+    B --> C["Your pages,<br/>in order"]
     C --> D["Review:<br/>check and change answers"]
     D --> E["Thank you,<br/>with a reference number"]
     E -->|after 20 seconds| A
@@ -60,7 +60,7 @@ flowchart LR
    UHID, or continues as a guest. Every form starts with this page, and you
    can't change it.
 3. **Your pages.** This is the part you write: details, rating cards and
-   open questions, in the order of their step numbers.
+   open questions, in the order you list the pages.
 4. **Review.** Every answer is listed. The patient can tap any line to change
    it, then taps **Submit feedback**.
 5. **Thank you.** The patient sees a reference number. After 20 seconds the
@@ -91,25 +91,25 @@ Each form has these boxes:
 | **Patient type** | Outpatient (OP) or inpatient (IP). It picks the icon on the choice page and lets reports filter OP and IP. |
 | **Title** (one box per language) | Shown on the choice page and at the top of every page. English is required. |
 | **Description** (one box per language) | A line under the title on the choice page. Optional. |
-| **Questions** | All the questions, written in JSON. Most of this guide is about this box. |
-| **Step titles** | Optional headings for pages. See [section 7](#7-pages-how-questions-are-grouped-and-ordered). |
+| **Pages** | All the pages and their questions, written in JSON. Most of this guide is about this box. |
 | **Facility id** | The facility that offers this form. Required. The facility's name shows below it after saving. |
 | **Is active** | Untick to hide the form from patients without deleting it. |
 | **Order** | Where the form appears on the choice page: 0 first, then 1, and so on. |
 | **Page** | The form's kiosk address. Open it in a browser to try the form. |
 
-When you click **Save**, the admin checks the questions. If something is
-wrong, it shows the problem in red and names the question, and nothing is
-saved until you fix it. See [section 13](#13-error-messages-and-what-they-mean).
+When you click **Save**, the admin checks the pages and questions. If
+something is wrong, it shows the problem in red and names the page or
+question, and nothing is saved until you fix it. See
+[section 13](#13-error-messages-and-what-they-mean).
 
 **A new facility has no forms.** Its kiosk shows "No feedback forms are set
 up". Either:
 
 - ask a developer to give it the default OPD and inpatient forms
   (`python manage.py seed_feedback_forms <facility-id>`), and then edit them; or
-- open another facility's form, copy everything in its **Questions** box
-  (and **Step titles**, if any), click **Add feedback form**, paste them in,
-  and fill in the other boxes with the new facility's id.
+- open another facility's form, copy everything in its **Pages** box, click
+  **Add feedback form**, paste it in, and fill in the other boxes with the
+  new facility's id.
 
 **A form that has feedback can't be deleted.** Untick **Is active** instead.
 
@@ -117,57 +117,75 @@ up". Either:
 
 ## 4. JSON in five minutes
 
-The **Questions** box holds a list of questions written in JSON, a common
-text format. You only need these four symbols:
+The **Pages** box holds a list of pages written in JSON, a common text
+format. Each page holds a list of questions. You only need these four
+symbols:
 
 | Symbol | Name | Use |
 | --- | --- | --- |
-| `[ ]` | Square brackets | A list. The whole box is one list of questions. |
-| `{ }` | Curly braces | One thing with named parts. Each question is one `{ }`. |
+| `[ ]` | Square brackets | A list. The whole box is one list of pages, and each page has a list of questions. |
+| `{ }` | Curly braces | One thing with named parts. Each page is one `{ }`, and so is each question. |
 | `"..."` | Double quotes | Every name and every piece of text. Use straight quotes `"`, not curly ones (`“ ”`) from Word or Google Docs. |
 | `,` | Comma | Between items. There is no comma after the last item. |
 
-Here is a list with one question:
+Here is a form with one page, and one question on it:
 
 ```json
 [
   {
-    "key": "cleanliness",
-    "type": "rating",
-    "step": 2,
-    "text": {"en": "How clean was the hospital?"}
+    "questions": [
+      {
+        "key": "cleanliness",
+        "type": "rating",
+        "text": {"en": "How clean was the hospital?"}
+      }
+    ]
   }
 ]
 ```
 
-Read it as: a list `[ ]` containing one question `{ }`. The question has four
-parts, each written `"name": value` and separated by commas. The last part,
-`text`, has no comma after it. The value of `text` is itself a `{ }` with one
-entry per language.
+Read it from the outside in:
 
-Two questions are two `{ }`, with a comma between them:
+- the outer `[ ]` is the list of pages; here there is one page, the `{ }`
+  inside it;
+- the page has one part, `"questions"`, whose value is the list `[ ]` of its
+  questions;
+- the question `{ }` has three parts, each written `"name": value` and
+  separated by commas. The last part, `text`, has no comma after it. The
+  value of `text` is itself a `{ }` with one entry per language.
+
+Two pages are two `{ }` in the outer list, with a comma between them. Here
+the first page has two questions:
 
 ```json
 [
-  {"key": "cleanliness", "type": "rating", "step": 2, "text": {"en": "How clean was the hospital?"}},
-  {"key": "doctor", "type": "rating", "step": 2, "text": {"en": "How well did the doctor explain things?"}}
+  {"title": {"en": "About your visit"},
+   "questions": [
+     {"key": "clinic", "type": "choice", "text": {"en": "Which clinic?"},
+      "options": [{"value": "eye", "en": "Eye"}, {"value": "ent", "en": "ENT"}]},
+     {"key": "visit_date", "type": "date", "text": {"en": "Date of your visit"}}
+   ]},
+  {"questions": [
+     {"key": "cleanliness", "type": "rating", "text": {"en": "How clean was the hospital?"}}
+   ]}
 ]
 ```
 
-Spaces and line breaks don't matter. Both layouts above are the same to the
-computer.
+Spaces and line breaks don't matter. Lay the text out however you find it
+easiest to read.
 
 Values come in three kinds:
 
 | Kind | Looks like | Used for |
 | --- | --- | --- |
 | Text | `"rating"` (in quotes) | Names, codes and wording |
-| Number | `2` (no quotes) | `step` |
+| List or group | `[ … ]` or `{ … }` | Pages, questions, options, text per language |
 | True or false | `true` / `false` (no quotes, lowercase) | Switches such as `required` |
 
 **The mistakes everyone makes:**
 
-- a missing comma between two questions, or between two parts of a question;
+- a missing comma between two pages or two questions, or between two parts
+  of one;
 - an extra comma after the last item, before a `]` or `}`;
 - curly quotes pasted from Word or Google Docs: type `"` again;
 - `True` or `"true"` instead of `true`;
@@ -175,17 +193,31 @@ Values come in three kinds:
 
 If the admin says "Enter a valid JSON", look for one of these. A text editor
 that highlights matching brackets helps. The safest way to work is to copy an
-existing question and change it.
+existing page or question and change it.
 
 ---
 
-## 5. One question, field by field
+## 5. Pages and questions, field by field
+
+### A page
 
 | Field | Required? | What it does | Example |
 | --- | --- | --- | --- |
-| `key` | Yes | The question's permanent name, where its answers are stored. Lowercase letters, digits and `_`, starting with a letter. Each question in a form needs its own key. | `"doctor_explained"` |
+| `questions` | Yes | The page's questions, in the order they are asked. At least one. | `[ {…}, {…} ]` |
+| `title` | No | The page's heading, per language. Without it, the page gets a default heading ([section 7](#7-pages-how-they-look-and-behave)). | `{"en": "About your visit"}` |
+| `description` | No | A line under the heading, per language. | `{"en": "Two quick questions."}` |
+| `primary_button` | No | The main button's label, per language. Without it, the label follows from what comes next: "Start the questions", "Next" or "Review answers". | `{"en": "Rate our services"}` |
+
+A page of **ratings** takes only `questions`. Each card shows its own
+question as the heading, and its button says "Next", or "Review answers" on
+the last card of a form that ends with ratings.
+
+### A question
+
+| Field | Required? | What it does | Example |
+| --- | --- | --- | --- |
+| `key` | Yes | The question's permanent name, where its answers are stored. Lowercase letters, digits and `_`, starting with a letter. Each question in a form needs its own key, across all pages. | `"doctor_explained"` |
 | `type` | Yes | `rating`, `choice`, `date` or `text`. See [section 6](#6-the-four-question-types). | `"rating"` |
-| `step` | No | The page that asks it, as a number from 1 to 99. If you leave it out, it is set for you when you save: `choice` and `date` → 1, `rating` → 2, `text` → 3. | `2` |
 | `text` | Yes | The question, per language. English is required. | `{"en": "How clean was the ward?", "kn": "…"}` |
 | `short_text` | No | A shorter label for the review page. Without it, the review shows `text`. | `{"en": "Ward cleanliness"}` |
 | `hint` | No | A smaller line under the question. | `{"en": "Think about the toilets too."}` |
@@ -195,6 +227,9 @@ existing question and change it.
 | `allow_comment` | No (default `false`) | Choices only: adds a "Why? (optional)" box under the answer. | `true` |
 | `allow_no_comment` | No (default `true`) | Ratings only: offers "No comments" next to the five faces. `false` removes it. | `false` |
 | `active` | No (default `true`) | `false` keeps the question in the form without asking it. | `false` |
+
+A question is asked on the page it is listed in. There is no field for
+that: to move a question, move it to another page's `questions`.
 
 > [!IMPORTANT]
 > **Never reuse or change a `key` once patients have answered.** Reports
@@ -206,6 +241,8 @@ existing question and change it.
 ---
 
 ## 6. The four question types
+
+Each example below is one question. Put it in a page's `questions` list.
 
 ### Rating: a card with faces
 
@@ -221,7 +258,8 @@ Use it for "how good was…" questions. Each rating gets a card of its own:
   [ Back ]                                             [ Next ]
 ```
 
-- The counter, "Question 3 of 10", counts the ratings this patient is asked.
+- The counter, "Question 3 of 10", counts the ratings this patient is asked,
+  across all pages.
 - When the patient taps a face, the kiosk moves to the next card by itself.
 - Answers are stored as numbers: Excellent 5, Very good 4, Good 3, Fair 2,
   Poor 1, and No comments 0. "No comments" doesn't count in averages.
@@ -229,7 +267,7 @@ Use it for "how good was…" questions. Each rating gets a card of its own:
   Each option is text per language, with no `value`:
 
 ```json
-{"key": "registration_wait", "type": "rating", "step": 2,
+{"key": "registration_wait", "type": "rating",
  "text": {"en": "Waiting time at the registration counter"},
  "short_text": {"en": "Registration wait"},
  "options": [{"en": "More than 30 mins"}, {"en": "10-30 mins"}, {"en": "5-10 mins"},
@@ -242,14 +280,14 @@ Use it for "which…" questions and yes/no questions. Every option needs a
 `value`, a short code that is stored, and its text per language:
 
 ```json
-{"key": "clinic", "type": "choice", "step": 1, "required": true,
+{"key": "clinic", "type": "choice", "required": true,
  "text": {"en": "Which clinic did you visit?"},
  "options": [{"value": "general", "en": "General Medicine"},
              {"value": "eye", "en": "Eye"},
              {"value": "ent", "en": "ENT"}]}
 ```
 
-How it looks depends on where it is ([section 7](#7-pages-how-questions-are-grouped-and-ordered)):
+How it looks depends on where its page is ([section 7](#7-pages-how-they-look-and-behave)):
 
 - **On a page before the ratings:** a row of tappable chips.
   `( General Medicine ) ( Eye ) ( ENT )`
@@ -261,7 +299,7 @@ A **yes/no question** is a choice with the options `yes` and `no`. Add
 `"allow_comment": true` to ask "Why? (optional)" under it:
 
 ```json
-{"key": "would_return", "type": "choice", "step": 3, "allow_comment": true,
+{"key": "would_return", "type": "choice", "allow_comment": true,
  "text": {"en": "Would you come back to this hospital?"},
  "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]}
 ```
@@ -274,7 +312,7 @@ reports count. You can change its text freely.
 A date box with a calendar. The date can't be in the future.
 
 ```json
-{"key": "date_of_admission", "type": "date", "step": 1, "required": true,
+{"key": "date_of_admission", "type": "date", "required": true,
  "text": {"en": "Date of admission"}}
 ```
 
@@ -284,29 +322,27 @@ A box for free text, up to 2,000 characters. Before the ratings it is a small
 box. After the ratings it is larger.
 
 ```json
-{"key": "suggestions", "type": "text", "step": 3,
+{"key": "suggestions", "type": "text",
  "text": {"en": "Any suggestions to improve our services?"}}
 ```
 
 ---
 
-## 7. Pages: how questions are grouped and ordered
+## 7. Pages: how they look and behave
 
-The `step` number decides everything about pages. These are the rules.
+**Rule 1: pages come in the order you list them.** The first page in the
+list comes first. To add a page between two others, put it between them in
+the list.
 
-**Rule 1: pages follow the step numbers.** Step 1 comes first, then 2, then
-3. Gaps are fine: 10, 20, 30 work the same as 1, 2, 3, and leave room to add
-a page in between later.
+**Rule 2: a page holds either ratings or other questions, never both.**
 
-**Rule 2: a step holds either ratings or other questions, never both.**
-
-- A step of **ratings** gives one card per rating, one after another.
-- A step of **choice, date and text** questions gives **one page** with all of
+- A page of **ratings** gives one card per rating, one after another.
+- A page of **choice, date and text** questions is **one screen** with all of
   them, top to bottom.
 
-**Rule 3: within a step, questions keep their order in the list.** To move a
-question up or down on its page, move it up or down in the JSON. Questions of
-other steps can sit anywhere in the list; only their step number matters.
+**Rule 3: on a page, questions keep their order in its list.** To move a
+question up or down on its page, move it up or down in the page's
+`questions`.
 
 **Rule 4: a page's look depends on whether it comes before or after the first
 rating.**
@@ -322,31 +358,28 @@ rating.**
 A form without ratings treats its first page as "details" and the rest as
 "open".
 
-**Rule 5: the main button's label follows from what comes next.**
+**Rule 5: a page can have its own heading.** Give it a `title`, and a
+`description` for a line under it. Both are per language. A page without a
+title keeps the default heading. Rating pages take neither, because each
+card shows its question.
+
+**Rule 6: the main button says where it leads, unless the page names it.**
+Without a `primary_button`:
 
 - "Start the questions" leads to the first rating card.
-- "Next" leads to another page.
-- "Review answers" leads to the review. It also appears when the patient
-  came from the review to change an answer.
+- "Next" leads to another page or card.
+- "Review answers" leads to the review.
 
-**Rule 6: a page with nothing for this patient is skipped.** For example,
-if every question on step 1 has `"audience": "guest"`, patients who gave a
-UHID go straight to step 2.
+With `"primary_button": {"en": "Rate our services"}`, the page's button says
+that instead. Only the main button can be renamed; Back keeps its label.
 
-**Rule 7: you can give any page of choice, date or text questions its own
-heading** in the **Step titles** box. Rating steps take none, because each
-card shows its question. The number in quotes is the step:
+When a patient taps an answer on the review page to change it, the main
+button always says "Review answers", whatever the page sets, because that is
+where it leads. Back is hidden then.
 
-```json
-{
-  "1": {"title": {"en": "About your visit"}, "lead": {"en": "Two quick questions."}},
-  "3": {"title": {"en": "Would you recommend us?"}}
-}
-```
-
-`title` is the heading and `lead` is a line under it. Both are optional and
-per language. A step without a title keeps the default heading. Leave the
-box empty for no custom headings.
+**Rule 7: a page with nothing for this patient is skipped.** For example,
+if every question on page 1 has `"audience": "guest"`, patients who gave a
+UHID go straight to page 2.
 
 **Rule 8: "optional" is added for you.** On a details page, every question
 that isn't `required` shows "· optional". On an open page, it shows only
@@ -355,28 +388,27 @@ heading already says "All optional".
 
 ### Putting it together
 
-These questions:
+These pages:
 
-| Question | `type` | `step` |
+| Page | Questions | Page fields |
 | --- | --- | --- |
-| clinic | choice | 1 |
-| visit_date | date | 1 |
-| doctor | rating | 2 |
-| cleanliness | rating | 2 |
-| would_return | choice (yes/no) | 3 |
-| pharmacy | rating | 4 |
-| suggestions | text | 5 |
+| 1 | clinic (choice), visit_date (date) | `title` |
+| 2 | doctor (rating), cleanliness (rating) | |
+| 3 | would_return (choice, yes/no) | |
+| 4 | pharmacy (rating) | |
+| 5 | suggestions (text) | `primary_button`: "Check my answers" |
 
-give the patient these pages, after the identify page:
+give the patient these screens, after the identify page:
 
-1. **Step 1 (details):** clinic and visit date together, as chips and a date
-   box. Button: "Start the questions".
-2. **Step 2:** a card for doctor, then a card for cleanliness ("Question 1
-   of 3", "Question 2 of 3").
-3. **Step 3 (open):** Yes / No as large buttons. Home and Reset are shown.
+1. **Page 1 (details):** its own title; clinic and visit date together, as
+   chips and a date box. Button: "Start the questions".
+2. **Page 2:** a card for doctor, then a card for cleanliness ("Question 1
+   of 3", "Question 2 of 3"). Button on each: "Next".
+3. **Page 3 (open):** Yes / No as large buttons. Home and Reset are shown.
    Button: "Next".
-4. **Step 4:** a card for pharmacy ("Question 3 of 3").
-5. **Step 5 (open):** a large box for suggestions. Button: "Review answers".
+4. **Page 4:** a card for pharmacy ("Question 3 of 3"). Button: "Next".
+5. **Page 5 (open):** a large box for suggestions. Button: "Check my
+   answers" (without `primary_button`, it would say "Review answers").
 6. **The review**, then the thank-you page.
 
 ---
@@ -385,22 +417,23 @@ give the patient these pages, after the identify page:
 
 | I want to… | Do this |
 | --- | --- |
-| Add a question to an existing page | Copy a question with the same `step`, give it a new `key` and new `text`, and place it in the list where it should appear on that page. |
-| Add a new page | Give the new questions a step number not used yet. To put it between steps 2 and 3, renumber 3 → 4 and so on, or use gaps (10, 20, 30) from the start. |
-| Move a question to another page | Change its `step`. Ratings and other questions can't share a step. |
-| Reorder pages | Change the step numbers. |
-| Reorder questions on a page | Move them up or down in the list. |
+| Add a question to an existing page | Copy a question on that page, give it a new `key` and new `text`, and place it in the page's `questions` where it should appear. |
+| Add a new page | Add a `{"questions": [ … ]}` to the list, where it should come. |
+| Move a question to another page | Cut it from one page's `questions` and paste it into the other's. Ratings and other questions can't share a page. |
+| Reorder pages | Move the pages up or down in the list. |
+| Reorder questions on a page | Move them up or down in the page's `questions`. |
 | Make a question compulsory | `"required": true`. |
 | Ask only guests, for example age and sex | `"audience": "guest"`. |
 | Ask only patients who gave a UHID | `"audience": "identified"`. |
 | Stop asking a question for now | `"active": false`. Its past answers stay in reports. |
-| Remove a question for good | Delete it from the list. Past answers are kept, with the wording patients saw. |
+| Remove a question for good | Delete it from its page. Past answers are kept, with the wording patients saw. A page left with no questions must go too. |
 | Reword a question | Change `text`, and keep the `key`. |
 | Ask a question with a new meaning | Give it a new `key`. |
 | Add "Why?" under a yes/no | `"allow_comment": true`. |
 | Remove "No comments" from a rating | `"allow_no_comment": false`. |
 | Use labels like "Immediate … More than 30 mins" on a rating | Give five `options`, worst first (see [section 6](#6-the-four-question-types)). |
-| Change a page's heading | Add its step to **Step titles**. |
+| Change a page's heading | Give the page a `title`, and a `description` if you like. |
+| Change the main button's label | Give the page a `primary_button`. |
 | Show a shorter label on the review | `"short_text": {"en": "…"}`. |
 | Hide a whole form | Untick **Is active**. |
 | Change the order of forms on the choice page | Change each form's **Order**. |
@@ -420,10 +453,11 @@ name:
 - The kiosk offers the languages it is set up with, currently English (`en`)
   and Kannada (`kn`). The patient switches with the button in the header.
 - Text missing in a language shows in English, so a half-translated form
-  still works.
+  still works. This includes a page's `title`, `description` and
+  `primary_button`.
 - Options carry their languages next to their value:
   `{"value": "eye", "en": "Eye", "kn": "ಕಣ್ಣು"}`.
-- The title and description have one box per language in the admin.
+- The form's title and description have one box per language in the admin.
 - Have a native speaker check every translation before patients see it.
 
 ---
@@ -432,15 +466,17 @@ name:
 
 | What | Most characters |
 | --- | --- |
-| Form title | 100 |
-| Form description, step lead | 300 |
+| Form title, page `title` | 100 |
+| Form description, page `description` | 300 |
+| Page `primary_button` | 40 |
 | Question `text` and `hint` | 300 |
 | `short_text` | 60 |
 | An option's text | 100 |
 | An option's `value` | 64 |
 | A patient's typed answer | 2,000 |
 
-These limits apply to each language separately.
+These limits apply to each language separately. A form can have up to 99
+pages.
 
 These characters are refused everywhere, in your questions and in what
 patients type, because they can be used to attack web pages:
@@ -453,46 +489,49 @@ Write "less than 5 minutes" instead of "< 5 mins".
 ## 11. A complete example
 
 A short eye-clinic form with every feature in this guide. You can paste it
-into the **Questions** box and adapt it:
+into the **Pages** box and adapt it:
 
 ```json
 [
-  {"key": "visit_type", "type": "choice", "step": 1, "required": true,
-   "text": {"en": "What was your visit for?"},
-   "options": [{"value": "new", "en": "First visit"},
-               {"value": "follow_up", "en": "Follow-up"},
-               {"value": "surgery", "en": "Surgery"}]},
-  {"key": "age_group", "type": "choice", "step": 1, "required": true, "audience": "guest",
-   "text": {"en": "Your age group"},
-   "options": [{"value": "under_18", "en": "Under 18"}, {"value": "18_45", "en": "18-45"},
-               {"value": "46_60", "en": "46-60"}, {"value": "over_60", "en": "Over 60"}]},
+  {"title": {"en": "About your visit"},
+   "questions": [
+     {"key": "visit_type", "type": "choice", "required": true,
+      "text": {"en": "What was your visit for?"},
+      "options": [{"value": "new", "en": "First visit"},
+                  {"value": "follow_up", "en": "Follow-up"},
+                  {"value": "surgery", "en": "Surgery"}]},
+     {"key": "age_group", "type": "choice", "required": true, "audience": "guest",
+      "text": {"en": "Your age group"},
+      "options": [{"value": "under_18", "en": "Under 18"}, {"value": "18_45", "en": "18-45"},
+                  {"value": "46_60", "en": "46-60"}, {"value": "over_60", "en": "Over 60"}]}
+   ]},
 
-  {"key": "waiting_time", "type": "rating", "step": 2,
-   "text": {"en": "How long did you wait to see the doctor?"},
-   "short_text": {"en": "Waiting time"},
-   "options": [{"en": "More than 1 hour"}, {"en": "30-60 mins"}, {"en": "15-30 mins"},
-               {"en": "Within 15 mins"}, {"en": "Immediate"}]},
-  {"key": "doctor_explained", "type": "rating", "step": 2,
-   "text": {"en": "How well did the doctor explain your condition?"},
-   "short_text": {"en": "Doctor's explanation"},
-   "hint": {"en": "Including the medicines and the next visit."}},
-  {"key": "clean_clinic", "type": "rating", "step": 2, "allow_no_comment": false,
-   "text": {"en": "How clean was the clinic?"},
-   "short_text": {"en": "Cleanliness"}},
+  {"questions": [
+     {"key": "waiting_time", "type": "rating",
+      "text": {"en": "How long did you wait to see the doctor?"},
+      "short_text": {"en": "Waiting time"},
+      "options": [{"en": "More than 1 hour"}, {"en": "30-60 mins"}, {"en": "15-30 mins"},
+                  {"en": "Within 15 mins"}, {"en": "Immediate"}]},
+     {"key": "doctor_explained", "type": "rating",
+      "text": {"en": "How well did the doctor explain your condition?"},
+      "short_text": {"en": "Doctor's explanation"},
+      "hint": {"en": "Including the medicines and the next visit."}},
+     {"key": "clean_clinic", "type": "rating", "allow_no_comment": false,
+      "text": {"en": "How clean was the clinic?"},
+      "short_text": {"en": "Cleanliness"}}
+   ]},
 
-  {"key": "would_recommend", "type": "choice", "step": 3, "required": true, "allow_comment": true,
-   "text": {"en": "Would you recommend this clinic to a friend?"},
-   "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]},
-  {"key": "suggestions", "type": "text", "step": 3,
-   "text": {"en": "Anything we could do better?"}}
+  {"title": {"en": "One last thing"},
+   "description": {"en": "Your answers help us improve."},
+   "primary_button": {"en": "Check my answers"},
+   "questions": [
+     {"key": "would_recommend", "type": "choice", "required": true, "allow_comment": true,
+      "text": {"en": "Would you recommend this clinic to a friend?"},
+      "options": [{"value": "yes", "en": "Yes"}, {"value": "no", "en": "No"}]},
+     {"key": "suggestions", "type": "text",
+      "text": {"en": "Anything we could do better?"}}
+   ]}
 ]
-```
-
-With these **Step titles**:
-
-```json
-{"1": {"title": {"en": "About your visit"}},
- "3": {"title": {"en": "One last thing"}, "lead": {"en": "Your answers help us improve."}}}
 ```
 
 The patient sees:
@@ -503,7 +542,7 @@ The patient sees:
 2. **Three rating cards:** waiting time with the custom labels, the doctor's
    explanation with its hint, and cleanliness without "No comments".
 3. **One last thing:** Yes / No as large buttons with a "Why?" box, and a
-   large suggestions box. Button: "Review answers".
+   large suggestions box. Button: "Check my answers".
 4. **The review:** "Waiting time", "Doctor's explanation" and so on, using
    the `short_text` labels.
 
@@ -523,35 +562,42 @@ The patient sees:
 - [ ] Stop at the review unless you mean to submit. A submitted test counts
       as real feedback in that facility's reports.
 - [ ] Look at it on the kiosk itself, or a screen of the same size: long
-      questions wrap, and a page with many questions scrolls.
+      questions wrap, a page with many questions scrolls, and a long button
+      label fits.
 
 ---
 
 ## 13. Error messages and what they mean
 
-The admin names the question (by its `key`, or by its position if it has no
-key) in every message.
+The admin names the page ("Page 2") or the question (by its `key`, or by its
+place, "Page 2, question 3", if it has no key) in every message.
 
 | Message (shortened) | What to fix |
 | --- | --- |
 | Enter a valid JSON | A comma, quote or bracket is wrong ([section 4](#4-json-in-five-minutes)). |
+| The pages must be a list | The whole box must be one `[ … ]` of pages. |
+| Page N: looks like a question. Questions go inside pages | The box holds questions directly. Put them in pages: `[ {"questions": [ … ]} ]`. |
+| Page N: must be an object | Each page is a `{ … }` with its `questions`. |
+| Page N: questions must be a list of at least one question | The page has no `questions`, or an empty list. Add a question, or remove the page. |
+| Page N: unknown field(s) … | A page field is misspelt, for example `titel`. The message lists the allowed names. |
+| Page N: has ratings, which get a card each; move its … questions to a page of their own | A choice, date or text question is on a page with ratings. Move it to another page. |
+| Page N: has ratings … it takes no title | A page of ratings has a `title`, `description` or `primary_button`. Remove it. |
+| Page N: title needs English text | Add `"en": "…"` inside the page's `title` (or `description`, or `primary_button`). |
 | key must be lowercase letters, digits and _ | Use only `a-z`, `0-9` and `_`, starting with a letter: `doctor_2`, not `Doctor 2`. |
-| another question already uses this key | Two questions share a key. Rename one. |
+| another question already uses this key | Two questions share a key, maybe on different pages. Rename one. |
 | type must be one of choice, date, rating, text | Check the spelling of `type`. |
 | text needs the English question | Add `"en": "…"` inside `text`. |
-| unknown field(s) … | A field name is misspelt, for example `requird`. The message lists the allowed names. |
+| unknown field(s) … | A question field is misspelt, for example `requird`. The message lists the allowed names. |
+| step isn't used any more | A question has a `step`, from the old format. Remove it: the question is asked on the page it's listed in. |
 | a choice needs options | Add `options` to the choice. |
 | every option needs a value | Each choice option needs `"value": "…"`. |
 | option values must be unique | Two options of one question share a value. |
 | give exactly five labels … Poor → Excellent, or none | A rating's `options` must be exactly five, or left out. |
 | a date question has no options / a text question has no options | Remove `options` from that question. |
-| step must be a whole number from 1 to 99 | Write the step as a number without quotes: `2`, not `"2"`. |
-| step 2 has ratings … give this question its own step | A choice, date or text question shares a step with ratings. Give it another step number. |
 | allow_comment ("Why?") is for choices only | Remove `allow_comment` from a non-choice question. |
 | … can't contain < > | Remove the blocked characters ([section 10](#10-limits-and-blocked-characters)). |
 | … is longer than N characters | Shorten the text ([section 10](#10-limits-and-blocked-characters)). |
-| Step N: no question has this step | A step title is set for a step no question uses. Remove it or fix the number. |
-| Step N: has ratings … it takes no title | Rating steps can't have a title. Remove it. |
+| A form can have at most 99 pages | Combine some pages. |
 | This facility already has a form with this code | Pick another code, or edit the existing form. |
 | No facility has this id | The facility id is wrong. Copy it again from Care. |
 
@@ -564,8 +610,10 @@ developer:
 
 - the identify page (scan, UHID or guest), the review page and the thank-you
   page;
-- the fixed wording, such as button labels, the default headings and the
-  rating words Excellent to Poor (these live in the language files);
+- the fixed wording, such as Back, Submit feedback, the default main-button
+  labels and headings, and the rating words Excellent to Poor (these live in
+  the language files). A page can still name its own main button and
+  heading ([section 7](#7-pages-how-they-look-and-behave));
 - the 11-digit UHID length, the idle reset times and the 20-second
   thank-you page;
 - the languages offered, the colours and the fonts.

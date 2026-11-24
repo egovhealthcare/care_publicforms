@@ -29,6 +29,7 @@ MAX_QUESTION_LENGTH = 300  # a question's text or hint
 MAX_SHORT_TEXT_LENGTH = 60  # a question's label on the review step
 MAX_OPTION_LENGTH = 100  # a choice's or rating's label
 MAX_OPTION_VALUE_LENGTH = 64  # a choice's stored code
+MAX_BUTTON_LENGTH = 40  # a page's own label for its main button
 
 
 def blocked_in(text) -> str:

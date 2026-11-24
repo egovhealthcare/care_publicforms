@@ -120,7 +120,7 @@ class FormLanguageTests(PageTestBase):
         for form in (self.opd, self.ipd):
             missing = [
                 f"{code}: {path}"
-                for path, text in texts({"title": form.title, "description": form.description, "q": form.questions})
+                for path, text in texts({"title": form.title, "description": form.description, "pages": form.pages})
                 for code in BUILT_IN
                 if not text.get(code)
             ]
@@ -153,12 +153,16 @@ class FormLanguageTests(PageTestBase):
             patient_type="op",
             title={"en": "Visit feedback"},
             description={"en": "Reworded in the admin"},
-            questions=[
+            pages=[
                 {
-                    "key": "clinic",
-                    "type": "choice",
-                    "text": {"en": "Clinic visited", TEST_LANGUAGE: "Already translated"},
-                    "options": [{"value": "ent", "en": "ENT"}, {"value": "new", "en": "Added in the admin"}],
+                    "questions": [
+                        {
+                            "key": "clinic",
+                            "type": "choice",
+                            "text": {"en": "Clinic visited", TEST_LANGUAGE: "Already translated"},
+                            "options": [{"value": "ent", "en": "ENT"}, {"value": "new", "en": "Added in the admin"}],
+                        }
+                    ]
                 }
             ],
         )
@@ -172,7 +176,7 @@ class FormLanguageTests(PageTestBase):
         form.refresh_from_db()
         self.assertEqual(form.title, {"en": "Visit feedback", TEST_LANGUAGE: "T title"})
         self.assertEqual(form.description, {"en": "Reworded in the admin"})  # not the English it knows
-        question = form.questions[0]
+        question = form.pages[0]["questions"][0]
         self.assertEqual(question["text"], {"en": "Clinic visited", TEST_LANGUAGE: "Already translated"})  # kept
         self.assertEqual([option.get(TEST_LANGUAGE) for option in question["options"]], ["T ent", None])
 
@@ -181,26 +185,18 @@ class FormLanguageTests(PageTestBase):
         # the default labels to a hyphen and leaves reworded ones alone.
         migration = importlib.import_module("public_forms.migrations.0003_hyphens_in_range_labels")
         dash = "\u2013"
-        form = FeedbackForm.objects.create(
-            facility_external_id=self.facility.external_id,
-            code="old",
-            patient_type="op",
-            title={"en": "Old form"},
-            questions=[
-                {
-                    "key": "wait",
-                    "type": "choice",
-                    "text": {"en": "Wait"},
-                    "options": [
-                        {"value": "a", "en": f"10{dash}30 mins", "kn": f"10{dash}30 ನಿಮಿಷ"},
-                        {"value": "b", "en": f"5{dash}10 days"},  # reworded in the admin
-                    ],
-                }
-            ],
-        )
-        migration.use_hyphens(FeedbackForm)
-        form.refresh_from_db()
-        default, reworded = form.questions[0]["options"]
+        questions = [
+            {
+                "key": "wait",
+                "type": "choice",
+                "text": {"en": "Wait"},
+                "options": [
+                    {"value": "a", "en": f"10{dash}30 mins", "kn": f"10{dash}30 ನಿಮಿಷ"},
+                    {"value": "b", "en": f"5{dash}10 days"},  # reworded in the admin
+                ],
+            }
+        ]
+        default, reworded = migration.with_hyphens(questions)[0]["options"]
         self.assertEqual(default, {"value": "a", "en": "10-30 mins", "kn": "10-30 ನಿಮಿಷ"})
         self.assertEqual(reworded, {"value": "b", "en": f"5{dash}10 days"})
 
