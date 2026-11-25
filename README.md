@@ -174,12 +174,20 @@ only **Feedback forms** and **Feedback submissions**.
 
   | To | Permissions (Django admin) | At facilities where their Care role has |
   | --- | --- | --- |
-  | View and export submissions | `Can view feedback submission` | `can_view_resource_responses` (what the API checks) |
-  | View forms | `Can view feedback form` | `can_view_resource_responses` or `can_update_facility` |
-  | Edit forms | `Can change feedback form` (and `Can add` / `Can delete` to create or remove forms) | `can_update_facility` |
+  | View and export submissions | `Can view feedback submission` | **Can View Resource Responses** (also what the API checks) |
+  | View forms | `Can view feedback form` | **Can View Resource Responses** or **Can Update on Facility** |
+  | Edit forms | `Can change feedback form` (and `Can add` / `Can delete` to create or remove forms) | **Can Update on Facility** |
 
-  On Care 3.0, which has no `can_view_resource_responses`, only superusers
-  see submissions.
+  Care 3.0 has no **Can View Resource Responses** (Care 3.1 added it), so
+  there **Can Read on Facility** takes its place. Most of Care 3.0's
+  facility roles have it.
+- **A user for this admin only:** give them **Staff status** and only the
+  `public_forms |` permissions above. Then, in Care (**Admin → Roles**),
+  make a role whose context is **Facility** with just **Can View Resource
+  Responses** (on Care 3.0, **Can Read on Facility**), and link them with
+  that role in each facility's top-level organization. Editing forms can't
+  be made admin-only: **Can Update on Facility** also lets them edit the
+  facility in Care.
 
 - **Sign-in limit:** Care's, per IP address and per account (Care's
   `RATE_LIMIT`, by default 5 attempts in 10 minutes).

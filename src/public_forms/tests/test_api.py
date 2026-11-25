@@ -3,6 +3,7 @@ import re
 from datetime import timedelta
 from unittest import skipUnless
 
+from care.emr.models import FacilityOrganization
 from care.utils.tests.base import CareAPITestBase
 from django.contrib import admin
 from django.contrib.admin.models import CHANGE, LogEntry
@@ -14,6 +15,7 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from public_forms.access import view_feedback
 from public_forms.admin import feedback_form_form, localized_form
 from public_forms.admin_site import site
 from public_forms.models import FeedbackForm, FeedbackSubmission
@@ -95,6 +97,17 @@ class FeedbackApiTests(CareAPITestBase):
 
     def test_requires_login(self):
         self.assertIn(self.client.get(self.url("facility-summary")).status_code, (401, 403))
+
+    def test_a_role_with_the_feedback_permission_opens_its_facility(self):
+        user = self.create_user()
+        root = FacilityOrganization.objects.get(facility=self.facility, org_type="root")
+        self.attach_role_facility_organization_user(root, user, self.create_role_with_permissions([view_feedback()]))
+        self.client.force_authenticate(user)
+        self.assertEqual(self.client.get(self.url("facility-responses")).data["count"], 4)
+        self.assertEqual(self.client.get(self.url("facility-summary")).status_code, 200)
+        elsewhere = self.create_facility(user=self.create_user())
+        url = reverse("public_forms_api:facility-summary", kwargs={"facility_external_id": elsewhere.external_id})
+        self.assertEqual(self.client.get(url).status_code, 403)
 
     def test_user_without_facility_access_is_denied(self):
         self.client.force_authenticate(self.create_user())

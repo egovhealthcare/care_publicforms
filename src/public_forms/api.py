@@ -1,13 +1,12 @@
 """
 Read-only staff API (mounted by Care at /api/public_forms/).
 
-Access follows Care's facility permissions: a user who can view questionnaire
-responses for the facility (``can_read_facility_questionnaire``) can read its
-feedback.
+Access follows Care's facility permissions, as in the admin (access.py): a
+user whose Care role at the facility, or in an area above it, can view its
+questionnaire responses (on Care 3.0, read the facility) can read its feedback.
 """
 
 from care.facility.models import Facility
-from care.security.authorization import AuthorizationController
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -18,6 +17,7 @@ from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from public_forms.access import reaches, view_feedback
 from public_forms.models import FeedbackSubmission, PatientType, QuestionType
 from public_forms.questionnaire import NO_COMMENT, question_order
 
@@ -43,7 +43,7 @@ class FeedbackSubmissionSerializer(serializers.ModelSerializer):
 class FacilityFeedbackMixin:
     def get_facility(self):
         facility = get_object_or_404(Facility, external_id=self.kwargs["facility_external_id"])
-        if not AuthorizationController.call("can_read_facility_questionnaire", self.request.user, facility):
+        if not reaches(self.request.user, facility, view_feedback()):
             raise PermissionDenied("You do not have permission to view feedback for this facility")
         return facility
 

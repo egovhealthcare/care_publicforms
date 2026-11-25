@@ -65,7 +65,7 @@ flowchart LR
     api --> db
     admin --> db
     pages -. "look up facility by external_id" .-> care
-    api -. "can_read_facility_questionnaire" .-> care
+    api -. "roles (access.py)" .-> care
 ```
 
 How it is wired in:
@@ -88,8 +88,7 @@ How it is wired in:
    page paths to the backend (README → *Putting a form on a screen*).
 
 The plugin reads one Care model, `facility.Facility` (by `external_id`), and
-calls one Care permission, `can_read_facility_questionnaire`. The admin also
-reads Care's role tables to limit each user to their facilities
+Care's role tables, which limit each admin and API user to their facilities
 (`access.py`). It has **no
 database relations** to Care: no foreign keys, and its migrations don't depend
 on Care's.
@@ -737,8 +736,9 @@ plugin doesn't create one.
 ### 9.1 API
 
 Authentication is Care's (`DEFAULT_AUTHENTICATION_CLASSES`). Both data
-endpoints require Care's `can_read_facility_questionnaire` permission for the
-facility (403 otherwise; 401/403 when not logged in).
+endpoints require a Care role that can view the facility's feedback, by the
+same check as the admin's submissions (`access.reaches(user, facility,
+view_feedback())`; 403 otherwise; 401/403 when not logged in).
 
 Filters on both (through the submission's form): `patient_type` (`op`|`ip`), `form` (code),
 `submitted_after` / `submitted_before` (`YYYY-MM-DD`, inclusive, by
@@ -827,14 +827,18 @@ geographic organization is reached only through its own staff roles.
 
 | Screen | Limited to facilities where the role has |
 | --- | --- |
-| Submissions: list, detail, history, CSV export, the form filter | `can_view_resource_responses` (as the API's `can_read_facility_questionnaire`) |
-| Forms: list and detail | `can_view_resource_responses` or `can_update_facility` |
+| Submissions: list, detail, history, CSV export, the form filter | `view_feedback()`: `can_view_resource_responses` (as Care's `can_read_facility_questionnaire`) |
+| Forms: list and detail | `view_feedback()` or `can_update_facility` |
 | Forms: add, change, delete; the facility id a form is saved with | `can_update_facility` (as `can_update_facility_obj`); other forms are read-only |
 
 Each screen's `get_queryset()` applies the filter, so a row outside it is
 "not found" by its address too, and admin actions only see what the list
-shows. Care 3.0 has no `can_view_resource_responses`, so there only
-superusers see submissions.
+shows.
+
+**Care 3.0.** `can_view_resource_responses` came with Care 3.1. On Care 3.0
+`view_feedback()` returns `can_read_facility` instead. It asks Care's
+`PermissionController` on first use (not at import, when another plug may
+not have registered its permissions yet) and keeps the answer.
 
 - **Feedback forms**: code, patient type, title and description with a text
   box per language (English and each offered language; text in other
