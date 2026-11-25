@@ -152,9 +152,15 @@ Forms and submissions are managed at `https://<care-api-host>/public_forms/admin
 (the `ADMIN_URL` setting). It is separate from Django's `/admin/` and holds
 only **Feedback forms** and **Feedback submissions**.
 
-- **Who can sign in:** Care superusers, and active users given any of this
-  app's permissions, with their Care username and password. They don't need
-  Django staff access, so the rest of Django's admin stays closed to them.
+- **Signing in is Care's own:** the admin is built on Care's admin site, so
+  it has the same sign-in page and limit as Care's `/admin/` and, for users
+  who turned on two-factor authentication in Care, asks for their
+  authenticator code (on Care versions that have it). A code entered on
+  either admin counts for both.
+- **Who can sign in:** Care staff users (**Staff status**) who are
+  superusers or have any of this app's permissions. Staff status also opens
+  Django's `/admin/`, where they see only what their permissions allow (this
+  app's screens aren't there).
 - **Which facilities:** the permissions below say what a user may do; their
   Care roles say where. Superusers see every facility. Anyone else sees only
   the facilities where they hold a role with the Care permission below, in
@@ -162,8 +168,9 @@ only **Feedback forms** and **Feedback submissions**.
   sees the district's facilities). Without such a role they see nothing,
   even with the permissions below. Another facility's submission can't be
   opened by its address or exported.
-- **Giving access:** in Django's admin, add the permissions to the user or
-  their group (**User permissions**, the ones starting `public_forms |`):
+- **Giving access:** in Django's admin, tick the user's **Staff status** and
+  add the permissions to the user or their group (**User permissions**, the
+  ones starting `public_forms |`):
 
   | To | Permissions (Django admin) | At facilities where their Care role has |
   | --- | --- | --- |
@@ -174,8 +181,8 @@ only **Feedback forms** and **Feedback submissions**.
   On Care 3.0, which has no `can_view_resource_responses`, only superusers
   see submissions.
 
-- **Sign-in limit:** 5 attempts a minute per IP address and per username
-  (`ADMIN_LOGIN_RATE_LIMIT`).
+- **Sign-in limit:** Care's, per IP address and per account (Care's
+  `RATE_LIMIT`, by default 5 attempts in 10 minutes).
 - Like the kiosk pages, the admin is served by the Care backend: open it on
   the API host, or route its path there.
 
@@ -387,7 +394,6 @@ environment. [docs/deployment.md](docs/deployment.md) lists them all.
 | `DONE_TIMEOUT_SECONDS` | `20` | How long the thank-you page stays up. |
 | `SUBMIT_RATE_LIMIT` | `"60/m"` | Submissions per IP address (django-ratelimit rate; `""` turns it off). A kiosk is one IP, so keep it well above a busy hour. |
 | `ADMIN_URL` | `"public_forms/admin"` | Path of the admin; read when Care starts. |
-| `ADMIN_LOGIN_RATE_LIMIT` | `"5/m"` | Admin sign-in attempts per IP address and per username (`""` turns it off). |
 | `LOAD_WEB_FONTS` | `True` | Load DM Sans and the languages' fonts from Google Fonts. |
 
 **Behind a proxy**, every request seems to come from the proxy, so the rate

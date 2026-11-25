@@ -143,9 +143,6 @@ DEFAULTS = {
     # its own site, apart from Django's /admin/ (see admin_site.py). Read
     # when Care starts.
     "ADMIN_URL": "public_forms/admin",
-    # Sign-in attempts allowed on that admin per IP address, and per
-    # username (django-ratelimit rate; Care's DISABLE_RATELIMIT turns it off).
-    "ADMIN_LOGIN_RATE_LIMIT": "5/m",
     # Load DM Sans and each language's font (e.g. Noto Sans Kannada) from Google Fonts.
     # Turn off for screens without internet access (system fonts are used).
     "LOAD_WEB_FONTS": True,

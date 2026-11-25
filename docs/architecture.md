@@ -123,7 +123,7 @@ src/public_forms/
 │   ├── kiosk.css        The OPD feedback design in Care's colours (DM Sans), single column scaled by rem
 │   └── kiosk.js         Step machine and kiosk behaviour (ES5, no dependencies)
 ├── admin.py             Admin for forms (per-language boxes, pages JSON) and submissions (read-only, CSV)
-├── admin_site.py        The plugin's own admin site at ADMIN_URL: who can sign in, sign-in limit
+├── admin_site.py        The plugin's own admin site at ADMIN_URL, built on Care's (its sign-in), and who can use it
 ├── access.py            Which facilities an admin user reaches, by their Care roles
 ├── text_rules.py        Blocked characters and length limits for all typed text
 ├── api.py, urls.py      Staff API: responses list and per-form summary
@@ -797,13 +797,24 @@ two lowest-scoring ratings (the NQAS "Check" step).
 
 ### 9.2 Admin
 
-The admin is its own Django `AdminSite` (`admin_site.py`), mounted at
-`ADMIN_URL` (default `/public_forms/admin/`) in `apps.ready()`. Our two
-screens are registered there and not on Django's `admin.site`, so they're
-gone from `/admin/`. Superusers can sign in, and so can active users with
-any of this app's permissions (`has_module_perms("public_forms")`), without
-`is_staff`; each screen then follows the model permissions. The sign-in form
-is rate-limited per IP and per username (`ADMIN_LOGIN_RATE_LIMIT`).
+The admin is its own admin site (`admin_site.py`), mounted at `ADMIN_URL`
+(default `/public_forms/admin/`) in `apps.ready()`. Our two screens are
+registered there and not on Django's `admin.site`, so they're gone from
+`/admin/`.
+
+**Sign-in is Care's.** The site's class is built on the admin site class
+Care sets up for `/admin/` (the admin app's `default_site`: Care's
+`CareAdminSite`, or Django's `AdminSite` on Care versions without one). So
+the plugin keeps no sign-in code of its own: it has Care's sign-in page, its
+rate limit (per IP and per account, Care's `RATE_LIMIT`) and, for users who
+turned on two-factor authentication, its authenticator-code step at
+`<ADMIN_URL>/totp/`. A session counts only once the code was entered, on
+this admin or Care's: both check the same mark in the session.
+
+**Who can use it:** `has_permission` is Care's (an active staff user who
+entered the code if they turned it on) plus at least one of this app's
+permissions (`has_module_perms("public_forms")`; superusers have them all).
+Each screen then follows the model permissions.
 
 **Facilities (`access.py`).** The model permissions say what a user may
 do; Care's roles say at which facilities. `facilities_with(user, *slugs)`
@@ -862,14 +873,13 @@ and reloaded when Django's `setting_changed` fires (tests).
 | `DONE_TIMEOUT_SECONDS` | `20` | done.html |
 | `SUBMIT_RATE_LIMIT` | `"60/m"` | views |
 | `ADMIN_URL` | `"public_forms/admin"` | apps (read at startup) |
-| `ADMIN_LOGIN_RATE_LIMIT` | `"5/m"` | admin_site |
 | `LOAD_WEB_FONTS` | `True` | base.html |
 
 ## 11. Security and privacy
 
 | Topic | Approach |
 | --- | --- |
-| Authentication | None on the pages by design (public kiosks). Staff data is only in the plugin's admin (Care sign-in, rate-limited, this app's permissions, limited to the user's facilities by their Care roles) and the API (Care's auth and permissions) |
+| Authentication | None on the pages by design (public kiosks). Staff data is only in the plugin's admin (Care's own admin sign-in, with its rate limit and two-factor code; staff users with this app's permissions, limited to the user's facilities by their Care roles) and the API (Care's auth and permissions) |
 | CSRF | The form view and the patient lookup are `csrf_exempt`: there is no session or cookie to protect, and every request is anonymous and rate-limited |
 | Patient lookup | Public by design, like the pages: the kiosk turns a patient's QR into their UHID. It answers only with the UHID (from the system-wide UHID config, or the facility's own, by `UHID_IDENTIFIER_SCOPE`), only for a patient id (random UUIDs can't be guessed), by POST (the id stays out of addresses and logs), and rate-limited per IP (`QR_LOOKUP_RATE_LIMIT`). Anyone holding the patient's slip already sees the UHID printed on it |
 | Abuse | Per-IP rate limit (see README → *Behind a proxy*); answers are limited to the form's question keys and valid values. Typed text (`text_rules.py`), on the kiosk and in the admin, can't contain `<` `>` `{` `}` `` ` `` `\`: kiosk.js drops them as they're typed and the server refuses them (`"characters"` error); control characters are dropped. Limits: answers and "Why?" 2000 characters; titles 100, descriptions 300, question text and hint 300, short_text 60, option labels 100, option values 64 |

@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import timedelta
+from unittest import skipUnless
 
 from care.utils.tests.base import CareAPITestBase
 from django.contrib import admin
@@ -14,6 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from public_forms.admin import feedback_form_form, localized_form
+from public_forms.admin_site import site
 from public_forms.models import FeedbackForm, FeedbackSubmission
 from public_forms.questions import parse_questions
 from public_forms.services import stored_answer
@@ -26,6 +28,9 @@ from public_forms.tests import (
     plugin_configs,
     questions_of,
 )
+
+# Care's admin with two-factor sign-in, which this plugin's admin is built on.
+CARE_TWO_FACTOR = hasattr(site, "start_mfa")
 
 
 def make_submission(facility, reference, form_code, values, uhid="", **extra):
@@ -360,11 +365,32 @@ class AdminTests(CareAPITestBase):
         self.assertTrue(lines[2].endswith(",,,,2"))
 
 
-@override_settings(STORAGES=PLAIN_STATIC_STORAGES, PLUGIN_CONFIGS=TEST_PLUGIN_CONFIGS)
+# Care's sign-in limit (per IP address, and per account) is a hard one, not
+# turned off for tests: give these tests room.
+@override_settings(STORAGES=PLAIN_STATIC_STORAGES, PLUGIN_CONFIGS=TEST_PLUGIN_CONFIGS, DJANGO_RATE_LIMIT="100/m")
 class AdminSiteTests(CareAPITestBase):
-    """The admin is its own site at /public_forms/admin/, apart from Django's /admin/."""
+    """The admin is its own site at /public_forms/admin/, apart from Django's /admin/, with Care's sign-in."""
 
     password = "test-only-Pw-4821"
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()  # sign-in counts and used codes live in the cache
+        self.addCleanup(cache.clear)
+
+    def two_factor_user(self):
+        """A staff superuser who turned on two-factor authentication in Care, and the code their app shows now."""
+        from pyotp import TOTP, random_base32  # Care's dependency, in versions with two-factor sign-in
+
+        secret = random_base32()
+        user = self.create_user_with_password(
+            self.password,
+            is_staff=True,
+            is_superuser=True,
+            totp_secret=secret,
+            mfa_settings={"totp": {"enabled": True}},
+        )
+        return user, TOTP(secret).now()
 
     def sign_in(self, user, password=None):
         # As the sign-in page posts it, with its hidden "next" (the admin's index).
@@ -408,34 +434,67 @@ class AdminSiteTests(CareAPITestBase):
             self.client.get(index), f"{reverse('public_forms_admin:login')}?next={index}", fetch_redirect_response=False
         )
 
-    def test_this_apps_permission_opens_it_without_staff_access(self):
+    def test_staff_with_this_apps_permission_can_use_it(self):
         user = self.create_user_with_password(self.password, is_staff=False, is_superuser=False)
-        response = self.sign_in(user)
-        self.assertContains(response, "an account that can manage feedback forms")
-        self.assertNotIn("_auth_user_id", self.client.session)
-
         user.user_permissions.add(
             Permission.objects.get(content_type__app_label="public_forms", codename="view_feedbacksubmission")
         )
+        # Care's sign-in is for staff accounts only.
+        self.assertContains(self.sign_in(user), "staff account")
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
         self.assertRedirects(self.sign_in(user), reverse("public_forms_admin:index"), fetch_redirect_response=False)
         submissions = reverse("public_forms_admin:public_forms_feedbacksubmission_changelist")
         self.assertEqual(self.client.get(submissions).status_code, 200)
         # Only what the permissions allow: viewing submissions, not the forms.
         forms = reverse("public_forms_admin:public_forms_feedbackform_changelist")
         self.assertEqual(self.client.get(forms).status_code, 403)
-        # The rest of Django's admin stays closed.
+
+    def test_staff_without_this_apps_permissions_are_turned_away(self):
+        self.client.force_login(self.create_user(is_active=True, is_staff=True, is_superuser=False))
+        index = reverse("public_forms_admin:index")
         self.assertRedirects(
-            self.client.get(reverse("admin:index")),
-            f"{reverse('admin:login')}?next={reverse('admin:index')}",
-            fetch_redirect_response=False,
+            self.client.get(index), f"{reverse('public_forms_admin:login')}?next={index}", fetch_redirect_response=False
         )
 
-    @override_settings(DISABLE_RATELIMIT=False, PLUGIN_CONFIGS=plugin_configs(ADMIN_LOGIN_RATE_LIMIT="2/m"))
-    def test_sign_in_attempts_are_rate_limited(self):
-        cache.clear()  # the counts live in the cache
-        user = self.create_user_with_password(self.password, is_superuser=True)
+    @skipUnless(CARE_TWO_FACTOR, "This Care has no two-factor sign-in.")
+    def test_two_factor_users_enter_their_code(self):
+        user, code = self.two_factor_user()
+        index, code_page = reverse("public_forms_admin:index"), reverse("public_forms_admin:totp")
+        self.assertRedirects(self.sign_in(user), code_page, fetch_redirect_response=False)
+        self.assertNotIn("_auth_user_id", self.client.session)  # the password alone signs no one in
+        self.assertContains(self.client.get(code_page), "Public Forms")  # Care's code page, in this admin
+        wrong = "000000" if code != "000000" else "111111"
+        self.assertContains(self.client.post(code_page, {"code": wrong}), "Invalid")
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertRedirects(self.client.post(code_page, {"code": code}), index, fetch_redirect_response=False)
+        self.assertEqual(self.client.get(index).status_code, 200)
+
+    @skipUnless(CARE_TWO_FACTOR, "This Care has no two-factor sign-in.")
+    def test_a_session_without_the_code_is_turned_away(self):
+        # As one from the plugin's own sign-in form, which asked for no code.
+        user, _code = self.two_factor_user()
+        self.client.force_login(user)
+        index = reverse("public_forms_admin:index")
+        self.assertRedirects(
+            self.client.get(index), f"{reverse('public_forms_admin:login')}?next={index}", fetch_redirect_response=False
+        )
+
+    @skipUnless(CARE_TWO_FACTOR, "This Care has no two-factor sign-in.")
+    def test_a_code_entered_on_cares_admin_counts_here(self):
+        user, code = self.two_factor_user()
+        self.client.post(reverse("admin:login"), {"username": user.username, "password": self.password})
+        self.client.post(reverse("admin:totp"), {"code": code})
+        self.assertEqual(self.client.get(reverse("public_forms_admin:index")).status_code, 200)
+
+    @skipUnless(CARE_TWO_FACTOR, "This Care has no sign-in limit on its admin.")
+    @override_settings(DJANGO_RATE_LIMIT="2/m")
+    def test_sign_in_attempts_are_limited_by_care(self):
+        user = self.create_user_with_password(self.password, is_staff=True, is_superuser=True)
         for _attempt in range(2):
-            self.assertContains(self.sign_in(user, "wrong"), "an account that can manage feedback forms")
+            self.assertContains(self.sign_in(user, "wrong"), "staff account")
         response = self.sign_in(user)  # the right password, but too soon
-        self.assertContains(response, "Too many sign-in attempts")
+        self.assertContains(response, "Too many attempts", status_code=429)
         self.assertNotIn("_auth_user_id", self.client.session)

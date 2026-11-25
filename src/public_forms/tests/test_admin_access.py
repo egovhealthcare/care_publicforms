@@ -31,8 +31,8 @@ class AdminFacilityAccessTests(CareAPITestBase):
         self.manager = self.create_role_with_permissions([MANAGE_FORMS])
 
     def admin_user(self, *codenames):
-        """A user with this app's permissions (no staff access, no Care role yet), signed in."""
-        user = self.create_user(is_active=True, is_staff=False, is_superuser=False)
+        """A staff user with this app's permissions (no Care role yet), signed in."""
+        user = self.create_user(is_active=True, is_staff=True, is_superuser=False)
         user.user_permissions.add(
             *Permission.objects.filter(content_type__app_label="public_forms", codename__in=codenames)
         )
@@ -101,7 +101,7 @@ class AdminFacilityAccessTests(CareAPITestBase):
         self.assertEqual(self.client.get(add).status_code, 403)
 
     def test_superusers_see_every_facility(self):
-        self.client.force_login(self.create_super_user())
+        self.client.force_login(self.create_super_user(is_staff=True))
         page = self.client.get(SUBMISSIONS)
         self.assertContains(page, "OPD-MYS")
         self.assertContains(page, "OPD-HAS")
