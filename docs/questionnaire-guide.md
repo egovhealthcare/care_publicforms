@@ -1,26 +1,24 @@
-# Making a questionnaire:
+# Making a questionnaire
 
-This guide explains, from start to finish, how to write or change the
-questions patients answer on the feedback kiosk. You don't need to be a
-developer. You need access to the feedback admin and about ten minutes to
-learn how the questions are written.
+How to write or change the questions patients answer on the feedback
+kiosk: where forms are edited, how their pages and questions are written,
+and how the kiosk shows them.
 
 **Contents**
 
 1. [The words used in this guide](#1-the-words-used-in-this-guide)
 2. [What the patient sees, start to finish](#2-what-the-patient-sees-start-to-finish)
 3. [Where you edit a questionnaire](#3-where-you-edit-a-questionnaire)
-4. [JSON in five minutes](#4-json-in-five-minutes)
-5. [Pages and questions, field by field](#5-pages-and-questions-field-by-field)
-6. [The four question types](#6-the-four-question-types)
-7. [Pages: how they look and behave](#7-pages-how-they-look-and-behave)
-8. [Recipes: common changes](#8-recipes-common-changes)
-9. [Languages](#9-languages)
-10. [Limits and blocked characters](#10-limits-and-blocked-characters)
-11. [A complete example](#11-a-complete-example)
-12. [Before you go live: a checklist](#12-before-you-go-live-a-checklist)
-13. [Error messages and what they mean](#13-error-messages-and-what-they-mean)
-14. [What you can't change here](#14-what-you-cant-change-here)
+4. [Pages and questions, field by field](#4-pages-and-questions-field-by-field)
+5. [The four question types](#5-the-four-question-types)
+6. [Pages: how they look and behave](#6-pages-how-they-look-and-behave)
+7. [Recipes: common changes](#7-recipes-common-changes)
+8. [Languages](#8-languages)
+9. [Limits and blocked characters](#9-limits-and-blocked-characters)
+10. [A complete example](#10-a-complete-example)
+11. [Before you go live: a checklist](#11-before-you-go-live-a-checklist)
+12. [Error messages and what they mean](#12-error-messages-and-what-they-mean)
+13. [What you can't change here](#13-what-you-cant-change-here)
 
 ---
 
@@ -29,16 +27,13 @@ learn how the questions are written.
 | Word | Meaning |
 | --- | --- |
 | **Kiosk** | The screen in the hospital where patients give feedback: a TV, a tablet or a computer. |
-| **Facility** | A hospital or clinic in Care. Every questionnaire belongs to one facility. |
 | **Facility id** | The facility's long code, like `2f6c1e8a-4b7d-4c1e-9a3f-5d2e8b7c6a10`. It is the part after `/facility/` in the address bar when you open the facility in Care. |
-| **Form** | One questionnaire, such as "OPD feedback" or "Inpatient feedback". |
+| **Form** | One questionnaire at one facility, such as "OPD feedback" or "Inpatient feedback". |
 | **Code** | A form's short name, such as `opd`. It appears in the kiosk's web address and in the reference number patients get (`OPD-20261124-4821`). |
 | **Page** | One part of a form, with its questions. A page of choice, date or text questions is one screen. A page of ratings shows one card per rating. Pages come in the order you list them. |
-| **Question** | One thing you ask. It has a type: rating, choice, date or text. |
 | **Main button** | The big button at the bottom of a page that moves the patient on, such as "Next". |
 | **UHID** | The patient's hospital id, 11 digits, printed on the OP slip. |
 | **Guest** | A patient who continues without a UHID. |
-| **JSON** | The text format the pages are written in (explained in [section 4](#4-json-in-five-minutes)). |
 
 ---
 
@@ -76,10 +71,12 @@ asks whether anyone is still there, then starts over.
 ## 3. Where you edit a questionnaire
 
 1. Open the feedback admin: `https://<care-api-host>/public_forms/admin/`
-   and sign in with your Care username and password. If you can't sign in
-   or can't see **Feedback forms**, ask an administrator for the permissions
-   "Can view feedback form" and "Can change feedback form", plus "Can add
-   feedback form" to make new forms.
+   and sign in with your Care username and password, plus the code from
+   your authenticator app if you turned on two-factor authentication in
+   Care. If you can't sign in or can't see **Feedback forms**, ask an
+   administrator for staff status and the permissions "Can view feedback
+   form" and "Can change feedback form", plus "Can add feedback form" to
+   make new forms.
 2. Click **Feedback forms**. Each row is one form at one facility.
 3. Click a form to edit it, or **Add feedback form** to make a new one.
 
@@ -100,13 +97,14 @@ Each form has these boxes:
 When you click **Save**, the admin checks the pages and questions. If
 something is wrong, it shows the problem in red and names the page or
 question, and nothing is saved until you fix it. See
-[section 13](#13-error-messages-and-what-they-mean).
+[section 12](#12-error-messages-and-what-they-mean).
 
 **A new facility has no forms.** Its kiosk shows "No feedback forms are set
 up". Either:
 
 - ask a developer to give it the default OPD and inpatient forms
-  (`python manage.py seed_feedback_forms <facility-id>`), and then edit them; or
+  (`python manage.py seed_feedback_forms`, which gives them to every facility
+  that lacks them), and then edit them; or
 - open another facility's form, copy everything in its **Pages** box, click
   **Add feedback form**, paste it in, and fill in the other boxes with the
   new facility's id.
@@ -115,47 +113,10 @@ up". Either:
 
 ---
 
-## 4. JSON in five minutes
+## 4. Pages and questions, field by field
 
-The **Pages** box holds a list of pages written in JSON, a common text
-format. Each page holds a list of questions. You only need these four
-symbols:
-
-| Symbol | Name | Use |
-| --- | --- | --- |
-| `[ ]` | Square brackets | A list. The whole box is one list of pages, and each page has a list of questions. |
-| `{ }` | Curly braces | One thing with named parts. Each page is one `{ }`, and so is each question. |
-| `"..."` | Double quotes | Every name and every piece of text. Use straight quotes `"`, not curly ones (`“ ”`) from Word or Google Docs. |
-| `,` | Comma | Between items. There is no comma after the last item. |
-
-Here is a form with one page, and one question on it:
-
-```json
-[
-  {
-    "questions": [
-      {
-        "key": "cleanliness",
-        "type": "rating",
-        "text": {"en": "How clean was the hospital?"}
-      }
-    ]
-  }
-]
-```
-
-Read it from the outside in:
-
-- the outer `[ ]` is the list of pages; here there is one page, the `{ }`
-  inside it;
-- the page has one part, `"questions"`, whose value is the list `[ ]` of its
-  questions;
-- the question `{ }` has three parts, each written `"name": value` and
-  separated by commas. The last part, `text`, has no comma after it. The
-  value of `text` is itself a `{ }` with one entry per language.
-
-Two pages are two `{ }` in the outer list, with a comma between them. Here
-the first page has two questions:
+The **Pages** box is a list of pages, in the order they are shown. Each page
+has its `questions`, in the order they are asked:
 
 ```json
 [
@@ -171,40 +132,15 @@ the first page has two questions:
 ]
 ```
 
-Spaces and line breaks don't matter. Lay the text out however you find it
-easiest to read.
-
-Values come in three kinds:
-
-| Kind | Looks like | Used for |
-| --- | --- | --- |
-| Text | `"rating"` (in quotes) | Names, codes and wording |
-| List or group | `[ … ]` or `{ … }` | Pages, questions, options, text per language |
-| True or false | `true` / `false` (no quotes, lowercase) | Switches such as `required` |
-
-**The mistakes everyone makes:**
-
-- a missing comma between two pages or two questions, or between two parts
-  of one;
-- an extra comma after the last item, before a `]` or `}`;
-- curly quotes pasted from Word or Google Docs: type `"` again;
-- `True` or `"true"` instead of `true`;
-- an unclosed bracket: every `[` needs a `]`, and every `{` needs a `}`.
-
-If the admin says "Enter a valid JSON", look for one of these. A text editor
-that highlights matching brackets helps. The safest way to work is to copy an
-existing page or question and change it.
-
----
-
-## 5. Pages and questions, field by field
+The quickest way to add a page or a question is to copy one that exists and
+change it.
 
 ### A page
 
 | Field | Required? | What it does | Example |
 | --- | --- | --- | --- |
 | `questions` | Yes | The page's questions, in the order they are asked. At least one. | `[ {…}, {…} ]` |
-| `title` | No | The page's heading, per language. Without it, the page gets a default heading ([section 7](#7-pages-how-they-look-and-behave)). | `{"en": "About your visit"}` |
+| `title` | No | The page's heading, per language. Without it, the page gets a default heading ([section 6](#6-pages-how-they-look-and-behave)). | `{"en": "About your visit"}` |
 | `description` | No | A line under the heading, per language. | `{"en": "Two quick questions."}` |
 | `primary_button` | No | The main button's label, per language. Without it, the label follows from what comes next: "Start the questions", "Next" or "Review answers". | `{"en": "Rate our services"}` |
 
@@ -217,11 +153,11 @@ the last card of a form that ends with ratings.
 | Field | Required? | What it does | Example |
 | --- | --- | --- | --- |
 | `key` | Yes | The question's permanent name, where its answers are stored. Lowercase letters, digits and `_`, starting with a letter. Each question in a form needs its own key, across all pages. | `"doctor_explained"` |
-| `type` | Yes | `rating`, `choice`, `date` or `text`. See [section 6](#6-the-four-question-types). | `"rating"` |
+| `type` | Yes | `rating`, `choice`, `date` or `text`. See [section 5](#5-the-four-question-types). | `"rating"` |
 | `text` | Yes | The question, per language. English is required. | `{"en": "How clean was the ward?", "kn": "…"}` |
 | `short_text` | No | A shorter label for the review page. Without it, the review shows `text`. | `{"en": "Ward cleanliness"}` |
 | `hint` | No | A smaller line under the question. | `{"en": "Think about the toilets too."}` |
-| `options` | Choice: yes. Rating: optional. | Choice: the answers to pick from. Rating: five labels of your own instead of the usual ones. | See [section 6](#6-the-four-question-types). |
+| `options` | Choice: yes. Rating: optional. | Choice: the answers to pick from. Rating: five labels of your own instead of the usual ones. | See [section 5](#5-the-four-question-types). |
 | `required` | No (default `false`) | `true`: the patient must answer before moving on. Ratings always need an answer. | `true` |
 | `audience` | No (default `"all"`) | Who is asked: `"all"`, `"guest"` (only patients without a UHID) or `"identified"` (only patients who gave a UHID). | `"guest"` |
 | `allow_comment` | No (default `false`) | Choices only: adds a "Why? (optional)" box under the answer. | `true` |
@@ -240,7 +176,7 @@ that: to move a question, move it to another page's `questions`.
 
 ---
 
-## 6. The four question types
+## 5. The four question types
 
 Each example below is one question. Put it in a page's `questions` list.
 
@@ -287,7 +223,7 @@ Use it for "which…" questions and yes/no questions. Every option needs a
              {"value": "ent", "en": "ENT"}]}
 ```
 
-How it looks depends on where its page is ([section 7](#7-pages-how-they-look-and-behave)):
+How it looks depends on where its page is ([section 6](#6-pages-how-they-look-and-behave)):
 
 - **On a page before the ratings:** a row of tappable chips.
   `( General Medicine ) ( Eye ) ( ENT )`
@@ -330,7 +266,7 @@ answer keeps them, and the admin shows them.
 
 ---
 
-## 7. Pages: how they look and behave
+## 6. Pages: how they look and behave
 
 **Rule 1: pages come in the order you list them.** The first page in the
 list comes first. To add a page between two others, put it between them in
@@ -415,7 +351,7 @@ give the patient these screens, after the identify page:
 
 ---
 
-## 8. Recipes: common changes
+## 7. Recipes: common changes
 
 | I want to… | Do this |
 | --- | --- |
@@ -433,7 +369,7 @@ give the patient these screens, after the identify page:
 | Ask a question with a new meaning | Give it a new `key`. |
 | Add "Why?" under a yes/no | `"allow_comment": true`. |
 | Remove "No comments" from a rating | `"allow_no_comment": false`. |
-| Use labels like "Immediate … More than 30 mins" on a rating | Give five `options`, worst first (see [section 6](#6-the-four-question-types)). |
+| Use labels like "Immediate … More than 30 mins" on a rating | Give five `options`, worst first (see [section 5](#5-the-four-question-types)). |
 | Change a page's heading | Give the page a `title`, and a `description` if you like. |
 | Change the main button's label | Give the page a `primary_button`. |
 | Show a shorter label on the review | `"short_text": {"en": "…"}`. |
@@ -442,7 +378,7 @@ give the patient these screens, after the identify page:
 
 ---
 
-## 9. Languages
+## 8. Languages
 
 Every piece of text is written per language, with the language's code as the
 name:
@@ -464,7 +400,7 @@ name:
 
 ---
 
-## 10. Limits and blocked characters
+## 9. Limits and blocked characters
 
 | What | Most characters |
 | --- | --- |
@@ -488,7 +424,7 @@ Write "less than 5 minutes" instead of "< 5 mins".
 
 ---
 
-## 11. A complete example
+## 10. A complete example
 
 A short eye-clinic form with every feature in this guide. You can paste it
 into the **Pages** box and adapt it:
@@ -550,7 +486,7 @@ The patient sees:
 
 ---
 
-## 12. Before you go live: a checklist
+## 11. Before you go live: a checklist
 
 - [ ] The form saved without errors.
 - [ ] **Facility id** is the right facility, and **Is active** is ticked.
@@ -569,14 +505,14 @@ The patient sees:
 
 ---
 
-## 13. Error messages and what they mean
+## 12. Error messages and what they mean
 
 The admin names the page ("Page 2") or the question (by its `key`, or by its
 place, "Page 2, question 3", if it has no key) in every message.
 
 | Message (shortened) | What to fix |
 | --- | --- |
-| Enter a valid JSON | A comma, quote or bracket is wrong ([section 4](#4-json-in-five-minutes)). |
+| Enter a valid JSON | The **Pages** box isn't valid JSON. Check the commas, quotes and brackets near your last change. |
 | The pages must be a list | The whole box must be one `[ … ]` of pages. |
 | Page N: looks like a question. Questions go inside pages | The box holds questions directly. Put them in pages: `[ {"questions": [ … ]} ]`. |
 | Page N: must be an object | Each page is a `{ … }` with its `questions`. |
@@ -597,15 +533,15 @@ place, "Page 2, question 3", if it has no key) in every message.
 | give exactly five labels … Poor → Excellent, or none | A rating's `options` must be exactly five, or left out. |
 | a date question has no options / a text question has no options | Remove `options` from that question. |
 | allow_comment ("Why?") is for choices only | Remove `allow_comment` from a non-choice question. |
-| … can't contain < > | Remove the blocked characters ([section 10](#10-limits-and-blocked-characters)). |
-| … is longer than N characters | Shorten the text ([section 10](#10-limits-and-blocked-characters)). |
+| … can't contain < > | Remove the blocked characters ([section 9](#9-limits-and-blocked-characters)). |
+| … is longer than N characters | Shorten the text ([section 9](#9-limits-and-blocked-characters)). |
 | A form can have at most 99 pages | Combine some pages. |
 | This facility already has a form with this code | Pick another code, or edit the existing form. |
 | No facility has this id | The facility id is wrong. Copy it again from Care. |
 
 ---
 
-## 14. What you can't change here
+## 13. What you can't change here
 
 Some parts of the kiosk are the same for every form. To change them, ask a
 developer:
@@ -615,7 +551,7 @@ developer:
 - the fixed wording, such as Back, Submit feedback, the default main-button
   labels and headings, and the rating words Excellent to Poor (these live in
   the language files). A page can still name its own main button and
-  heading ([section 7](#7-pages-how-they-look-and-behave));
+  heading ([section 6](#6-pages-how-they-look-and-behave));
 - the 11-digit UHID length, the idle reset times and the 20-second
   thank-you page;
 - the languages offered, the colours and the fonts.

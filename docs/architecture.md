@@ -65,7 +65,7 @@ flowchart LR
     api --> db
     admin --> db
     pages -. "look up facility by external_id" .-> care
-    api -. "can_read_facility_questionnaire" .-> care
+    api -. "roles (access.py)" .-> care
 ```
 
 How it is wired in:
@@ -88,8 +88,7 @@ How it is wired in:
    page paths to the backend (README → *Putting a form on a screen*).
 
 The plugin reads one Care model, `facility.Facility` (by `external_id`), and
-calls one Care permission, `can_read_facility_questionnaire`. The admin also
-reads Care's role tables to limit each user to their facilities
+Care's role tables, which limit each admin and API user to their facilities
 (`access.py`). It has **no
 database relations** to Care: no foreign keys, and its migrations don't depend
 on Care's.
@@ -123,7 +122,7 @@ src/public_forms/
 │   ├── kiosk.css        The OPD feedback design in Care's colours (DM Sans), single column scaled by rem
 │   └── kiosk.js         Step machine and kiosk behaviour (ES5, no dependencies)
 ├── admin.py             Admin for forms (per-language boxes, pages JSON) and submissions (read-only, CSV)
-├── admin_site.py        The plugin's own admin site at ADMIN_URL: who can sign in, sign-in limit
+├── admin_site.py        The plugin's own admin site at ADMIN_URL, built on Care's (its sign-in), and who can use it
 ├── access.py            Which facilities an admin user reaches, by their Care roles
 ├── text_rules.py        Blocked characters and length limits for all typed text
 ├── api.py, urls.py      Staff API: responses list and per-form summary
@@ -737,8 +736,9 @@ plugin doesn't create one.
 ### 9.1 API
 
 Authentication is Care's (`DEFAULT_AUTHENTICATION_CLASSES`). Both data
-endpoints require Care's `can_read_facility_questionnaire` permission for the
-facility (403 otherwise; 401/403 when not logged in).
+endpoints require a Care role that can view the facility's feedback, by the
+same check as the admin's submissions (`access.reaches(user, facility,
+view_feedback())`; 403 otherwise; 401/403 when not logged in).
 
 Filters on both (through the submission's form): `patient_type` (`op`|`ip`), `form` (code),
 `submitted_after` / `submitted_before` (`YYYY-MM-DD`, inclusive, by
@@ -797,13 +797,24 @@ two lowest-scoring ratings (the NQAS "Check" step).
 
 ### 9.2 Admin
 
-The admin is its own Django `AdminSite` (`admin_site.py`), mounted at
-`ADMIN_URL` (default `/public_forms/admin/`) in `apps.ready()`. Our two
-screens are registered there and not on Django's `admin.site`, so they're
-gone from `/admin/`. Superusers can sign in, and so can active users with
-any of this app's permissions (`has_module_perms("public_forms")`), without
-`is_staff`; each screen then follows the model permissions. The sign-in form
-is rate-limited per IP and per username (`ADMIN_LOGIN_RATE_LIMIT`).
+The admin is its own admin site (`admin_site.py`), mounted at `ADMIN_URL`
+(default `/public_forms/admin/`) in `apps.ready()`. Our two screens are
+registered there and not on Django's `admin.site`, so they're gone from
+`/admin/`.
+
+**Sign-in is Care's.** The site's class is built on the admin site class
+Care sets up for `/admin/` (the admin app's `default_site`: Care's
+`CareAdminSite`, or Django's `AdminSite` on Care versions without one). So
+the plugin keeps no sign-in code of its own: it has Care's sign-in page, its
+rate limit (per IP and per account, Care's `RATE_LIMIT`) and, for users who
+turned on two-factor authentication, its authenticator-code step at
+`<ADMIN_URL>/totp/`. A session counts only once the code was entered, on
+this admin or Care's: both check the same mark in the session.
+
+**Who can use it:** `has_permission` is Care's (an active staff user who
+entered the code if they turned it on) plus at least one of this app's
+permissions (`has_module_perms("public_forms")`; superusers have them all).
+Each screen then follows the model permissions.
 
 **Facilities (`access.py`).** The model permissions say what a user may
 do; Care's roles say at which facilities. `facilities_with(user, *slugs)`
@@ -816,14 +827,18 @@ geographic organization is reached only through its own staff roles.
 
 | Screen | Limited to facilities where the role has |
 | --- | --- |
-| Submissions: list, detail, history, CSV export, the form filter | `can_view_resource_responses` (as the API's `can_read_facility_questionnaire`) |
-| Forms: list and detail | `can_view_resource_responses` or `can_update_facility` |
+| Submissions: list, detail, history, CSV export, the form filter | `view_feedback()`: `can_view_resource_responses` (as Care's `can_read_facility_questionnaire`) |
+| Forms: list and detail | `view_feedback()` or `can_update_facility` |
 | Forms: add, change, delete; the facility id a form is saved with | `can_update_facility` (as `can_update_facility_obj`); other forms are read-only |
 
 Each screen's `get_queryset()` applies the filter, so a row outside it is
 "not found" by its address too, and admin actions only see what the list
-shows. Care 3.0 has no `can_view_resource_responses`, so there only
-superusers see submissions.
+shows.
+
+**Care 3.0.** `can_view_resource_responses` came with Care 3.1. On Care 3.0
+`view_feedback()` returns `can_read_facility` instead. It asks Care's
+`PermissionController` on first use (not at import, when another plug may
+not have registered its permissions yet) and keeps the answer.
 
 - **Feedback forms**: code, patient type, title and description with a text
   box per language (English and each offered language; text in other
@@ -842,8 +857,9 @@ superusers see submissions.
 ## 10. Settings
 
 `settings.PluginSettings` resolves each setting from Care's
-`PLUGIN_CONFIGS["public_forms"]` (the plug's `configs={}`), then an
-environment variable of the same name, then the default. Values are cached
+`PLUGIN_CONFIGS["public_forms"]` (the plug's `configs={}`), then the
+environment variable `PUBLIC_FORMS_<setting>` (`ENV_PREFIX`: environment
+variables are shared by Care and every plugin), then the default. Values are cached
 and reloaded when Django's `setting_changed` fires (tests).
 
 | Setting | Default | Used by |
@@ -861,14 +877,13 @@ and reloaded when Django's `setting_changed` fires (tests).
 | `DONE_TIMEOUT_SECONDS` | `20` | done.html |
 | `SUBMIT_RATE_LIMIT` | `"60/m"` | views |
 | `ADMIN_URL` | `"public_forms/admin"` | apps (read at startup) |
-| `ADMIN_LOGIN_RATE_LIMIT` | `"5/m"` | admin_site |
 | `LOAD_WEB_FONTS` | `True` | base.html |
 
 ## 11. Security and privacy
 
 | Topic | Approach |
 | --- | --- |
-| Authentication | None on the pages by design (public kiosks). Staff data is only in the plugin's admin (Care sign-in, rate-limited, this app's permissions, limited to the user's facilities by their Care roles) and the API (Care's auth and permissions) |
+| Authentication | None on the pages by design (public kiosks). Staff data is only in the plugin's admin (Care's own admin sign-in, with its rate limit and two-factor code; staff users with this app's permissions, limited to the user's facilities by their Care roles) and the API (Care's auth and permissions) |
 | CSRF | The form view and the patient lookup are `csrf_exempt`: there is no session or cookie to protect, and every request is anonymous and rate-limited |
 | Patient lookup | Public by design, like the pages: the kiosk turns a patient's QR into their UHID. It answers only with the UHID (from the system-wide UHID config, or the facility's own, by `UHID_IDENTIFIER_SCOPE`), only for a patient id (random UUIDs can't be guessed), by POST (the id stays out of addresses and logs), and rate-limited per IP (`QR_LOOKUP_RATE_LIMIT`). Anyone holding the patient's slip already sees the UHID printed on it |
 | Abuse | Per-IP rate limit (see README → *Behind a proxy*); answers are limited to the form's question keys and valid values. Typed text (`text_rules.py`), on the kiosk and in the admin, can't contain `<` `>` `{` `}` `` ` `` `\`: kiosk.js drops them as they're typed and the server refuses them (`"characters"` error); control characters are dropped. Limits: answers and "Why?" 2000 characters; titles 100, descriptions 300, question text and hint 300, short_text 60, option labels 100, option values 64 |

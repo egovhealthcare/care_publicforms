@@ -1,10 +1,13 @@
+from unittest import mock
+
 from care.emr.models import FacilityOrganization
+from care.security.permissions.base import PermissionController
 from care.utils.tests.base import CareAPITestBase
 from django.contrib.auth.models import Permission
 from django.test import RequestFactory, override_settings
 from django.urls import reverse
 
-from public_forms.access import MANAGE_FORMS, VIEW_FEEDBACK
+from public_forms.access import MANAGE_FORMS, READ_FACILITY, VIEW_RESPONSES, view_feedback
 from public_forms.admin_site import site
 from public_forms.models import FeedbackForm, FeedbackSubmission
 from public_forms.tests import PLAIN_STATIC_STORAGES, TEST_PLUGIN_CONFIGS
@@ -27,12 +30,12 @@ class AdminFacilityAccessTests(CareAPITestBase):
         make_submission(self.mysuru, "OPD-MYS", "opd", {"overall_satisfaction": 4})
         make_submission(self.mysuru, "IPD-MYS", "ipd", {"diet": 3})
         make_submission(self.hassan, "OPD-HAS", "opd", {"overall_satisfaction": 2})
-        self.viewer = self.create_role_with_permissions([VIEW_FEEDBACK])
+        self.viewer = self.create_role_with_permissions([view_feedback()])
         self.manager = self.create_role_with_permissions([MANAGE_FORMS])
 
     def admin_user(self, *codenames):
-        """A user with this app's permissions (no staff access, no Care role yet), signed in."""
-        user = self.create_user(is_active=True, is_staff=False, is_superuser=False)
+        """A staff user with this app's permissions (no Care role yet), signed in."""
+        user = self.create_user(is_active=True, is_staff=True, is_superuser=False)
         user.user_permissions.add(
             *Permission.objects.filter(content_type__app_label="public_forms", codename__in=codenames)
         )
@@ -100,8 +103,17 @@ class AdminFacilityAccessTests(CareAPITestBase):
         add = reverse("public_forms_admin:public_forms_feedbackform_add")
         self.assertEqual(self.client.get(add).status_code, 403)
 
+    def test_feedback_follows_a_permission_this_care_has(self):
+        # Care 3.1 added "Can View Resource Responses"; Care 3.0 only has "Can Read on Facility".
+        self.assertIn(view_feedback(), PermissionController.get_permissions())
+        self.addCleanup(view_feedback.cache_clear)
+        for defined, expected in (({VIEW_RESPONSES, READ_FACILITY}, VIEW_RESPONSES), ({READ_FACILITY}, READ_FACILITY)):
+            view_feedback.cache_clear()
+            with mock.patch.object(PermissionController, "get_permissions", return_value=dict.fromkeys(defined)):
+                self.assertEqual(view_feedback(), expected)
+
     def test_superusers_see_every_facility(self):
-        self.client.force_login(self.create_super_user())
+        self.client.force_login(self.create_super_user(is_staff=True))
         page = self.client.get(SUBMISSIONS)
         self.assertContains(page, "OPD-MYS")
         self.assertContains(page, "OPD-HAS")

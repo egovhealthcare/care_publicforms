@@ -15,7 +15,7 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 
-from public_forms.access import MANAGE_FORMS, VIEW_FEEDBACK, facility_ids
+from public_forms.access import MANAGE_FORMS, facility_ids, view_feedback
 from public_forms.admin_site import site
 from public_forms.i18n import BASE_LANGUAGE, admin_languages, localize
 from public_forms.models import FeedbackForm, FeedbackSubmission
@@ -225,7 +225,7 @@ class FeedbackFormAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         # The facilities whose feedback the user sees or whose forms they set up (access.py).
         queryset = super().get_queryset(request)
-        reachable = facility_ids(request.user, VIEW_FEEDBACK, MANAGE_FORMS)
+        reachable = facility_ids(request.user, view_feedback(), MANAGE_FORMS)
         if reachable is not None:
             queryset = queryset.filter(facility_external_id__in=reachable)
         # No foreign key: the facility's name is looked up by its id.
@@ -348,7 +348,7 @@ class FeedbackSubmissionAdmin(admin.ModelAdmin):
         # Only facilities whose feedback the user may see (access.py). The
         # detail pages, history and CSV export all start from this.
         queryset = super().get_queryset(request)
-        visible = facility_ids(request.user, VIEW_FEEDBACK)
+        visible = facility_ids(request.user, view_feedback())
         if visible is not None:
             queryset = queryset.filter(facility_external_id__in=visible)
         return with_facility_name(queryset).select_related("form")
